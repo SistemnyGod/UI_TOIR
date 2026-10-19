@@ -37,6 +37,7 @@ export function CompactTable<T>({
 }) {
   return (
     <div aria-busy={loading} className={`compact-table-wrap ${className}`}>
+      {rows.length > 0 && (loading || error) ? <div className={`compact-table-update ${error ? "is-error" : ""}`} role={error ? "alert" : "status"}>{error || "Обновляем данные…"}</div> : null}
       <table className="compact-table">
         <thead>
           <tr>
@@ -48,13 +49,13 @@ export function CompactTable<T>({
           </tr>
         </thead>
         <tbody>
-          {loading ? (
+          {loading && rows.length === 0 ? (
             <tr>
               <td className="compact-table-state" colSpan={columns.length}>
                 Загрузка…
               </td>
             </tr>
-          ) : error ? (
+          ) : error && rows.length === 0 ? (
             <tr>
               <td aria-live="assertive" className="compact-table-state compact-table-state-error" colSpan={columns.length}>
                 {error}
@@ -90,7 +91,7 @@ export function CompactTable<T>({
                 tabIndex={onRowClick ? 0 : undefined}
               >
                 {columns.map((column) => (
-                  <td className={column.sticky ? `compact-table-cell-sticky-${column.sticky}` : undefined} key={column.key} style={{ textAlign: column.align }}>
+                  <td className={column.sticky ? `compact-table-cell-sticky-${column.sticky}` : undefined} data-label={typeof column.header === "string" ? column.header : undefined} key={column.key} style={{ textAlign: column.align }}>
                     {column.render(row)}
                   </td>
                 ))}

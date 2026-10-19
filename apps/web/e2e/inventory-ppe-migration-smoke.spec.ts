@@ -1,314 +1,75 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
-test("inventory PPE wizard supports employee search and set-based picking", async ({ page }) => {
-  const sessionUser = {
-    id: "admin-1",
-    login: "admin",
-    displayName: "Администратор",
-    roles: ["admin"],
-    permissions: ["dashboard.read", "site_users.write"],
-  };
-
-  const ppeCards = {
-    rows: [
-      {
-        id: "00000000-0000-0000-0000-000000000101",
-        employeeId: "00000000-0000-0000-0000-000000000201",
-        employeeName: "Иванов Иван Иванович",
-        position: "Электромонтер",
-        status: "active",
-        linesCount: 2,
-      },
-    ],
-    total: 1,
-    page: 1,
-    pageSize: 100,
-    pageCount: 1,
-  };
-
-  const ppeOptions = {
-    employees: [
-      {
-        id: "00000000-0000-0000-0000-000000000201",
-        fullName: "Иванов Иван Иванович",
-        personnelNo: "T-001",
-        position: "Электромонтер",
-        department: "Цех 1",
-        status: "active",
-        employeeGroup: "Производство",
-        hiredAt: null,
-        birthDate: null,
-      },
-      {
-        id: "00000000-0000-0000-0000-000000000202",
-        fullName: "Петров Петр Петрович",
-        personnelNo: "T-002",
-        position: "Слесарь",
-        department: "РМЦ",
-        status: "active",
-        employeeGroup: "Производство",
-        hiredAt: null,
-        birthDate: null,
-      },
-    ],
-    items: [
-      {
-        id: "00000000-0000-0000-0000-000000000301",
-        name: "Каска защитная",
-        sku: "PPE-001",
-        categoryId: "00000000-0000-0000-0000-000000000401",
-        category: "Голова",
-        unitId: "00000000-0000-0000-0000-000000000501",
-        unit: "шт.",
-        balance: 10,
-        stockPhysical: 10,
-        stockReserved: 0,
-        stockAvailable: 10,
-        stockStatus: "normal",
-        minStockQty: 1,
-        itemKind: "ppe",
-        normItemName: "Каска",
-        actualItemName: "Каска защитная",
-        brandName: "UVEX",
-        modelName: "Фаворит",
-        article: "UV-01",
-        protectionClass: "",
-        clothingSize: "",
-        heightSize: "",
-        shoeSize: "",
-        headSize: "",
-        gloveSize: "",
-        respiratorSize: "",
-        defaultLifeMonths: 12,
-        defaultUnitPriceMinor: 250000,
-        trackingType: "ppe",
-        comment: "",
-        isConsumable: false,
-        trackLife: true,
-        isActive: true,
-        status: "active",
-      },
-    ],
-    settings: {
-      categories: [
-        {
-          id: "00000000-0000-0000-0000-000000000401",
-          name: "Голова",
-          code: "head",
-          isActive: true,
-        },
-      ],
-      units: [],
-      warehouses: [
-        {
-          id: "00000000-0000-0000-0000-000000000601",
-          name: "Основной склад",
-          code: "main",
-          isActive: true,
-        },
-      ],
-      custodyCategories: [],
-      returnReasons: [],
-      writeOffReasons: [],
-      itemSets: [
-        {
-          id: "00000000-0000-0000-0000-000000000701",
-          name: "Базовый набор электромонтера",
-          itemsCount: 1,
-          isActive: true,
-        },
-      ],
-      positionNorms: [],
-      employeePositions: [],
-      employeeDepartments: [],
-      employeeGroups: [],
-    },
-    statuses: ["active", "issued", "not_issued", "returned", "written_off"],
-  };
-
+test("retired browser draft exports only its owner and creates no issue", async ({ page }) => {
+  const mutations: string[] = [];
   await page.addInitScript(() => {
-    window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
-    window.localStorage.setItem("patrol360.sessionToken", "test-token");
+    localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
+    localStorage.setItem("patrol360.sessionToken", "fixture-token");
+    localStorage.setItem("patrol360.inventory.ppe.issue-workflow.v3.fixture-user.draft", "{old-draft-with-invalid-json");
+    localStorage.setItem("patrol360.inventory.ppe.issue-workflow.v3.other-user.draft", "private-other-draft");
   });
-
-  await page.route("**/api/v1/auth/me", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(sessionUser),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/cards**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeCards),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/options", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeOptions),
-    }),
-  );
-  await page.route("**/api/v1/inventory/settings/item-sets/00000000-0000-0000-0000-000000000701/items", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "00000000-0000-0000-0000-000000000801",
-          quantity: 1,
-          item: ppeOptions.items[0],
-        },
-      ]),
-    }),
-  );
-
-  await page.goto("/#inventory-ppe");
-
-  await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Выдать СИЗ" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Предпросмотр карточки" })).toBeVisible();
+  await page.route("**/api/**", route => {
+    if (route.request().method() !== "GET") mutations.push(route.request().url());
+    return route.abort();
+  });
+  await page.route("**/api/v1/auth/me", route => route.fulfill({ json: {
+    id: "fixture-user", login: "pilot", displayName: "Тест", roles: ["admin"],
+    permissions: ["inventory.view", "inventory.ppe.manage"],
+  } }));
+  await page.route("**/issue-documents/capabilities", route => route.fulfill({ json: { enabled: false } }));
+  await page.route("**/api/v1/system-notifications**", route => route.fulfill({ json: [] }));
+  await page.goto("/#inventory-ppe-create");
+  await expect(page.getByRole("heading", { name: "Новые выдачи СИЗ выключены" })).toBeVisible();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать прежний черновик" }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe("ppe-legacy-drafts.json");
+  const exported = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(exported).toEqual({ userId: "fixture-user", drafts: {
+    "patrol360.inventory.ppe.issue-workflow.v3.fixture-user.draft": "{old-draft-with-invalid-json",
+  } });
+  expect(await page.evaluate(() => localStorage.getItem("patrol360.inventory.ppe.issue-workflow.v3.fixture-user.draft"))).toBe("{old-draft-with-invalid-json");
+  expect(mutations).toEqual([]);
 });
 
-test("inventory PPE preview uses detail payload and DOCX export endpoints", async ({ page }) => {
-  const sessionUser = {
-    id: "admin-1",
-    login: "admin",
-    displayName: "Администратор",
-    roles: ["admin"],
-    permissions: ["dashboard.read", "site_users.write"],
-  };
-
-  const ppeCards = {
-    rows: [
-      {
-        id: "00000000-0000-0000-0000-000000000101",
-        employeeId: "00000000-0000-0000-0000-000000000201",
-        employeeName: "Иванов Иван Иванович",
-        position: "Электромонтер",
-        status: "active",
-        linesCount: 1,
-      },
-    ],
-    total: 1,
-    page: 1,
-    pageSize: 100,
-    pageCount: 1,
-  };
-
-  const ppeOptions = {
-    employees: [{
-      id: "00000000-0000-0000-0000-000000000201",
-      fullName: "Иванов Иван Иванович",
-      personnelNo: "001245",
-      position: "Электромонтер",
-      department: "Электромонтажный участок",
-      employeeGroup: "",
-      status: "active",
-      birthDate: null,
-      hiredAt: null,
-    }],
-    items: [],
-    settings: {
-      categories: [],
-      units: [],
-      warehouses: [],
-      custodyCategories: [],
-      returnReasons: [],
-      writeOffReasons: [],
-      itemSets: [],
-      positionNorms: [],
-      employeePositions: [],
-      employeeDepartments: [],
-      employeeGroups: [],
-    },
-    statuses: ["active", "issued", "not_issued", "returned", "written_off"],
-  };
-
-  const detailPayload = {
-    id: "00000000-0000-0000-0000-000000000101",
-    employeeId: "00000000-0000-0000-0000-000000000201",
-    employeeName: "Иванов Иван Иванович",
-    employeePersonnelNo: "001245",
-    employeeDepartment: "Электромонтажный участок",
-    position: "Электромонтер",
-    status: "active",
-    createdAt: "2026-05-22T08:00:00.000Z",
-    lines: [
-      {
-        id: "00000000-0000-0000-0000-000000000901",
-        itemId: "00000000-0000-0000-0000-000000000301",
-        itemName: "Каска защитная",
-        warehouseId: "00000000-0000-0000-0000-000000000601",
-        warehouseName: "Основной склад",
-        quantity: 1,
-        unit: "шт.",
-        status: "issued",
-        issuedAt: "2026-05-22T08:00:00.000Z",
-        dueAt: "2027-05-22T08:00:00.000Z",
-        modelDescription: "РОСОМЗ / СОМЗ-55 / 78214 / 2 класс",
-        normPoint: "Типовые нормы",
-      },
-    ],
-  };
-
-  const printRequests: string[] = [];
-
+test("historical personal card still previews and exports both DOCX forms", async ({ page }) => {
+  const employee = { id: "employee", fullName: "Иванов Иван Иванович", personnelNo: "001245", position: "Электромонтер", department: "Электромонтажный участок", status: "active" };
+  const norm = { id: "row", rowType: "item", normItemName: "Каска защитная", quantity: 1, quantityText: "1 шт.", unit: "шт.", issuePeriodText: "1 год", normPoint: "Типовые нормы", mappedItemId: "item", brandModelArticle: "РОСОМЗ / СОМЗ-55", coverageStatus: "issued", mappings: [] };
+  const card = { id: "card", employeeId: employee.id, employeeName: employee.fullName, employeePersonnelNo: employee.personnelNo, employeeDepartment: employee.department, position: employee.position, status: "active", version: 1, createdAt: "2026-05-22T08:00:00Z", normRows: [norm], lines: [{ id: "line", cardNormRowId: norm.id, itemId: "item", itemName: norm.normItemName, quantity: 1, unit: "шт.", status: "issued", issuedAt: "2026-05-22T08:00:00Z", dueAt: "2027-05-22T08:00:00Z", modelDescription: norm.brandModelArticle, normPoint: norm.normPoint }] };
+  const printRequests: URL[] = [];
   await page.addInitScript(() => {
-    window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
-    window.localStorage.setItem("patrol360.sessionToken", "test-token");
+    localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
+    localStorage.setItem("patrol360.sessionToken", "fixture-token");
   });
-
-  await page.route("**/api/v1/auth/me", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(sessionUser),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/cards**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeCards),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/options", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeOptions),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/cards/00000000-0000-0000-0000-000000000101", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(detailPayload),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/cards/00000000-0000-0000-0000-000000000101/print**", async (route) => {
-    printRequests.push(route.request().url());
-    await route.fulfill({
-      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      headers: {
-        "content-disposition": "attachment; filename=\"ppe.docx\"",
-      },
-      body: "docx",
-    });
+  await page.route("**/api/**", route => route.abort());
+  await page.route("**/api/v1/auth/me", route => route.fulfill({ json: { id: "fixture-user", login: "pilot", displayName: "Тест", roles: ["admin"], permissions: ["inventory.view", "inventory.reports.export"] } }));
+  await page.route("**/api/v1/system-notifications**", route => route.fulfill({ json: [] }));
+  await page.route("**/issue-documents/capabilities", route => route.fulfill({ json: { enabled: false } }));
+  await page.route("**/issue-documents/journal?*", route => route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 10, pageCount: 1, summary: { total: 0, confirmed: 0, draft: 0, cancelled: 0, overdue: 0 }, departments: [] } }));
+  await page.route("**/api/v1/inventory/employees?*", route => route.fulfill({ json: { rows: [employee], total: 1, page: 1, pageSize: 40, pageCount: 1 } }));
+  await page.route("**/api/v1/inventory/ppe/employees/employee/workspace", route => route.fulfill({ json: { employee, card, normRows: [norm], activeNormSet: null, normsTotal: 1, issued: 1, notIssued: 0, overdue: 0, partial: 0, errors: 0, recentHistory: [] } }));
+  await page.route("**/api/v1/inventory/ppe/cards/card/print?*", route => {
+    printRequests.push(new URL(route.request().url()));
+    return route.fulfill({ contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", headers: { "content-disposition": "attachment; filename=ppe.docx" }, body: "fixture-docx" });
   });
-
   await page.goto("/#inventory-ppe");
-
-  await page.getByRole("button", { name: "Личная карточка" }).first().click();
-  await expect(page.locator(".inventory-ppe-print-modal")).toBeVisible();
-  await expect(page.getByText("Каска защитная").first()).toBeVisible();
-  await expect(page.getByText("001245", { exact: true })).toBeVisible();
-  await expect(page.locator(".inventory-ppe-print-modal").getByText("Электромонтажный участок", { exact: true })).toBeVisible();
-  await page.locator(".inventory-ppe-print-modal").getByRole("button", { name: "Лист подписи" }).click();
-  await expect(page.getByRole("heading", { name: "Предпросмотр документа" })).toBeVisible();
-  await page.locator(".inventory-ppe-print-modal .inventory-ppe-icon-button").click();
-  await page.getByRole("button", { name: "DOCX карточка" }).click();
-  await page.getByRole("button", { name: "DOCX лист" }).click();
-
-  await expect.poll(() => printRequests.length).toBe(2);
-  await expect(printRequests[0]).toContain("type=card");
-  await expect(printRequests[0]).toContain("format=docx");
-  await expect(printRequests[1]).toContain("type=sheet");
-  await expect(printRequests[1]).toContain("format=docx");
+  await page.getByRole("button", { name: "Нормы и личные карточки" }).click();
+  await expect(page.getByRole("heading", { name: employee.fullName })).toBeVisible();
+  await page.getByRole("tab", { name: /Печать/ }).click();
+  const forms = page.locator(".ppe-v2-print-grid > article");
+  await forms.first().getByRole("button", { name: "Предпросмотр", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Предпросмотр печати" });
+  await expect(preview.getByText("001245", { exact: true })).toBeVisible();
+  await expect(preview.getByText(employee.department, { exact: true })).toBeVisible();
+  await preview.getByRole("button", { name: "Лист подписи" }).click();
+  await expect(preview.getByText(norm.normItemName, { exact: true })).toBeVisible();
+  await preview.getByRole("button", { name: "Закрыть", exact: true }).last().click();
+  for (const form of await forms.all()) {
+    const download = page.waitForEvent("download");
+    await form.getByRole("button", { name: "DOCX", exact: true }).click();
+    await download;
+  }
+  expect(printRequests.map(url => url.searchParams.get("type"))).toEqual(["card", "sheet"]);
+  expect(printRequests.every(url => url.searchParams.get("format") === "docx")).toBe(true);
 });

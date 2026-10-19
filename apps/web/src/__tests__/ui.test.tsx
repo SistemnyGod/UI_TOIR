@@ -2,20 +2,21 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MobileAccountCreateDrawer, MobileAccountEditPanel, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
-import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
-import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
-import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
-import { RequestCreateModal } from "../components/requests/RequestCreateModal";
-import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
-import { SiteUserAccessPanel } from "../components/site-users/SiteUserAccessPanel";
-import { SiteUsersTablePanel } from "../components/site-users/SiteUsersTablePanel";
-import { Chip, EmptyState, ProgressBar } from "../components/ui";
+import { MobileAccountCreateDrawer } from "../features/mobileAccounts/components/MobileAccountCreateDrawer";
+import { MobileAccountEditPanel } from "../features/mobileAccounts/components/MobileAccountEditPanel";
+import { MobileAccountLinkPanel } from "../features/mobileAccounts/components/MobileAccountLinkPanel";
+import { MobileAccountListPanel } from "../features/mobileAccounts/components/MobileAccountListPanel";
+import { AccountRefresh, MobileAccountEvents, MobileAccountSessions } from "../features/mobileAccounts/components/MobileAccountActivity";
+import { RequestCreateModal } from "../features/patrol/components/requests/RequestCreateModal";
+import { SiteUserFormPanel } from "../features/users/components/SiteUserFormPanel";
+import { SiteUserAccessPanel } from "../features/users/components/SiteUserAccessPanel";
+import { SiteUsersTablePanel } from "../features/users/components/SiteUsersTablePanel";
+import { Chip, EmptyState, ProgressBar } from "../shared/ui/primitives";
 import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
 import { patrolResultsFallback } from "../repositories/resultsRepository";
-import { PointResultTable } from "../features/patrol/results/PointResultTable";
+import { PatrolResultDetails } from "../features/patrol/results/PatrolResultDetails";
 import { filterGroups, mapWithConcurrency, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
 import { AssignmentScreen } from "../features/patrol/AssignmentScreen";
 import { PatrolEmployeePickerModal } from "../features/patrol/EmployeesScreen";
@@ -29,9 +30,9 @@ import { RequestModals } from "../features/patrol/components/requests/RequestMod
 import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
 import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
 import { EmuWorkAccountingScreen } from "../features/emu/EmuWorkAccountingScreen";
-import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
+import { InventoryPpeScreen } from "../features/inventory/InventoryPpeScreen";
 import { Button, CompactTable, IconButton, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonList, SkeletonPreview, SkeletonTable, StatusBadge } from "../shared/ui";
-import { LoginScreen } from "../screens/LoginScreen";
+import { LoginScreen } from "../app/auth/LoginScreen";
 import type { EmuWorkspace } from "../hooks/useEmuWorkspace";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
@@ -417,7 +418,7 @@ describe("shared UI primitives", () => {
 
     render(
       <InventoryRepositoryProvider value={repository}>
-        <InventoryPpeScreen
+        <InventoryPpeScreen canManage canExport
           onNavigate={onNavigate}
           onNotify={vi.fn()}
         />
@@ -431,21 +432,17 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("tab", { name: /^Нормы/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /^Фактическая выдача/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /^Печать/ })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Иванов Иван Иванович/ }));
+    expect(screen.getByRole("tab", { name: /^Нормы/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Оформить выдачу" }));
     expect(onNavigate).toHaveBeenCalledWith("inventory-ppe-create");
 
     await user.click(screen.getByRole("button", { name: "Каска защитная" }));
-    expect(await screen.findByRole("dialog", { name: "Сопоставить норму с номенклатурой" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Поиск номенклатуры")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Отмена" }));
-
+    expect(onNavigate).toHaveBeenCalledWith("inventory-settings");
     await user.click(screen.getByRole("button", { name: "Выдать" }));
-    expect(await screen.findByRole("dialog", { name: "Выдать СИЗ" })).toBeInTheDocument();
-    expect(screen.getAllByText("Пункт норм").length).toBeGreaterThan(0);
-    expect(screen.getByText("Способ выдачи")).toBeInTheDocument();
-    expect(screen.getByText("Комментарий")).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenCalledWith("inventory-ppe-create");
+    expect(screen.queryByRole("dialog", { name: "Выдать СИЗ" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Закрыть" }));
     await user.click(screen.getByRole("tab", { name: /^Фактическая выдача/ }));
     expect(screen.getByText("Модель / артикул")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /^Печать/ }));
@@ -1090,13 +1087,13 @@ describe("shared UI primitives", () => {
 
     await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Открыть заявку" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Создать заявку" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Экспорт" })).toBeEnabled();
 
     fireEvent.change(screen.getByLabelText("Поиск по результатам обходов"), { target: { value: "результат-которого-нет" } });
 
     await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(0));
     expect(screen.queryByRole("button", { name: "Открыть заявку" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Создать заявку" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Экспорт" })).toBeDisabled();
   });
   it("debounces API result search and labels metrics as a loaded sample", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
@@ -1117,7 +1114,7 @@ describe("shared UI primitives", () => {
     );
 
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getAllByText("По 0 загруженным из 250").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("По 0 загруженным обходам из 250").length).toBeGreaterThan(0));
 
     fireEvent.change(screen.getByPlaceholderText(/Поиск по маршруту/), { target: { value: "печи" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -1191,9 +1188,12 @@ describe("shared UI primitives", () => {
 
     await user.click(menuButton!);
 
-    await waitFor(() => expect(container.querySelector(".results-review-row-menu")).not.toBeNull());
-    expect(container.querySelector(".results-review-context-panel")).toBeNull();
-    const deleteButton = container.querySelector<HTMLButtonElement>(".results-review-row-menu [data-action='delete']");
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument());
+    await user.keyboard("{ArrowDown}{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(menuButton).toHaveFocus();
+    await user.click(menuButton!);
+    const deleteButton = container.querySelector<HTMLButtonElement>(".results-review-context-panel [data-action='delete']");
     expect(deleteButton).not.toBeNull();
     await user.click(deleteButton!);
 
@@ -1255,20 +1255,12 @@ describe("shared UI primitives", () => {
     };
 
     const { container } = render(
-      <PointResultTable
-        group={group}
-        results={[result]}
-        onOpenAttachment={vi.fn()}
-        photoLoadingResultId={null}
-      />,
+      <PatrolResultDetails group={group} onClose={vi.fn()} onCreateRequest={vi.fn()} onExport={vi.fn()} onOpenRequest={vi.fn()} onOpenAttachment={vi.fn()} photoLoadingResultId={null} />,
     );
-    const row = container.querySelector("article.results-review-point-row.is-issue");
-
-    expect(row).not.toBeNull();
-    expect(row?.querySelector(".results-review-point-name .results-review-status.is-issue")).not.toBeNull();
-    expect(row?.querySelector(".results-review-point-status")).toBeNull();
-    expect(row?.querySelector(".results-review-point-cell.is-result")).toBeNull();
-    expect(row?.querySelector(".results-review-point-comment")?.textContent).toContain("Нужна замена заслонки");
+    expect(screen.getByRole("dialog")).toHaveTextContent("К14");
+    expect(screen.getAllByText("Неисправно").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Нужна замена заслонки").length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Вложения выбранной точки" })).toBeInTheDocument();
   });
 
   it("does not request API details for a stale mock selected result id", async () => {
@@ -1329,43 +1321,6 @@ describe("shared UI primitives", () => {
     });
 
     expect(peak).toBe(3);
-  });
-
-  it("renders request list loading state", () => {
-    render(
-      <DashboardRequestsPanel
-        requests={[]}
-        status="loading"
-        onCreateRequest={vi.fn()}
-        onOpenRequestById={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("\u0417\u0430\u044f\u0432\u043a\u0438 \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u044e\u0442\u0441\u044f")).toBeInTheDocument();
-    expect(screen.getByText(/backend API/)).toBeInTheDocument();
-  });
-
-  it("renders request list error state with retry action", async () => {
-    const user = userEvent.setup();
-    const onRetry = vi.fn();
-
-    render(
-      <DashboardRequestsPanel
-        errorMessage="Backend unavailable"
-        requests={[]}
-        status="error"
-        onCreateRequest={vi.fn()}
-        onOpenRequestById={vi.fn()}
-        onRetry={onRetry}
-      />,
-    );
-
-    expect(screen.getByText("\u0417\u0430\u044f\u0432\u043a\u0438 API \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u044b")).toBeInTheDocument();
-    expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443" }));
-
-    expect(onRetry).toHaveBeenCalledOnce();
   });
 
   it("submits patrol request modal with selected employee and route ids", async () => {
@@ -1459,7 +1414,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("\u041c\u043e\u0431\u0438\u043b\u044c\u043d\u044b\u0435 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u044b \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u044e\u0442\u0441\u044f")).toBeInTheDocument();
-    expect(screen.getByText(/backend API/)).toBeInTheDocument();
+    expect(screen.getByText(/список аккаунтов с сервера/)).toBeInTheDocument();
   });
 
   it("renders mobile account list error state with retry action", async () => {
@@ -1485,7 +1440,7 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getByText("\u041c\u043e\u0431\u0438\u043b\u044c\u043d\u044b\u0435 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u044b API \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u044b")).toBeInTheDocument();
+    expect(screen.getByText("Не удалось загрузить мобильные аккаунты")).toBeInTheDocument();
     expect(screen.getByText("Accounts endpoint unavailable")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443" }));
@@ -1530,7 +1485,7 @@ describe("shared UI primitives", () => {
 
     expect(screen.getByText("mobile.operator")).toBeInTheDocument();
     expect(screen.getByText("Не удалось обновить список. Показаны последние загруженные данные.")).toBeInTheDocument();
-    expect(screen.queryByText("Мобильные аккаунты API не загружены")).not.toBeInTheDocument();
+    expect(screen.queryByText("Не удалось загрузить мобильные аккаунты")).not.toBeInTheDocument();
   });
   it("renders mobile account sessions and security events", async () => {
     const user = userEvent.setup();
@@ -1538,10 +1493,7 @@ describe("shared UI primitives", () => {
     const onNotify = vi.fn();
 
     render(
-      <MobileAccountSecurityPanels
-        onNotify={onNotify}
-        onRefresh={onRefresh}
-        securityEvents={[
+      <><AccountRefresh onRefresh={onRefresh} status="ready" /><MobileAccountEvents detailed events={[
           {
             id: "event-1",
             accountId: "account-1",
@@ -1550,8 +1502,7 @@ describe("shared UI primitives", () => {
             createdAt: "2026-05-18T10:30:00Z",
             actor: "operator",
           },
-        ]}
-        sessions={[
+        ]} /><MobileAccountSessions sessions={[
           {
             id: "session-1",
             accountId: "account-1",
@@ -1564,18 +1515,16 @@ describe("shared UI primitives", () => {
             startedAt: "2026-05-18T10:00:00Z",
             lastSeenAt: "2026-05-18T10:20:00Z",
           },
-        ]}
-        status="ready"
-      />,
+        ]} /></>,
     );
 
-    expect(screen.getAllByText("Сейчас онлайн")).toHaveLength(1);
+    expect(screen.getAllByText("Онлайн")).toHaveLength(1);
     expect(screen.getByText("Xiaomi")).toBeInTheDocument();
     expect(screen.getByText("Android · 2.3.0 · 127.0.0.1")).toBeInTheDocument();
     expect(screen.getByText("Вход в приложение")).toBeInTheDocument();
     expect(screen.getByText("Login accepted")).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c" })[0]);
+    await user.click(screen.getByRole("button", { name: "Обновить активность аккаунта" }));
 
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(onNotify).not.toHaveBeenCalled();
@@ -1619,7 +1568,7 @@ describe("shared UI primitives", () => {
     await user.clear(loginInput);
     await user.type(loginInput, "test2");
     await user.click(screen.getByRole("button", { name: "Сохранить изменения" }));
-    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Подтвердить изменения?" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Да, сохранить" }));
 
     expect(onUpdateAccount).toHaveBeenCalledWith({
@@ -1631,36 +1580,18 @@ describe("shared UI primitives", () => {
 
   it("limits mobile account security events to the latest 7 with readable labels", () => {
     render(
-      <MobileAccountSecurityPanels
-        onNotify={vi.fn()}
-        onRefresh={vi.fn()}
-        securityEvents={Array.from({ length: 11 }, (_, index) => ({
+      <MobileAccountEvents detailed limit={7} events={Array.from({ length: 11 }, (_, index) => ({
           id: `event-${index + 1}`,
           accountId: "account-1",
           eventType: "mobile_account.employee_attached",
           message: `Employee employee-${index + 1} attached.`,
           createdAt: `2026-05-${String(index + 1).padStart(2, "0")}T10:30:00Z`,
           actor: "operator",
-        }))}
-        sessions={[
-          {
-            id: "session-1",
-            accountId: "account-1",
-            status: "online",
-            deviceId: "device-1",
-            device: "Xiaomi",
-            platform: "Android",
-            appVersion: "2.3.0",
-            ipAddress: "127.0.0.1",
-            startedAt: "2026-05-18T10:00:00Z",
-            lastSeenAt: "2026-05-18T10:20:00Z",
-          },
-        ]}
-        status="ready"
-      />,
+        }))} />,
     );
 
-    expect(screen.getByText("Последние 7 событий")).toBeInTheDocument();
+    expect(screen.queryByText("Employee employee-1 attached.")).not.toBeInTheDocument();
+    expect(screen.getByText("Employee employee-11 attached.")).toBeInTheDocument();
     expect(screen.getAllByText("Сотрудник привязан")).toHaveLength(7);
     expect(screen.getAllByText("Пользователь: operator · Код: mobile_account.employee_attached")).toHaveLength(7);
   });

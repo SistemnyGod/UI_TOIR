@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Chip, EmptyState, FilterBar, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, FilterBar, Panel, PaginationBar, type PageSizeOption } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem } from "../../../../types";
 
 interface EmployeeDirectoryPanelProps {
@@ -8,6 +8,7 @@ interface EmployeeDirectoryPanelProps {
   employees: EmployeeDirectoryItem[];
   isSaving?: boolean;
   selectedEmployeeId?: string;
+  showCreateAction?: boolean;
   onOpenAddFromAccounting?: () => void;
   onOpenCreate: () => void;
   onSelectEmployee: (id: string) => void;
@@ -19,6 +20,7 @@ export function EmployeeDirectoryPanel({
   canManage = true,
   isSaving = false,
   selectedEmployeeId,
+  showCreateAction = true,
   onOpenAddFromAccounting,
   onOpenCreate,
   onSelectEmployee,
@@ -28,6 +30,8 @@ export function EmployeeDirectoryPanel({
   const [position, setPosition] = useState("all");
   const [group, setGroup] = useState("all");
   const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(25);
   const departments = useMemo(() => uniqueValues(employees.map((employee) => employee.department)), [employees]);
   const positions = useMemo(() => uniqueValues(employees.map((employee) => employee.position)), [employees]);
   const groups = useMemo(() => uniqueValues(employees.map((employee) => employee.employeeGroup)), [employees]);
@@ -54,8 +58,11 @@ export function EmployeeDirectoryPanel({
   const hasActiveFilters = Boolean(query.trim()) || department !== "all" || position !== "all" || group !== "all" || status !== "all";
   const activeCount = employees.filter((employee) => employee.status === "Активен" || employee.status === "На смене").length;
   const mobileCount = employees.filter((employee) => employee.mobileStatus === "Привязан").length;
+  const safePage = Math.min(page, Math.max(1, Math.ceil(filteredEmployees.length / pageSize)));
+  const pageEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   function resetFilters() {
+    setPage(1);
     setQuery("");
     setDepartment("all");
     setPosition("all");
@@ -65,7 +72,8 @@ export function EmployeeDirectoryPanel({
 
   return (
     <Panel
-      title="Сотрудники обхода территории"
+      className="employee-directory-panel"
+      title="Список обходчиков"
       note={`Рабочий список для назначения маршрутов: ${employees.length}${typeof allEmployeesCount === "number" ? ` из ${allEmployeesCount} в общем справочнике` : ""}`}
       actions={
         <>
@@ -74,66 +82,72 @@ export function EmployeeDirectoryPanel({
               Выбрать из справочника
             </Button>
           ) : null}
-          <Button
+          {showCreateAction ? <Button
             disabled={!canManage || isSaving}
             onClick={onOpenCreate}
             title={!canManage ? "Недостаточно прав для управления сотрудниками." : undefined}
             variant="primary"
           >
             Создать сотрудника
-          </Button>
+          </Button> : null}
         </>
       }
     >
       <div className="employee-directory-summary" aria-label="Сводка по сотрудникам обхода">
         <span><strong>{employees.length}</strong> в списке</span>
-        <span><strong>{activeCount}</strong> доступны</span>
+        <span><strong>{activeCount}</strong> активны</span>
         <span><strong>{mobileCount}</strong> с мобильным входом</span>
       </div>
 
-      <FilterBar ariaLabel="Фильтры сотрудников обхода" className="filters employee-filters">
+      <FilterBar ariaLabel="Фильтры сотрудников обхода" className="filters employee-filters" >
         <label className="wide-filter">
           Поиск
           <input
             aria-label="Поиск сотрудников обхода"
             value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
+            onChange={(event) => { setQuery(event.currentTarget.value); setPage(1); }}
             placeholder="ФИО, табельный номер, должность, подразделение"
           />
         </label>
+        <details className="employee-more-filters">
+        <summary>Фильтры{[department, position, group, status].filter(value => value !== "all").length ? ` · ${[department, position, group, status].filter(value => value !== "all").length}` : ""}</summary>
+        <div className="employee-filter-grid">
         <label>
           Подразделение
-          <select value={department} onChange={(event) => setDepartment(event.currentTarget.value)}>
+          <select value={department} onChange={(event) => { setDepartment(event.currentTarget.value); setPage(1); }}>
             <option value="all">Все подразделения</option>
             {departments.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
         <label>
           Должность
-          <select value={position} onChange={(event) => setPosition(event.currentTarget.value)}>
+          <select value={position} onChange={(event) => { setPosition(event.currentTarget.value); setPage(1); }}>
             <option value="all">Все должности</option>
             {positions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
         <label>
           Основная группа
-          <select value={group} onChange={(event) => setGroup(event.currentTarget.value)}>
+          <select value={group} onChange={(event) => { setGroup(event.currentTarget.value); setPage(1); }}>
             <option value="all">Все группы</option>
             {groups.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
         <label>
           Статус
-          <select value={status} onChange={(event) => setStatus(event.currentTarget.value)}>
+          <select value={status} onChange={(event) => { setStatus(event.currentTarget.value); setPage(1); }}>
             <option value="all">Все статусы</option>
             {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
+        </div>
+        </details>
+        {hasActiveFilters ? <button className="link-button" onClick={resetFilters} type="button">Сбросить фильтры</button> : null}
       </FilterBar>
 
       {filteredEmployees.length > 0 ? (
         <div className="employee-roster-list">
-          {filteredEmployees.map((employee) => (
+          {pageEmployees.map((employee) => (
             <button
               aria-label={`Открыть профиль: ${employee.fullName}`}
               aria-pressed={selectedEmployeeId === employee.id}
@@ -146,7 +160,7 @@ export function EmployeeDirectoryPanel({
                 <span className="avatar small">{employee.initials}</span>
                 <div>
                   <strong>{employee.fullName}</strong>
-                  <span className="muted-line">{employee.position || "Должность не указана"}</span>
+                  <span className="muted-line">{employee.position || "Должность не указана"} · № {employee.personnelNo || "—"}</span>
                 </div>
               </div>
               <div className="employee-roster-meta">
@@ -183,10 +197,7 @@ export function EmployeeDirectoryPanel({
         />
       )}
 
-      <div className="employee-directory-footer">
-        <span>Показано {filteredEmployees.length} из {employees.length}</span>
-        {hasActiveFilters ? <button className="link-button" onClick={resetFilters} type="button">Сбросить фильтры</button> : null}
-      </div>
+      <PaginationBar page={safePage} pageSize={pageSize} total={filteredEmployees.length} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />
     </Panel>
   );
 }

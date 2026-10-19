@@ -16,6 +16,7 @@ export function EmuCompletedWorkHistoryScreen({
 }) {
   return (
     <EmuWorkHistoryWorkspace
+      key={JSON.stringify([currentUser?.id, currentUser?.roles, currentUser?.permissions, workspace.sourceMode])}
       currentUser={currentUser}
       employeeDirectory={employeeDirectory}
       onNotify={onNotify}

@@ -3,11 +3,11 @@ import type { ScreenId } from "../../../../types";
 import { Button, ModalShell } from "../../../../shared/ui";
 
 export function EmployeeMobileAccessPanel({
+  canManageAccounts = false,
   onNavigate,
-  onNotify,
 }: {
+  canManageAccounts?: boolean;
   onNavigate: (screen: ScreenId) => void;
-  onNotify: (message: string) => void;
 }) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
@@ -36,7 +36,7 @@ export function EmployeeMobileAccessPanel({
                 <div className="access-step">
                   <span>2</span>
                   <strong>Указать сотрудника</strong>
-                  <p>ФИО можно выбрать из справочника или ввести вручную до подключения backend.</p>
+                  <p>Выберите сотрудника из общего справочника. Нового сотрудника сначала добавьте во вкладке «Сотрудники».</p>
                 </div>
                 <div className="access-step">
                   <span>3</span>
@@ -45,7 +45,7 @@ export function EmployeeMobileAccessPanel({
                 </div>
               </div>
 
-              <div className="access-actions">
+              {canManageAccounts ? <div className="access-actions">
                 <Button
                   onClick={() => {
                     setIsHelpOpen(false);
@@ -53,19 +53,9 @@ export function EmployeeMobileAccessPanel({
                   }}
                   variant="primary"
                 >
-                  Создать аккаунт телефона
+                  Открыть мобильные аккаунты
                 </Button>
-                <Button
-                  onClick={() => {
-                    setIsHelpOpen(false);
-                    onNavigate("accounts");
-                    onNotify("Выберите аккаунт телефона и укажите ФИО сотрудника в блоке привязки");
-                  }}
-                  variant="ghost"
-                >
-                  Быстрая привязка
-                </Button>
-              </div>
+              </div> : <p>Создание аккаунтов и привязка сотрудников доступны пользователям с правом управления мобильными аккаунтами.</p>}
             </div>
         </ModalShell>
       ) : null}

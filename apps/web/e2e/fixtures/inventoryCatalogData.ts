@@ -1,0 +1,9 @@
+import type { InventoryItemDto, InventorySettingsDto } from "../../src/api/contracts";
+export const catalogItemName = "Костюм для защиты от производственных загрязнений и механических воздействий — комплект электромонтёра";
+export const catalogSettings: InventorySettingsDto = {
+  categories: [{ id: "category-ppe", code: "ppe", name: "СИЗ для обслуживания производственного оборудования", isActive: true }],
+  units: [{ id: "unit-set", code: "set", name: "комплект", isActive: true }], warehouses: [], custodyCategories: [], returnReasons: [], writeOffReasons: [], itemSets: [], positionNorms: [], employeePositions: [], employeeDepartments: [], employeeGroups: [],
+};
+export function catalogItem(index = 0): InventoryItemDto {
+ return { id: "catalog-item-"+index, name: index ? `Средство защиты ${String(index+1).padStart(2,"0")} для обслуживания оборудования производственного участка` : catalogItemName, sku: "UI-CAT-"+index, categoryId: "category-ppe", category: catalogSettings.categories[0].name, unitId: "unit-set", unit: "комплект", balance: 0, stockPhysical: 0, stockReserved: 0, stockAvailable: 0, stockStatus: "normal", minStockQty: 2.5, itemKind: "СИЗ", normItemName: "Костюм для защиты от производственных загрязнений", actualItemName: "Костюм защитный для электромонтёра", brandName: "Тестовая марка", modelName: "Контрольная модель", article: "UI-CAT-"+index, protectionClass: "Проверить по документации изделия", clothingSize: "48–50", heightSize: "182–188", headSize: "58", shoeSize: "42", gloveSize: "9", respiratorSize: "M", defaultLifeMonths: 12, defaultUnitPriceMinor: 125050, trackingType: "quantity", comment: "Проверочные данные интерфейса.\n"+"Описание защитных свойств и особенностей применения изделия.\n".repeat(18), isConsumable: false, trackLife: true, isActive: true, status: "active", standards: [{ designation: "TEST-1", name: "Тестовый стандарт, не нормативные сведения" }] };
+}

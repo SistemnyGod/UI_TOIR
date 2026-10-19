@@ -1,0 +1,68 @@
+/* Catalogs and favorites share the standard shell and one scrolling body. */
+.emu-accounting-dialog:is(.emu-catalogs-modal-frame, .emu-favorites-modal-frame) {
+  min-height: 0;
+  height: min(740px, calc(100dvh - 32px));
+  border-color: var(--ui-border);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-modal);
+}
+.emu-accounting-dialog .emu-directory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; width: 100%; }
+.emu-accounting-dialog .emu-directory-actions > p { flex: 1 1 240px; margin: 0; color: var(--ui-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.emu-accounting-dialog .emu-directory-actions > .emu-work-form-error { flex-basis: 100%; color: var(--ui-danger); }
+.emu-accounting-dialog .emu-directory-actions > button { flex: 0 0 auto; min-width: 100px; }
+.emu-accounting-dialog .emu-catalog-tabs { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.emu-accounting-dialog .emu-catalog-tab { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; min-height: 44px; background: var(--ui-surface-muted); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: var(--radius-control); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.emu-accounting-dialog .emu-catalog-tab[aria-selected="true"] { color: var(--ui-blue); background: var(--ui-blue-soft); border-color: var(--ui-blue); }
+.emu-accounting-dialog .emu-catalog-tab em, .emu-accounting-dialog .emu-reference-heading > em { background: var(--ui-blue-soft); color: var(--ui-blue); font-size: 12px; font-style: normal; border-radius: 20px; padding: 3px 8px; }
+.emu-accounting-dialog .emu-catalog-content { display: block; height: auto; overflow: visible; padding: 0; min-width: 0; }
+.emu-accounting-dialog .emu-reference-block { display: grid; align-content: start; gap: 14px; min-width: 0; min-height: 0; padding: 0; overflow: visible; background: none; border: 0; box-shadow: none; }
+.emu-accounting-dialog .emu-reference-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin: 0; padding: 0 0 10px; border-bottom: 1px solid var(--ui-border); }
+.emu-accounting-dialog .emu-reference-heading h4 { color: var(--ui-text); font-size: 15px; font-weight: 650; margin: 0 0 4px; }
+.emu-accounting-dialog .emu-reference-heading span { color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.emu-accounting-dialog .emu-reference-block label { display: grid; gap: 6px; min-width: 0; color: var(--ui-text); font-size: 12px; font-weight: 600; }
+.emu-accounting-dialog .emu-reference-block :is(input,select,textarea) { min-width: 0; width: 100%; font-size: 14px; font-weight: 400; border-color: var(--ui-border); border-radius: var(--radius-control); }
+.emu-accounting-dialog .emu-reference-block :is(input,select) { min-height: 40px; }
+.emu-accounting-dialog .emu-reference-block textarea { min-height: 84px; resize: vertical; }
+.emu-accounting-dialog .emu-catalog-create { display: flex; align-items: end; gap: 8px; padding: 12px; background: var(--ui-surface-muted); border: 1px solid var(--ui-border); border-radius: var(--radius-panel); }
+.emu-accounting-dialog .emu-catalog-create > label { flex: 1; }
+.emu-accounting-dialog .emu-template-form-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.emu-accounting-dialog .emu-reference-list { display: grid; align-content: start; gap: 6px; min-height: 0; max-height: none; overflow: visible; padding: 0; }
+.emu-accounting-dialog .emu-reference-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px 12px; min-height: 46px; padding: 8px 10px; margin: 0; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface); }
+.emu-accounting-dialog .emu-reference-row > span { display: grid; gap: 4px; min-width: 0; color: var(--ui-text); font-size: 13px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
+.emu-accounting-dialog .emu-reference-row :is(strong,small) { white-space: normal; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-reference-row strong { font-size: 13px; font-weight: 600; }
+.emu-accounting-dialog .emu-reference-row small { color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.emu-accounting-dialog .emu-reference-state { background: var(--ui-success-soft); color: var(--ui-success); font-size: 11px; font-style: normal; border-radius: 20px; padding: 3px 7px; white-space: nowrap; }
+.emu-accounting-dialog .emu-reference-state.is-hidden { color: var(--ui-muted); background: var(--ui-surface-muted); }
+.emu-accounting-dialog .emu-reference-actions { display: flex; gap: 6px; min-width: 0; width: auto; }
+.emu-accounting-dialog .emu-reference-block button:not(.ui-button), .emu-accounting-dialog .emu-favorite-switch button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--ui-border-strong); background: var(--ui-surface); color: var(--ui-blue); border-radius: var(--radius-control); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.emu-accounting-dialog .emu-reference-block button:disabled { cursor: default; opacity: .55; }
+.emu-accounting-dialog .emu-favorite-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: start; gap: 24px; min-height: 0; overflow: visible; }
+.emu-accounting-dialog .emu-favorite-grid .emu-reference-row { grid-template-columns: minmax(0,1fr) auto; }
+.emu-accounting-dialog .emu-reference-toolbar { display: grid; grid-template-columns: minmax(0,1fr) 88px; gap: 12px; padding: 0; border: 0; background: none; }
+.emu-accounting-dialog .emu-pagination { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; color: var(--ui-muted); font-size: 12px; }
+.emu-accounting-dialog .emu-pagination > div { display: flex; align-items: center; gap: 8px; }
+.emu-accounting-dialog .emu-favorite-switch { display: none; }
+.emu-accounting-dialog .emu-reference-block :is(button,input,select,textarea):focus-visible,
+.emu-accounting-dialog .emu-catalog-tab:focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .emu-accounting-dialog .emu-catalog-tabs { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+  .emu-accounting-dialog .emu-catalog-tab { padding: 7px 8px; }
+  .emu-accounting-dialog .emu-reference-row { grid-template-columns: minmax(0,1fr) auto; }
+  .emu-accounting-dialog .emu-reference-actions { grid-column: 1/-1; }
+  .emu-accounting-dialog .emu-reference-actions > button { flex: 1; }
+  .emu-accounting-dialog .emu-template-form-grid { grid-template-columns: 1fr; }
+  .emu-accounting-dialog .emu-favorite-grid { grid-template-columns: minmax(0,1fr); }
+  .emu-accounting-dialog .emu-favorite-grid[data-pane="catalog"] .emu-favorite-selected,
+  .emu-accounting-dialog .emu-favorite-grid[data-pane="favorites"] .emu-favorite-candidates { display: none; }
+  .emu-accounting-dialog .emu-favorite-switch { display: flex; gap: 6px; }
+  .emu-accounting-dialog .emu-favorite-switch button { flex: 1; min-height: 44px; }
+  .emu-accounting-dialog .emu-favorite-switch button[aria-pressed="true"] { border-color: var(--ui-blue); background: var(--ui-blue-soft); }
+  .emu-accounting-dialog .emu-reference-block :is(input,select,textarea) { font-size: 16px; }
+  .emu-accounting-dialog .emu-reference-block button:not(.ui-button) { min-height: 44px; }
+  .emu-accounting-dialog .emu-directory-actions > p { flex: 1 1 180px; }
+  .emu-accounting-dialog .emu-directory-actions > button { min-height: 44px; min-width: 80px; }
+}
+@media (max-height: 520px) {
+  .emu-accounting-dialog .emu-directory-actions > p { font-size: 11px; }
+}

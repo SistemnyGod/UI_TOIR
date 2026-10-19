@@ -4,25 +4,27 @@ test.use({ viewport: { width: 390, height: 844 } });
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "mock" })));
   await page.goto("/#inventory-ppe");
+  await page.getByRole("button", { name: "Нормы и личные карточки" }).click();
 });
 
-test("PPE warning does not overlap its action and issue draft survives rotation", async ({ page }) => {
+test("PPE warning does not overlap its action and return form survives rotation", async ({ page }) => {
   await expect(page.locator("tr.is-mapped").getByText("Связь с товаром ещё не задана", { exact: true })).toHaveCount(0);
   const warning = page.locator(".ppe-v2-norm-context > div");
   await expect(warning).toBeVisible();
   const action = page.getByRole("button", { name: "Найти и проверить норму", exact: true });
   const copyBox = (await warning.boundingBox())!;
   expect((await action.boundingBox())!.y).toBeGreaterThanOrEqual(copyBox.y + copyBox.height);
-  await page.getByRole("button", { name: "Выдать", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Выдать СИЗ", exact: true });
-  const size = dialog.getByRole("textbox", { name: "Размер", exact: true });
-  await size.fill("48–50");
+  await page.getByRole("tab", { name: /Фактическая выдача/ }).click();
+  await page.getByLabel("Действия: Каска защитная").click();
+  await page.getByRole("button", { name: "Оформить возврат", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Оформить возврат", exact: true });
+  const comment = dialog.getByRole("textbox", { name: "Причина / комментарий", exact: true });
+  await comment.fill("Возврат после смены");
   for (const viewport of [{ width: 844, height: 390 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await expect(size).toHaveValue("48–50");
-    await expect(dialog.getByRole("button", { name: "Подтвердить выдачу" })).toBeInViewport();
+    await expect(comment).toHaveValue("Возврат после смены");
+    await expect(dialog.getByRole("button", { name: "Оформить возврат", exact: true })).toBeInViewport();
   }
-  page.once("dialog", (confirmation) => confirmation.accept());
   await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
   await expect(dialog).toHaveCount(0);
 });

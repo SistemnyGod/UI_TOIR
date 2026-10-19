@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronRight } from 'lucide-react';
+import { AlertCircle, ChevronRight, Moon, Sun, Wrench, Zap } from 'lucide-react';
 import type {
   EmuShiftReportCategory,
   EmuShiftReportDetailDto,
@@ -54,7 +54,7 @@ function ShiftReportDetails({ detail, summary, error, onRetry }: { detail?: EmuS
         <span>Итого: <strong>{formatDuration(detail.totalDurationMinutes)}</strong></span>
       </div>
       <div className='emu-detail-mobile-meta' aria-label='Сводка отчёта'>
-        <span><b>Дата</b>{summary?.reportDate ?? detail.reportDate}</span>
+        <span><b>Дата</b>{reportDate(summary?.reportDate ?? detail.reportDate)}</span>
         <span><b>Смена</b>{summary ? shiftLabels[summary.shiftType] : shiftLabels[detail.shiftType]}</span>
         <span><b>Общее время</b>{formatDuration(summary?.totalDurationMinutes ?? detail.totalDurationMinutes)}</span>
         <span><b>Отправлен</b>{submittedTime(summary?.submittedAt ?? detail.submittedAt)}</span>
@@ -103,8 +103,12 @@ export function ShiftReportHistoryGroup({
   return (
     <section className={`emu-shift-card emu-history-group ${refreshing ? 'is-refreshing' : ''}`}>
       <header>
-        <div><span>{categoryLabels[group.category]}</span><h2>{shiftLabels[group.shift]} смена</h2></div>
-        <b aria-label={`${rows.length} отчётов`}>{rows.length}</b>
+        <div className='emu-report-group-title'>
+          <span className={`emu-report-group-icon is-${group.category}`}>{group.category === 'mechanic' ? <Wrench aria-hidden='true' size={18} /> : <Zap aria-hidden='true' size={18} />}</span>
+          <span>{categoryLabels[group.category]}</span>
+          <h2>{group.shift === 'day' ? <Sun aria-hidden='true' size={15} /> : <Moon aria-hidden='true' size={15} />}{shiftLabels[group.shift]} смена</h2>
+        </div>
+        <b aria-label={`${rows.length} отчётов на странице`} title='Отчётов в этой группе на текущей странице'>{rows.length}</b>
       </header>
       {loading && rows.length === 0 ? (
         <div className='emu-history-loading' role='status' aria-label='Загружаем отчёты'>

@@ -1,8 +1,7 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { readDocumentStorage, writeDocumentStorage } from "./ppe/documentStorage";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FileText, MoreVertical, Printer, RefreshCw, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import type {
-  InventoryEmployeeDto,
-  InventoryItemDto,
   InventoryPpeCardDetailDto,
   InventoryPpeCardLineDto,
   InventoryPpeCardNormRowDto,
@@ -12,10 +11,9 @@ import type {
 import type { ScreenId } from "../../types";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 import { formatDate, printDataFromDetail, saveApiFile } from "./ppe/ppeCommon";
-import { PrintPaper, PrintPreviewModal, printDocument } from "./ppe/ppePrint";
+import { PrintPaper, printDocument } from "./ppe/ppePrint";
+import { LegacyPrintPreview } from "./ppe/LegacyPrintPreview";
 import type { PrintData, PrintMode } from "./ppe/ppeTypes";
-import { PpeCatalogModal, type PpeCatalogSelection } from "./ppe/PpeCatalogModal";
-import { PpeIssueModal } from "./ppe/PpeIssueModal";
 import { PpeLineActionModal } from "./ppe/PpeLineActionModal";
 import { PpeModuleNav } from "./ppe/PpeModuleNav";
 import { PpeButton } from "./ppe/PpeUi";
@@ -23,60 +21,48 @@ import { savePpeNormSettingsIntent } from "./ppe/ppeNormSettingsIntent";
 import { usePhoneLayout } from "../../hooks/usePhoneLayout";
 import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
 import { ppeErrorMessage } from "./ppe/ppeErrors";
+import { usePpeEmployeeSearch } from "./ppe/usePpeEmployeeSearch";
 
 type WorkspaceMode = "norms" | "issued" | "print";
 
-export function InventoryPpeScreen({
+type PpeWorkspaceProps = {
+  currentUserId?: string; canManage?: boolean; canExport?: boolean; cards?: unknown; onNavigate?: (screen: ScreenId) => void;
+  onNotify: (message: string) => void; onReload?: () => Promise<void>; options?: unknown;
+};
+export function InventoryPpeScreen(props: PpeWorkspaceProps) {
+  const repository = useInventoryRepository(), owner = useRef({ repository, revision: 0 });
+  if (owner.current.repository !== repository) owner.current = { repository, revision: owner.current.revision + 1 };
+  return <PpeCardWorkspace key={(props.currentUserId ?? "anonymous") + ":" + owner.current.revision} {...props} />;
+}
+function PpeCardWorkspace({
   onNavigate = navigateByHash,
-  onNotify,
-}: {
-  cards?: unknown;
-  onNavigate?: (screen: ScreenId) => void;
-  onNotify: (message: string) => void;
-  onReload?: () => Promise<void>;
-  options?: unknown;
-}) {
+  onNotify, canManage = false, canExport = false, currentUserId = "anonymous",
+}: PpeWorkspaceProps) {
   const repository = useInventoryRepository();
-  const [query, setQuery] = useState("");
   const phoneLayout = usePhoneLayout("(max-width: 767px)");
   const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(phoneLayout);
-  const deferredQuery = useDeferredValue(query);
-  const [employees, setEmployees] = useState<InventoryEmployeeDto[]>([]);
-  const [employeesLoading, setEmployeesLoading] = useState(true);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => readSelectedEmployee());
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => readSelectedEmployee(currentUserId));
+  const employeeSearch = usePpeEmployeeSearch(repository, currentUserId, selectedEmployeeId);
+  const { employees, query, loading: employeesLoading, error: employeesError } = employeeSearch;
   const [workspace, setWorkspace] = useState<InventoryPpeWorkspaceDto | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [mode, setMode] = useState<WorkspaceMode>("norms");
-  const [catalogRow, setCatalogRow] = useState<InventoryPpeCardNormRowDto | null>(null);
-  const [issueRow, setIssueRow] = useState<InventoryPpeCardNormRowDto | null>(null);
-  const [issueItem, setIssueItem] = useState<InventoryItemDto | null>(null);
-  const [issueSelection, setIssueSelection] = useState<PpeCatalogSelection | null>(null);
-  const [selectedItems, setSelectedItems] = useState<Record<string, InventoryItemDto>>({});
   const [previewMode, setPreviewMode] = useState<PrintMode | null>(null);
   const [downloadAction, setDownloadAction] = useState<string | null>(null);
   const downloadActionRef = useRef<string | null>(null);
-  const issueRequestRef = useRef(0);
-  useEffect(() => () => { issueRequestRef.current += 1; }, [selectedEmployeeId, repository]);
-  const [lineAction, setLineAction] = useState<{ action: ApplyInventoryPpeLineActionDto["action"]; line: InventoryPpeCardLineDto } | null>(null);
+  const ownerVersionRef = useRef(0);
+  useEffect(() => () => { ownerVersionRef.current += 1; workspaceRequest.current++; }, [selectedEmployeeId, repository]);
+  const workspaceRequest = useRef(0);
+  const selectedRef = useRef(selectedEmployeeId);
+  selectedRef.current = selectedEmployeeId;
+  const [lineAction, setLineAction] = useState<{ action: ApplyInventoryPpeLineActionDto["action"]; line: InventoryPpeCardLineDto; cardId: string; version?: number } | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setError("");
-    setEmployeesLoading(true);
-    repository.getEmployees({ page: 1, pageSize: 40, query: deferredQuery, status: "active" })
-      .then((result) => {
-        if (cancelled) return;
-        setEmployees(result.rows);
-        if (!selectedEmployeeId && result.rows[0]) selectEmployee(result.rows[0].id);
-      })
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить сотрудников");
-      })
-      .finally(() => { if (!cancelled) setEmployeesLoading(false); });
-    return () => { cancelled = true; };
-  }, [deferredQuery, reloadToken, repository]);
+    if (!selectedRef.current && employeeSearch.rows[0]) selectEmployee(employeeSearch.rows[0].id, false);
+  }, [employeeSearch.rows]);
 
   useEffect(() => {
     if (!selectedEmployeeId) {
@@ -84,12 +70,13 @@ export function InventoryPpeScreen({
       return;
     }
     let cancelled = false;
+    const generation = ++workspaceRequest.current;
     setWorkspaceLoading(true);
     setError("");
     repository.getPpeWorkspace(selectedEmployeeId)
-      .then((result) => { if (!cancelled) setWorkspace(result); })
-      .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить карточку СИЗ"); })
-      .finally(() => { if (!cancelled) setWorkspaceLoading(false); });
+      .then((result) => { if (!cancelled && generation === workspaceRequest.current) { if (result.employee.id !== selectedEmployeeId) throw new Error("Сервер вернул карточку другого сотрудника. Повторите загрузку."); setWorkspace(result); setRefreshRequired(false); } })
+      .catch((reason) => { if (!cancelled && generation === workspaceRequest.current) { setRefreshRequired(true); setError(reason instanceof Error ? reason.message : "Не удалось загрузить карточку СИЗ"); } })
+      .finally(() => { if (!cancelled && generation === workspaceRequest.current) setWorkspaceLoading(false); });
     return () => { cancelled = true; };
   }, [reloadToken, repository, selectedEmployeeId]);
 
@@ -100,18 +87,41 @@ export function InventoryPpeScreen({
   );
   const cardPrintData = useMemo(() => card ? buildPrintData(card, normRows, "card") : null, [card, normRows]);
   const sheetPrintData = useMemo(() => card ? buildPrintData(card, normRows, "sheet") : null, [card, normRows]);
-  const previewData = previewMode === "sheet" ? sheetPrintData : cardPrintData;
 
-  function selectEmployee(employeeId: string) {
+  function selectEmployee(employeeId: string, collapsePane = true) {
+    if (employeeId === selectedEmployeeId) { if (collapsePane) setEmployeePaneCollapsed(true); return; }
+    workspaceRequest.current++;
+    setWorkspace(null); setLineAction(null); setPreviewMode(null); setRefreshRequired(false); setError("");
+    downloadActionRef.current = null; setDownloadAction(null);
     setSelectedEmployeeId(employeeId);
-    setEmployeePaneCollapsed(true);
-    window.localStorage.setItem("patrol360.inventory.ppe.employee", employeeId);
+    if (collapsePane) setEmployeePaneCollapsed(true);
+    const key = employeeStorageKey(currentUserId); if (key) writeDocumentStorage("localStorage", key, employeeId);
   }
 
   async function reloadWorkspace() {
     if (!selectedEmployeeId) return;
+    const generation = ++workspaceRequest.current;
     const result = await repository.getPpeWorkspace(selectedEmployeeId);
-    setWorkspace(result);
+    if (generation === workspaceRequest.current && selectedRef.current === selectedEmployeeId) {
+      if (result.employee.id !== selectedEmployeeId) throw new Error("Сервер вернул карточку другого сотрудника.");
+      setWorkspace(result); setRefreshRequired(false); setError("");
+    }
+  }
+
+  async function applyLineAction(payload: ApplyInventoryPpeLineActionDto) {
+    if (!lineAction || refreshRequired || workspaceLoading) throw new Error("Сначала обновите карточку сотрудника.");
+    const owner = ownerVersionRef.current;
+    await repository.applyPpeLineAction(lineAction.cardId, lineAction.line.id, { ...payload, expectedVersion: lineAction.version });
+    if (owner !== ownerVersionRef.current) return;
+    setRefreshRequired(true);
+    try { await reloadWorkspace(); }
+    catch (reason) {
+      if (owner !== ownerVersionRef.current) return;
+      setError("Операция сохранена в истории СИЗ. Карточку не удалось обновить: " + ppeErrorMessage(reason, "Нет связи с сервером") + ". Обновите карточку; повторять операцию не нужно.");
+      onNotify("Операция сохранена. Для следующих действий обновите карточку СИЗ.");
+      return;
+    }
+    if (owner === ownerVersionRef.current) onNotify("Операция сохранена в истории СИЗ");
   }
 
   function retryLoad() {
@@ -119,84 +129,22 @@ export function InventoryPpeScreen({
     setReloadToken((value) => value + 1);
   }
 
-  async function openIssue(row: InventoryPpeCardNormRowDto) {
-    const request = ++issueRequestRef.current;
-    try {
-    let item = row.mappedItemId ? selectedItems[row.mappedItemId] ?? null : null;
-    if (!item && row.mappedItemId) {
-      item = await repository.getItem(row.mappedItemId);
-      if (request !== issueRequestRef.current) return;
-      if (item) setSelectedItems((current) => ({ ...current, [item!.id]: item! }));
-    }
-    setIssueItem(item);
-    setIssueSelection(item ? {
-      item,
-      mapping: {
-        brandModelArticle: row.brandModelArticle,
-        comment: "",
-        defaultUnitPriceMinor: row.defaultUnitPriceMinor,
-        isDefault: true,
-        itemId: item.id,
-      },
-      quantity: row.quantity || 1,
-    } : null);
-    setIssueRow(row);
-    } catch (reason) {
-      if (request === issueRequestRef.current) onNotify(reason instanceof Error ? reason.message : "Не удалось загрузить связанную номенклатуру. Повторите открытие выдачи.");
-    }
-  }
-
-  async function saveMapping(selections: PpeCatalogSelection[]) {
-    const selection = selections[0];
-    if (!selection) return;
-    const { item, mapping } = selection;
-    if (!catalogRow || !card) return;
-    setSelectedItems((current) => ({ ...current, [item.id]: item }));
-    if (issueRow?.id === catalogRow.id) {
-      setIssueItem(item);
-      setIssueSelection(selection);
-    }
-    if (catalogRow.sourceNormRowId) {
-      await repository.upsertPpeNormRowMapping(catalogRow.sourceNormRowId, mapping);
-    }
-    await repository.updatePpeCardNormRows(card.id, {
-      expectedVersion: card.version ?? 0,
-      rows: normRows.map((row) => ({
-        brandModelArticle: row.id === catalogRow.id ? mapping.brandModelArticle : row.brandModelArticle,
-        defaultUnitPriceMinor: row.id === catalogRow.id ? mapping.defaultUnitPriceMinor : row.defaultUnitPriceMinor,
-        id: row.id,
-        issuePeriodText: row.issuePeriodText,
-        lifeMonths: row.lifeMonths,
-        mappedItemId: row.id === catalogRow.id ? item.id : row.mappedItemId,
-        normItemName: row.normItemName,
-        normPoint: row.normPoint,
-        parentRowId: row.parentRowId,
-        quantity: row.quantity,
-        quantityText: row.quantityText,
-        rowType: row.rowType,
-        sortOrder: row.sortOrder,
-        sourceNormRowId: row.sourceNormRowId,
-      })),
-    });
-    await reloadWorkspace();
-    onNotify("Норма сопоставлена с номенклатурой. Фактическая выдача не создана.");
-  }
-
   async function downloadPrint(type: "card" | "sheet", format: "pdf" | "docx") {
-    if (!card) return;
+    if (!card || !canExport) return;
+    const owner = ownerVersionRef.current;
     const actionKey = `${type}:${format}`;
     if (downloadActionRef.current) return;
     downloadActionRef.current = actionKey;
     setDownloadAction(actionKey);
     try {
       const file = await repository.printPpeCard(card.id, type, format);
+      if (owner !== ownerVersionRef.current) return;
       saveApiFile(file);
       onNotify(`${type === "card" ? "Личная карточка" : "Лист выдачи"} ${format.toUpperCase()} сформирован`);
     } catch (reason) {
-      onNotify(ppeErrorMessage(reason, `Не удалось сформировать ${format.toUpperCase()}`));
+      if (owner === ownerVersionRef.current) onNotify(ppeErrorMessage(reason, `Не удалось сформировать ${format.toUpperCase()}`));
     } finally {
-      downloadActionRef.current = null;
-      setDownloadAction(null);
+      if (owner === ownerVersionRef.current) { downloadActionRef.current = null; setDownloadAction(null); }
     }
   }
 
@@ -216,9 +164,11 @@ export function InventoryPpeScreen({
               {employeePaneCollapsed ? "Выбрать" : "Скрыть"}
             </button>
           </div>
-          <label className="ppe-v2-search ppe-v2-employee-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => setQuery(event.target.value)} placeholder="ФИО или табельный номер" value={query} />{query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} type="button"><X size={15} /></button> : null}</label>
+          <label className="ppe-v2-search ppe-v2-employee-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => employeeSearch.search(event.target.value)} placeholder="ФИО или табельный номер" value={query} />{query ? <button aria-label="Очистить поиск" onClick={() => employeeSearch.search("")} type="button"><X size={15} /></button> : null}</label>
           <div className="ppe-v2-employee-list">
-            {employeesLoading ? <div className="ppe-v2-state">Загрузка сотрудников…</div> : employees.length === 0 ? <div className="ppe-v2-state"><UserRound size={28} /><strong>Сотрудники не найдены</strong></div> : employees.map((employee) => (
+            {employeesError ? <div className="ppe-workspace-refresh-error" role="alert"><span>{employeesError}</span><PpeButton disabled={employeesLoading} onClick={employeeSearch.retry}>Повторить поиск</PpeButton></div> : null}
+            {employeesLoading ? <div className="ppe-v2-state" role="status">{employees.length ? "Обновление сотрудников…" : "Загрузка сотрудников…"}</div> : null}
+            {!employeesLoading && employees.length === 0 ? <div className="ppe-v2-state"><UserRound size={28} /><strong>Сотрудники не найдены</strong></div> : employees.map((employee) => (
               <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={(event) => {
                 const toggle = event.currentTarget.closest("aside")?.querySelector<HTMLButtonElement>(".ppe-v2-pane-toggle");
                 selectEmployee(employee.id);
@@ -230,11 +180,14 @@ export function InventoryPpeScreen({
               </button>
             ))}
           </div>
+          <div className="ppe-card-employee-pages"><span>В поиске: {employeeSearch.rows.length} из {employeeSearch.total}</span>{employeeSearch.hasMore ? <PpeButton disabled={employeesLoading} onClick={employeeSearch.more}>Показать ещё сотрудников</PpeButton> : null}</div>
         </aside>
 
         <main className="ppe-v2-card-pane">
-          {workspaceLoading ? <div className="ppe-v2-state ppe-v2-state-large">Загрузка карточки сотрудника…</div> : error ? <div className="ppe-v2-state ppe-v2-state-large"><AlertTriangle size={32} /><strong>Не удалось открыть СИЗ</strong><span>{error}</span><PpeButton icon={<RefreshCw size={16} />} onClick={retryLoad} variant="secondary">Повторить</PpeButton></div> : !workspace ? <div className="ppe-v2-state ppe-v2-state-large"><UserRound size={32} /><strong>Выберите сотрудника</strong><span>Справа откроются нормы, выдача и печать.</span></div> : (
+          {workspaceLoading && !workspace ? <div className="ppe-v2-state ppe-v2-state-large">Загрузка карточки сотрудника…</div> : error && !workspace ? <div className="ppe-v2-state ppe-v2-state-large"><AlertTriangle size={32} /><strong>Не удалось открыть СИЗ</strong><span>{error}</span><PpeButton icon={<RefreshCw size={16} />} onClick={retryLoad} variant="secondary">Повторить</PpeButton></div> : !workspace ? <div className="ppe-v2-state ppe-v2-state-large"><UserRound size={32} /><strong>Выберите сотрудника</strong><span>Справа откроются нормы, выдача и печать.</span></div> : (
             <>
+              {error ? <div className="ppe-workspace-refresh-error" role="alert"><span>{error}</span><PpeButton disabled={workspaceLoading} onClick={retryLoad}>Обновить карточку</PpeButton></div> : null}
+              {workspaceLoading ? <p role="status">Обновляем карточку. Показаны ранее полученные данные.</p> : null}
               <EmployeeHeader
                 onCreateIssue={() => onNavigate("inventory-ppe-create")}
                 onOpenNormSettings={() => {
@@ -253,9 +206,9 @@ export function InventoryPpeScreen({
                     <button aria-selected={mode === "print"} className={mode === "print" ? "is-active" : ""} onClick={() => setMode("print")} role="tab" type="button"><span className="ppe-v2-mode-tab-copy"><strong>Печать</strong><small>Карточка и лист выдачи</small></span></button>
                   </div>
                   {mode === "norms" ? <NormContext workspace={workspace} onOpenNormSettings={() => { savePpeNormSettingsIntent(workspace.employee.position); onNavigate("inventory-settings"); }} /> : null}
-                  {mode === "norms" ? <NormRowsTable rows={normRows} onIssue={(row) => void openIssue(row)} onMap={setCatalogRow} /> : null}
-                  {mode === "issued" ? <IssuedTable card={card} onAction={(line, action) => setLineAction({ action, line })} /> : null}
-                  {mode === "print" && cardPrintData && sheetPrintData ? <PrintWorkspace cardData={cardPrintData} sheetData={sheetPrintData} downloadAction={downloadAction} onDownload={downloadPrint} onPreview={setPreviewMode} /> : null}
+                  {mode === "norms" ? <NormRowsTable rows={normRows} onIssue={() => onNavigate("inventory-ppe-create")} onMap={() => onNavigate("inventory-settings")} /> : null}
+                  {mode === "issued" ? <IssuedTable canManage={canManage} actionsDisabled={workspaceLoading || refreshRequired} card={card} onAction={(line, action) => setLineAction({ action, line, cardId: card.id, version: card.version })} /> : null}
+                  {mode === "print" && canExport && cardPrintData && sheetPrintData ? <PrintWorkspace cardData={cardPrintData} sheetData={sheetPrintData} downloadAction={downloadAction} onDownload={downloadPrint} onPreview={setPreviewMode} /> : null}
                 </>
               )}
             </>
@@ -263,26 +216,8 @@ export function InventoryPpeScreen({
         </main>
       </div>
 
-      {catalogRow ? <PpeCatalogModal normRow={catalogRow} onClose={() => setCatalogRow(null)} onConfirm={saveMapping} /> : null}
-      {issueRow && card ? (
-        <PpeIssueModal
-          initialBrandModelArticle={issueSelection?.mapping.brandModelArticle ?? issueRow.brandModelArticle}
-          initialQuantity={issueSelection?.quantity ?? issueRow.quantity}
-          initialUnitPriceMinor={issueSelection?.mapping.defaultUnitPriceMinor ?? issueRow.defaultUnitPriceMinor}
-          item={issueItem}
-          normRow={issueRow}
-          onChooseItem={() => setCatalogRow(issueRow)}
-          onClose={() => { setIssueRow(null); setIssueSelection(null); }}
-          onSubmit={async (payload) => {
-            await repository.createPpeIssue(card.id, { ...payload, expectedVersion: card.version });
-            await reloadWorkspace();
-            setMode("issued");
-            onNotify("СИЗ выдано. Запись добавлена в историю и лист выдачи.");
-          }}
-        />
-      ) : null}
-      {previewMode && previewData ? <PrintPreviewModal data={previewData} mode={previewMode} onClose={() => setPreviewMode(null)} onModeChange={setPreviewMode} onPrint={printDocument} /> : null}
-      {lineAction && card ? <PpeLineActionModal action={lineAction.action} line={lineAction.line} onClose={() => setLineAction(null)} onSubmit={async (payload) => { await repository.applyPpeLineAction(card.id, lineAction.line.id, { ...payload, expectedVersion: card.version }); await reloadWorkspace(); onNotify("Операция сохранена в истории СИЗ"); }} /> : null}
+      {previewMode && cardPrintData && sheetPrintData ? <LegacyPrintPreview key={selectedEmployeeId + ":" + card?.id} sources={{ card: cardPrintData, sheet: sheetPrintData }} mode={previewMode} onClose={() => setPreviewMode(null)} onModeChange={setPreviewMode} onPrint={printDocument} /> : null}
+      {lineAction && card ? <PpeLineActionModal action={lineAction.action} line={lineAction.line} onClose={() => setLineAction(null)} onSubmit={applyLineAction} /> : null}
     </section>
   );
 }
@@ -364,7 +299,7 @@ function Coverage({ status }: { status: InventoryPpeCardNormRowDto["coverageStat
   return <span className={`ppe-v2-status is-${status}`}>{status === "issued" ? <CheckCircle2 size={14} /> : null}{labels[status]}</span>;
 }
 
-function IssuedTable({ card, onAction }: { card: InventoryPpeCardDetailDto; onAction: (line: InventoryPpeCardLineDto, action: ApplyInventoryPpeLineActionDto["action"]) => void }) {
+function IssuedTable({ card, onAction, canManage, actionsDisabled }: { canManage: boolean; actionsDisabled: boolean; card: InventoryPpeCardDetailDto; onAction: (line: InventoryPpeCardLineDto, action: ApplyInventoryPpeLineActionDto["action"]) => void }) {
   const rows = [...card.lines].filter((line) => line.status !== "archived").sort((a, b) => (b.issuedAt ?? "").localeCompare(a.issuedAt ?? ""));
   const active = rows.filter((line) => line.status === "issued" || line.status === "defective").length;
   const returned = rows.filter((line) => line.status === "returned").length;
@@ -374,15 +309,15 @@ function IssuedTable({ card, onAction }: { card: InventoryPpeCardDetailDto; onAc
     <section className="ppe-v2-work-section">
       <header className="ppe-v2-work-section-head"><div><span className="ppe-v2-eyebrow">Фактическая выдача</span><h3>Что сотрудник получил</h3><p>Операции отсортированы от новой даты к старой. Завершённые строки нельзя провести повторно.</p></div><div className="ppe-v2-section-counters"><span><strong>{rows.length}</strong><small>всего</small></span><span className="is-ready"><strong>{active}</strong><small>на руках</small></span><span><strong>{returned}</strong><small>возвращено</small></span><span><strong>{writtenOff}</strong><small>списано</small></span></div></header>
       <div className="ppe-v2-table-wrap"><table className="ppe-v2-table ppe-v2-responsive-table"><thead><tr><th>СИЗ</th><th>Модель / артикул</th><th>Дата выдачи</th><th>Количество</th><th>Способ</th><th>Статус</th><th aria-label="Действия" /></tr></thead><tbody>{rows.map((line) => {
-        const actions = availableLineActions(line.status);
-        return <tr className={`is-${line.status}`} key={line.id}><td data-label="СИЗ"><strong>{line.printItemName || line.itemName}</strong>{line.printItemName && line.printItemName !== line.itemName ? <small>{line.itemName}</small> : null}</td><td data-label="Модель / артикул">{line.brandModelArticle || "Не указано"}</td><td data-label="Дата выдачи">{formatDate(line.issuedAt)}</td><td data-label="Количество">{line.quantity} {line.unit}</td><td data-label="Способ">{line.issueMethod === "dispenser" ? "Дозатор" : "Лично"}</td><td data-label="Статус"><span className={`ppe-v2-status is-${line.status}`}>{issueStatusLabel(line.status)}</span></td><td className="ppe-v2-actions-cell">{actions.length ? <details className="ppe-v2-row-menu"><summary aria-label={`Действия: ${line.printItemName || line.itemName}`}><MoreVertical size={18} /></summary><div>{actions.map((action) => <button className={action === "written_off" || action === "defective" ? "is-danger" : ""} key={action} onClick={() => onAction(line, action)} type="button">{lineActionLabel(action)}</button>)}</div></details> : <span className="ppe-v2-row-closed">Операция завершена</span>}</td></tr>;
+        const actions = canManage ? availableLineActions(line.status) : [];
+        return <tr className={`is-${line.status}`} key={line.id}><td data-label="СИЗ"><strong>{line.printItemName || line.itemName}</strong>{line.printItemName && line.printItemName !== line.itemName ? <small>{line.itemName}</small> : null}</td><td data-label="Модель / артикул">{line.brandModelArticle || "Не указано"}</td><td data-label="Дата выдачи">{formatDate(line.issuedAt)}</td><td data-label="Количество">{line.quantity} {line.unit}</td><td data-label="Способ">{line.issueMethod === "dispenser" ? "Дозатор" : "Лично"}</td><td data-label="Статус"><span className={`ppe-v2-status is-${line.status}`}>{issueStatusLabel(line.status)}</span></td><td className="ppe-v2-actions-cell">{actions.length ? <details className="ppe-v2-row-menu"><summary aria-label={`Действия: ${line.printItemName || line.itemName}`}><MoreVertical size={18} /></summary><div>{actions.map((action) => <button disabled={actionsDisabled} className={action === "written_off" || action === "defective" ? "is-danger" : ""} key={action} onClick={() => onAction(line, action)} type="button">{lineActionLabel(action)}</button>)}</div></details> : <span className="ppe-v2-row-closed">Операция завершена</span>}</td></tr>;
       })}</tbody></table></div>
     </section>
   );
 }
 
 function availableLineActions(status: string): ApplyInventoryPpeLineActionDto["action"][] {
-  if (status === "issued") return ["returned", "written_off", "defective"];
+  if (["issued", "partial", "replacement", "reissued"].includes(status)) return ["returned", "written_off", "defective"];
   if (status === "defective") return ["returned", "written_off"];
   return [];
 }
@@ -442,6 +377,7 @@ function buildPrintData(card: InventoryPpeCardDetailDto, normRows: InventoryPpeC
 }
 
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
-function readSelectedEmployee() { return typeof window === "undefined" ? "" : window.localStorage.getItem("patrol360.inventory.ppe.employee") ?? ""; }
+function employeeStorageKey(owner: string) { return owner && owner !== "anonymous" ? "patrol360.inventory.ppe.employee." + owner : null; }
+function readSelectedEmployee(owner: string) { const key = employeeStorageKey(owner); return typeof window === "undefined" || !key ? "" : readDocumentStorage("localStorage", key) ?? ""; }
 function issueStatusLabel(status: string) { return ({ defective: "Неисправно", issued: "Выдано", returned: "Возвращено", written_off: "Списано" } as Record<string, string>)[status] ?? status; }
 function navigateByHash(screen: ScreenId) { window.location.hash = screen; }

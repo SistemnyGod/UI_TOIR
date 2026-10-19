@@ -215,7 +215,7 @@
 
   .screen-area :where(
     .dashboard-am-kpis, .results-review-kpis, .inventory-dashboard-kpis,
-    .emu-dashboard-kpis, .emu-work-kpis, .perco-dashboard-kpis,
+    .emu-dashboard-kpis, .emu-work-kpis,
     .metric-grid, .metric-grid.compact
   ) {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -592,13 +592,6 @@ body .site-user-modal.site-user-modal-wide .site-user-modal-actions .button {
 }
 
 /* EMU history range picker: keep the calendar reachable above the phone viewport. */
-@media (max-width: 640px) {
-  body .emu-shell .emu-history-period-popover {
-    max-height: calc(100dvh - 120px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-}
 
 /* PERCO pagination: keep page controls compact instead of stacking three full-width buttons on phones. */
 @media (max-width: 640px) {

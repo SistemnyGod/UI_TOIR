@@ -1,0 +1,31 @@
+.user-account-trigger { display: flex; align-items: center; gap: 8px; min-height: 40px; min-width: 0; max-width: 260px; padding: 4px; border: 0; background: transparent; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-control); }
+.user-account-trigger .user-copy { min-width: 0; }
+.user-account-trigger-icon { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; background: var(--ui-blue-soft); color: var(--ui-blue); }
+.user-account-trigger .user-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
+.user-account-trigger:focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.user-account-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.user-account-identity h3 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }
+.user-account-identity p { color: var(--ui-muted); margin: 4px 0 0; }
+.user-account-avatar { display: grid; place-items: center; width: 56px; height: 56px; flex: 0 0 56px; background: var(--ui-blue-soft); color: var(--ui-blue); border-radius: 50%; }
+.user-account-session { display: flex; align-items: center; gap: 8px; color: var(--ui-text); font-size: 13px; margin: 16px 0; }
+.user-account-session svg { color: var(--ui-success); flex-shrink: 0; }
+.user-account-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px; }
+.user-account-fields > div { padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); }
+.user-account-fields dt, .user-account-hint { color: var(--ui-muted); font-size: 13px; line-height: 1.5; }
+.user-account-fields dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+.user-account-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.user-account-password fieldset { display: grid; gap: 16px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.user-account-password label { display: grid; gap: 6px; font-size: 14px; }
+.user-account-password input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 10px 12px; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); color: var(--ui-text); background: var(--ui-surface); font: inherit; }
+.user-account-error { color: var(--ui-danger); line-height: 1.5; }
+.mock-mode-notice { margin: 0; padding: 6px 20px; color: var(--ui-muted); background: var(--ui-blue-soft); border-bottom: 1px solid var(--ui-border); font-size: 12px; line-height: 1.4; }
+.auth-password-fields { display: grid; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.auth-password-fields label { display: grid; gap: 6px; }
+.auth-password-fields input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; }
+@media (max-width: 767px) {
+  .user-account-trigger { min-height: 44px; min-width: 44px; }
+  .user-account-trigger .user-copy { display: none; }
+  .user-account-fields { grid-template-columns: minmax(0, 1fr); }
+  .user-account-options { display: grid; }
+  .user-account-options > button { min-height: 44px; }
+}

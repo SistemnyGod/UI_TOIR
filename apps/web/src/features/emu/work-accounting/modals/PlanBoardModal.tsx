@@ -1,350 +1,118 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { EmuPlanTaskDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import type { EmuEmployeeOption } from "../types";
-import { EmployeePicker } from "../components/EmployeePicker";
-import { ModalFrame } from "../components/ModalFrame";
 import { Button } from "../../../../shared/ui";
-import { activeSections, formatDate, formatEmployeeShortName, getSystemOtherSection, mondayOf, parseDateInput, toDateInput, toggle } from "../workAccountingUtils";
+import { ModalFrame } from "../components/ModalFrame";
+import { useEmuDialogSession } from "../useEmuDialogSession";
+import { activeSections, formatDate, getSystemOtherSection, mondayOf, toDateInput } from "../workAccountingUtils";
+import { planColumn, planColumns, shiftPlanWeek, snapshotPlanTask, tasksInWeek, type PlanColumn } from "../plan/planBoardModel";
+import { PlanTaskEditor } from "../plan/PlanTaskEditor";
+import { PlanTaskActionDialog, PlanTaskView, PlanWeekApprovalDialog } from "../plan/PlanTaskDialogs";
+import "../plan/emuPlanBoard.css";
 
-export function PlanBoardModal({
-  canApprovePlan,
-  canCreateWork,
-  canManagePlan,
-  employeeOptions,
-  onClose,
-  onNotify,
-  workspace,
-}: {
-  canApprovePlan: boolean;
-  canCreateWork: boolean;
-  canManagePlan: boolean;
-  employeeOptions: EmuEmployeeOption[];
-  onClose: () => void;
-  onNotify: (message: string) => void;
-  workspace: EmuWorkspace;
+type Selection = { kind: "create"; date: string } | { kind: "edit" | "reject" | "reschedule" | "view"; task: EmuPlanTaskDto } | { kind: "week"; weekStart: string; tasks: EmuPlanTaskDto[] };
+
+export function PlanBoardModal({ canApprovePlan, canCreateWork, canManagePlan, employeeOptions, onClose, onNotify, workspace }: {
+  canApprovePlan: boolean; canCreateWork: boolean; canManagePlan: boolean;
+  employeeOptions: EmuEmployeeOption[]; onClose: () => void; onNotify: (message: string) => void; workspace: EmuWorkspace;
 }) {
   const today = toDateInput(new Date());
-  const defaultPlanSectionId = getSystemOtherSection(workspace)?.id ?? activeSections(workspace)[0]?.id ?? "";
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [plannedDate, setPlannedDate] = useState(today);
-  const [sectionId, setSectionId] = useState(defaultPlanSectionId);
-  const [priority, setPriority] = useState("");
-  const [employeeIds, setEmployeeIds] = useState<string[]>([]);
-  const [editingTaskId, setEditingTaskId] = useState("");
-  const [rejectTask, setRejectTask] = useState<EmuPlanTaskDto | null>(null);
-  const [rejectComment, setRejectComment] = useState("");
-  const [rescheduleTask, setRescheduleTask] = useState<EmuPlanTaskDto | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState(today);
-  const [rescheduleComment, setRescheduleComment] = useState("");
-  const [confirmWeekApproval, setConfirmWeekApproval] = useState(false);
-
-  const weekStart = mondayOf(plannedDate);
-  const weekApprovalCount = workspace.planTasks.filter((task) => {
-    const taskDate = parseDateInput(task.plannedDate);
-    const start = parseDateInput(weekStart);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 7);
-    return taskDate >= start && taskDate < end && task.approvalStatus !== "Согласовано";
-  }).length;
-
-  const editingTask = workspace.planTasks.find((task) => task.id === editingTaskId);
-
-  function resetTaskForm() {
-    setTitle("");
-    setDescription("");
-    setSectionId(defaultPlanSectionId);
-    setPriority("");
-    setEmployeeIds([]);
-    setEditingTaskId("");
+  const [weekStart, setWeekStart] = useState(() => mondayOf(today));
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 760);
+  const [column, setColumn] = useState<PlanColumn>("draft");
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [accepted, setAccepted] = useState<Record<string, EmuPlanTaskDto>>({});
+  const [sent, setSent] = useState<string[]>([]);
+  const session = useEmuDialogSession({ onClose, onNotify });
+  const defaultSectionId = getSystemOtherSection(workspace)?.id ?? activeSections(workspace)[0]?.id ?? "";
+  const merged = new Map(workspace.planTasks.map(task => [task.id, task]));
+  for (const task of Object.values(accepted)) if (!merged.has(task.id) || merged.get(task.id)!.rowVersion < task.rowVersion) merged.set(task.id, task);
+  useEffect(() => {
+    setAccepted(current => {
+      const rest = Object.fromEntries(Object.entries(current).filter(([id, task]) => !workspace.planTasks.some(row => row.id === id && row.rowVersion >= task.rowVersion)));
+      return Object.keys(rest).length === Object.keys(current).length ? current : rest;
+    });
+    setSent(current => {
+      const rest = current.filter(id => !workspace.planTasks.some(task => task.id === id && task.status !== "Запланировано"));
+      return rest.length === current.length ? current : rest;
+    });
+  }, [workspace.planTasks]);
+  const week = tasksInWeek([...merged.values()], weekStart);
+  const awaitingApproval = week.filter(task => task.approvalStatus !== "Согласовано");
+  const query = search.trim().toLowerCase();
+  const visible = week.filter(task => [task.title, task.description, task.sectionName, ...task.employeeIds.map(id => employeeOptions.find(employee => employee.id === id)?.fullName || "")].some(value => value.toLowerCase().includes(query)));
+  function accept(tasks: EmuPlanTaskDto[]) { setAccepted(current => ({ ...current, ...Object.fromEntries(tasks.map(task => [task.id, task])) })); }
+  function saved(task: EmuPlanTaskDto) { accept([task]); setWeekStart(mondayOf(task.plannedDate)); setColumn(planColumn(task)); }
+  function open(kind: "edit" | "reject" | "reschedule" | "view", task: EmuPlanTaskDto) { setSelection({ kind, task: snapshotPlanTask(task) }); }
+  function send(task: EmuPlanTaskDto) {
+    if (!canCreateWork || task.status !== "Запланировано" || task.approvalStatus !== "Согласовано" || sent.includes(task.id)) return;
+    void session.run(async () => {
+      const sectionId = task.sectionId || defaultSectionId;
+      if (!sectionId) throw new Error("Добавьте участок перед отправкой задачи в работу");
+      return workspace.actions.createWorkSession({ arrivedAt: new Date().toISOString(), employeeIds: task.employeeIds, planTaskId: task.id,
+        sectionId, taskDescription: task.description || task.title, workDate: task.plannedDate });
+    }, "Плановая задача отправлена в работу", () => setSent(current => [...current, task.id]));
   }
-
-  function editTask(task: EmuPlanTaskDto) {
-    if (!canManagePlan) {
-      onNotify("Недостаточно прав для изменения плана ЭМУ");
-      return;
-    }
-
-    setEditingTaskId(task.id);
-    setTitle(task.title);
-    setDescription(task.description);
-    setPlannedDate(task.plannedDate);
-    setSectionId(task.sectionId ?? defaultPlanSectionId);
-    setPriority(task.priority || "");
-    setEmployeeIds(task.employeeIds);
-  }
-
-  async function createTask() {
-    if (!canManagePlan) {
-      onNotify("Недостаточно прав для изменения плана ЭМУ");
-      return;
-    }
-
-    const payload = {
-      description,
-      employeeIds,
-      isRecurring: false,
-      plannedDate,
-      priority: priority || "Обычный",
-      recurrenceRule: "",
-      sectionId: sectionId || defaultPlanSectionId || null,
-      title,
-      rowVersion: editingTask?.rowVersion,
-    };
-
-    try {
-      if (editingTask) {
-        await workspace.actions.updatePlanTask(editingTask.id, payload);
-        onNotify("Задача плана обновлена");
-      } else {
-        await workspace.actions.createPlanTask(payload);
-        onNotify("Задача добавлена в недельный план");
-      }
-
-      resetTaskForm();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось сохранить задачу");
-    }
-  }
-
-  async function approveWeek() {
-    if (!canApprovePlan) {
-      onNotify("Недостаточно прав для согласования плана ЭМУ");
-      return;
-    }
-
-    if (weekApprovalCount === 0) {
-      onNotify("В выбранной неделе нет задач для согласования");
-      return;
-    }
-
-    setConfirmWeekApproval(true);
-  }
-
-  async function confirmApproveWeek() {
-    if (!canApprovePlan) {
-      onNotify("Недостаточно прав для согласования плана ЭМУ");
-      return;
-    }
-
-    try {
-      await workspace.actions.approveWeek(weekStart, `Массовое согласование недели: ${weekApprovalCount} задач`);
-      onNotify("Неделя согласована");
-      setConfirmWeekApproval(false);
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось согласовать неделю");
-    }
-  }
-
-  async function approveTask(task: EmuPlanTaskDto) {
-    if (!canApprovePlan) {
-      onNotify("Недостаточно прав для согласования плана ЭМУ");
-      return;
-    }
-
-    try {
-      await workspace.actions.approvePlanTask(task.id, true, "Согласовано");
-      onNotify("Задача согласована");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось согласовать задачу");
-    }
-  }
-
-  async function rejectSelectedTask() {
-    if (!rejectTask) return;
-    if (!canApprovePlan) {
-      onNotify("Недостаточно прав для согласования плана ЭМУ");
-      return;
-    }
-
-    try {
-      await workspace.actions.approvePlanTask(rejectTask.id, false, rejectComment);
-      onNotify("Задача отклонена");
-      setRejectTask(null);
-      setRejectComment("");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось отклонить задачу");
-    }
-  }
-
-  function openReschedule(task: EmuPlanTaskDto) {
-    if (!canManagePlan) {
-      onNotify("Недостаточно прав для переноса плана ЭМУ");
-      return;
-    }
-
-    setRescheduleTask(task);
-    setRescheduleDate(task.plannedDate);
-    setRescheduleComment("");
-  }
-
-  async function confirmRescheduleTask() {
-    if (!rescheduleTask) return;
-    if (!canManagePlan) {
-      onNotify("Недостаточно прав для переноса плана ЭМУ");
-      return;
-    }
-
-    try {
-      await workspace.actions.reschedulePlanTask(rescheduleTask.id, {
-        comment: rescheduleComment,
-        newPlannedDate: rescheduleDate,
-        rowVersion: rescheduleTask.rowVersion,
-      });
-      onNotify("Плановая задача перенесена");
-      setRescheduleTask(null);
-      setRescheduleComment("");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось перенести задачу");
-    }
-  }
-
-  async function sendPlanTaskToWork(task: EmuPlanTaskDto) {
-    if (!canCreateWork) {
-      onNotify("Недостаточно прав для отправки задачи в работу");
-      return;
-    }
-
-    if (task.approvalStatus !== "Согласовано") {
-      onNotify("Плановая задача должна быть согласована перед отправкой в работу");
-      return;
-    }
-
-    const section = task.sectionId || defaultPlanSectionId || activeSections(workspace)[0]?.id;
-    if (!section) {
-      onNotify("Добавьте участок перед отправкой задачи в работу");
-      return;
-    }
-
-    try {
-      await workspace.actions.createWorkSession({
-        arrivedAt: new Date().toISOString(),
-        employeeIds: task.employeeIds,
-        planTaskId: task.id,
-        sectionId: section,
-        taskDescription: task.description || task.title,
-        workDate: task.plannedDate,
-      });
-      onNotify("Плановая задача отправлена в работу");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось отправить задачу в работу");
-    }
-  }
-
-  const columns = [
-    { key: "draft", title: "Черновик / отклонено", tasks: workspace.planTasks.filter((task) => task.approvalStatus !== "Согласовано") },
-    { key: "approved", title: "Согласовано", tasks: workspace.planTasks.filter((task) => task.approvalStatus === "Согласовано" && task.status === "Запланировано") },
-    { key: "active", title: "В работе", tasks: workspace.planTasks.filter((task) => task.status === "В работе") },
-    { key: "done", title: "Закрыто", tasks: workspace.planTasks.filter((task) => task.status !== "Запланировано" && task.status !== "В работе" && task.approvalStatus === "Согласовано") },
-  ];
-
-  return (
-    <ModalFrame wide onClose={onClose} title="Доска задач / план на неделю">
-      {canManagePlan ? (
-        <>
-          <div className="emu-plan-create">
-            <input placeholder="Новая плановая задача" value={title} onChange={(event) => setTitle(event.target.value)} />
-            <input type="date" value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)} />
-            <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-              {activeSections(workspace).length === 0 ? <option value="">Нет активного участка</option> : null}
-              {activeSections(workspace).map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
-            </select>
-            <select value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="">Без приоритета</option>
-              <option>Низкий</option>
-              <option>Обычный</option>
-              <option>Высокий</option>
-              <option>Срочно</option>
-            </select>
-            <Button disabled={!title.trim() || employeeIds.length === 0} onClick={() => void createTask()} variant="primary">{editingTask ? "Сохранить" : "Добавить"}</Button>
-          </div>
-          <label className="emu-textarea-label">Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что нужно сделать, критерий выполнения" /></label>
-          <div className="emu-plan-options">
-            {editingTask ? <Button onClick={resetTaskForm} variant="secondary">Отменить изменение</Button> : null}
-            {canApprovePlan ? <Button onClick={() => void approveWeek()} variant="secondary">Согласовать неделю ({weekApprovalCount})</Button> : null}
-          </div>
-          <div className="emu-check-list compact">
-            {employeeOptions.slice(0, 12).map((employee) => (
-              <label key={employee.id}>
-                <input checked={employeeIds.includes(employee.id)} onChange={() => setEmployeeIds((value) => toggle(value, employee.id))} type="checkbox" />
-                {employee.fullName}
-              </label>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="emu-empty-state">Доска доступна только для просмотра. Для изменения задач требуется право emu.plan.manage.</div>
-      )}
-      {!canManagePlan && canApprovePlan ? (
-        <div className="emu-plan-options">
-          <Button onClick={() => void approveWeek()} variant="secondary">Согласовать неделю ({weekApprovalCount})</Button>
-        </div>
-      ) : null}
-      <div className="emu-kanban">
-        {columns.map((column) => (
-          <section key={column.key}>
-            <h4>{column.title}</h4>
-            {column.tasks.map((task) => (
-              <article className={`emu-plan-card priority-${task.priority.toLowerCase() || "none"}`} key={task.id}>
-                <strong>{task.title}</strong>
-                <span>{task.plannedDate} · {task.sectionName || "Прочее"}</span>
-                <small>{task.priority || "Без приоритета"} · сотрудников: {task.employeeIds.length}</small>
-                <div className="emu-plan-card-actions">
-                  {canManagePlan ? <button onClick={() => editTask(task)} type="button">Изменить</button> : null}
-                  {canManagePlan && task.status === "Запланировано" ? <button onClick={() => openReschedule(task)} type="button">Перенести</button> : null}
-                  {task.approvalStatus !== "Согласовано" && canApprovePlan ? <button onClick={() => void approveTask(task)} type="button">Согласовать</button> : null}
-                  {task.approvalStatus !== "Согласовано" && canApprovePlan ? <button className="emu-danger-action" onClick={() => setRejectTask(task)} type="button">Отклонить</button> : null}
-                  {canCreateWork ? (
-                    <button
-                      disabled={task.status !== "Запланировано" || task.approvalStatus !== "Согласовано"}
-                      onClick={() => void sendPlanTaskToWork(task)}
-                      title={task.approvalStatus !== "Согласовано" ? "Сначала согласуйте задачу" : undefined}
-                      type="button"
-                    >
-                      Отправить в работу
-                    </button>
-                  ) : null}
-                </div>
-                {task.status === "Запланировано" && task.approvalStatus !== "Согласовано" ? <p className="emu-card-warning compact">Отправка заблокирована: задача не согласована.</p> : null}
-              </article>
-            ))}
-          </section>
-        ))}
+  const error = session.error || workspace.error;
+  return <><ModalFrame wide title="Доска задач / план на неделю" className="emu-plan-board" subtitle={`Неделя с ${formatDate(weekStart)} · Задач: ${week.length}`}
+    onClose={session.close} pending={session.pending} leaveDialog={session.leaveDialog}
+    actions={<div className="emu-plan-footer">
+      {error ? <p className="emu-work-form-error" role="alert">{error}</p> : null}
+      <span role="status">{session.pending ? "Сохраняем изменения…" : `Найдено: ${visible.length} из ${week.length}`}</span>
+      <Button disabled={session.pending} onClick={session.close} variant="ghost">Готово</Button>
+      {canManagePlan ? <Button disabled={session.pending} variant="primary" onClick={() => setSelection({ kind: "create", date: mondayOf(today) === weekStart ? today : weekStart })}>Новая задача</Button> : null}
+    </div>}>
+    <details className="emu-plan-filters" open={filtersOpen} onToggle={event => setFiltersOpen(event.currentTarget.open)}>
+      <summary>Неделя и поиск{query ? " · поиск включён" : ""}</summary>
+      <div className="emu-plan-toolbar">
+      <div className="emu-plan-week-nav">
+        <Button aria-label="Предыдущая неделя" onClick={() => setWeekStart(shiftPlanWeek(weekStart, -1))}>←</Button>
+        <label>Неделя плана<input type="date" value={weekStart} onChange={event => { if (event.target.value) setWeekStart(mondayOf(event.target.value)); }} /></label>
+        <Button aria-label="Следующая неделя" onClick={() => setWeekStart(shiftPlanWeek(weekStart, 1))}>→</Button>
+        <Button onClick={() => setWeekStart(mondayOf(today))} variant="ghost">Текущая</Button>
       </div>
-      {rejectTask ? (
-        <div className="emu-nested-confirm">
-          <strong>Отклонить задачу «{rejectTask.title}»</strong>
-          <label className="emu-textarea-label">Комментарий<textarea value={rejectComment} onChange={(event) => setRejectComment(event.target.value)} placeholder="Причина отклонения" /></label>
-          <div className="emu-modal-actions">
-            <button onClick={() => { setRejectTask(null); setRejectComment(""); }} type="button">Отмена</button>
-            <Button disabled={!rejectComment.trim()} onClick={() => void rejectSelectedTask()} variant="danger">Отклонить</Button>
-          </div>
-        </div>
-      ) : null}
-      {rescheduleTask ? (
-        <div className="emu-nested-confirm">
-          <strong>Перенести задачу «{rescheduleTask.title}»</strong>
-          <div className="emu-form-grid compact">
-            <label>Новая дата<input type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></label>
-          </div>
-          <label className="emu-textarea-label">Причина переноса<textarea value={rescheduleComment} onChange={(event) => setRescheduleComment(event.target.value)} placeholder="Почему переносим задачу" /></label>
-          <div className="emu-modal-actions">
-            <button onClick={() => { setRescheduleTask(null); setRescheduleComment(""); }} type="button">Отмена</button>
-            <Button disabled={!rescheduleComment.trim() || rescheduleDate === rescheduleTask.plannedDate} onClick={() => void confirmRescheduleTask()} variant="primary">Перенести</Button>
-          </div>
-        </div>
-      ) : null}
-      {confirmWeekApproval ? (
-        <div className="emu-nested-confirm">
-          <strong>Согласовать неделю</strong>
-          <p>Будет согласовано задач: {weekApprovalCount}. Действие попадет в историю изменений плана.</p>
-          <div className="emu-modal-actions">
-            <button onClick={() => setConfirmWeekApproval(false)} type="button">Отмена</button>
-            <Button onClick={() => void confirmApproveWeek()} variant="primary">Согласовать неделю</Button>
-          </div>
-        </div>
-      ) : null}
-    </ModalFrame>
-  );
+      <label className="emu-plan-search">Поиск задач<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Задача, участок или сотрудник" /></label>
+      <div className="emu-plan-toolbar-actions">
+        <Button onClick={() => void workspace.refreshPlanBoard()} variant="ghost">Обновить доску</Button>
+        {canApprovePlan ? <Button disabled={!awaitingApproval.length} onClick={() => setSelection({ kind: "week", weekStart, tasks: awaitingApproval.map(snapshotPlanTask) })} variant="secondary">Согласовать неделю ({awaitingApproval.length})</Button> : null}
+      </div>
+      </div>
+    </details>
+    <div className="emu-plan-column-switch" role="group" aria-label="Статусы плана">{planColumns.map(item => <button type="button" key={item.id} aria-pressed={column === item.id} onClick={() => setColumn(item.id)}>{item.title} <span>{visible.filter(task => planColumn(task) === item.id).length}</span></button>)}</div>
+    <div className="emu-plan-columns" data-column={column}>
+      {planColumns.map(item => {
+        const tasks = visible.filter(task => planColumn(task) === item.id);
+        return <section className={`emu-plan-column emu-plan-column-${item.id}`} key={item.id} aria-label={item.title}>
+          <h3>{item.title}<span>{tasks.length}</span></h3>
+          {tasks.map(task => <article className="emu-plan-card" data-priority={task.priority} key={task.id}>
+            <button className="emu-plan-title" type="button" onClick={() => open("view", task)} aria-label={`Открыть задачу ${task.title}`}>{task.title}</button>
+            <span>{formatDate(task.plannedDate)} · {task.sectionName || "Прочее"}</span>
+            <div className="emu-plan-badges"><span>{task.priority || "Обычный"}</span><span>{item.id === "done" ? task.status : task.approvalStatus}</span><span>Сотрудников: {task.employeeIds.length}</span></div>
+            {sent.includes(task.id) ? <p role="status">Работа создана. Ожидаем обновления плана.</p> : null}
+            {canManagePlan || canApprovePlan || canCreateWork ? <details className="emu-plan-card-menu"><summary>Действия</summary><div className="emu-plan-card-actions">
+              {canManagePlan ? <button type="button" onClick={() => open("edit", task)} disabled={sent.includes(task.id)}>Изменить</button> : null}
+              {canManagePlan && task.status === "Запланировано" ? <button type="button" onClick={() => open("reschedule", task)} disabled={sent.includes(task.id)}>Перенести</button> : null}
+              {canApprovePlan && task.approvalStatus !== "Согласовано" ? <>
+                <button type="button" onClick={() => void session.run(() => workspace.actions.approvePlanTask(task.id, true, "Согласовано", task.rowVersion), "Задача согласована", result => { accept([result]); setColumn(planColumn(result)); })}>Согласовать</button>
+                <button type="button" onClick={() => open("reject", task)}>Отклонить</button>
+              </> : null}
+              {canCreateWork && task.status === "Запланировано" ? <button type="button" disabled={task.approvalStatus !== "Согласовано" || sent.includes(task.id)} onClick={() => send(task)} title={task.approvalStatus !== "Согласовано" ? "Сначала согласуйте задачу" : undefined}>Отправить в работу</button> : null}
+            </div></details> : null}
+          </article>)}
+          {!tasks.length ? <p className="emu-plan-empty">{query ? "По этому поиску задач нет" : "Задач нет"}</p> : null}
+        </section>;
+      })}
+    </div>
+  </ModalFrame>
+    {canManagePlan && (selection?.kind === "create" || selection?.kind === "edit") ? <PlanTaskEditor key={selection.kind === "edit" ? selection.task.id : "new"}
+      task={selection.kind === "edit" ? selection.task : undefined} initialDate={selection.kind === "create" ? selection.date : selection.task.plannedDate}
+      defaultSectionId={defaultSectionId} employees={employeeOptions} workspace={workspace} onClose={() => setSelection(null)} onNotify={onNotify} onSaved={saved} /> : null}
+    {selection && ((selection.kind === "reject" && canApprovePlan) || (selection.kind === "reschedule" && canManagePlan)) ? <PlanTaskActionDialog key={`${selection.kind}:${selection.task.id}`} kind={selection.kind as "reject" | "reschedule"}
+      task={selection.task} workspace={workspace} onClose={() => setSelection(null)} onNotify={onNotify} onSaved={saved} /> : null}
+    {selection?.kind === "week" && canApprovePlan ? <PlanWeekApprovalDialog weekStart={selection.weekStart} tasks={selection.tasks} currentTasks={week}
+      workspace={workspace} onClose={() => setSelection(null)} onNotify={onNotify} onSaved={tasks => { accept(tasks); setColumn("approved"); }} /> : null}
+    {selection?.kind === "view" ? <PlanTaskView task={selection.task} employees={employeeOptions} onClose={() => setSelection(null)} /> : null}
+  </>;
 }

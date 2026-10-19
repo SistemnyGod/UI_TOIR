@@ -26,7 +26,7 @@
 }
 
 .emu-history-v2-header p,
-.emu-history-view-actions span {
+.emu-history-view-actions > span {
   color: #60718d;
   font-size: 13px;
   margin: 6px 0 0;
@@ -951,7 +951,7 @@
   }
 
   .emu-history-view-actions button,
-  .emu-history-view-actions span {
+  .emu-history-view-actions > span {
     flex: 1 1 140px;
   }
 
@@ -1055,7 +1055,6 @@
 .emu-history-right-card,
 .emu-history-kpi,
 .emu-history-top-strip section,
-.emu-history-employee-modal,
 .emu-employee-month-panel {
   border-color: var(--emu-history-border);
   box-shadow: 0 16px 38px rgba(15, 36, 71, 0.05);
@@ -1178,7 +1177,7 @@
   gap: 8px;
 }
 
-.emu-history-view-actions span {
+.emu-history-view-actions > span {
   margin: 0 4px 0 0;
   white-space: nowrap;
 }
@@ -1423,11 +1422,6 @@
   margin-top: 10px;
 }
 
-.emu-history-employee-modal {
-  border-radius: 12px;
-  box-shadow: 0 28px 80px rgba(15, 36, 71, 0.24);
-}
-
 .emu-history-compact-table .compact-table {
   min-width: 1180px;
 }
@@ -1498,7 +1492,7 @@
   }
 
   .emu-history-view-actions button,
-  .emu-history-view-actions span {
+  .emu-history-view-actions > span {
     flex: 1 1 100%;
   }
 }
@@ -1535,7 +1529,7 @@
   gap: 8px;
 }
 
-.emu-history-view-actions span {
+.emu-history-view-actions > span {
   margin: 0;
   white-space: nowrap;
 }

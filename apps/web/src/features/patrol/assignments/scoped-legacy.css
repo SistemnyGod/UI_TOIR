@@ -1,0 +1,89 @@
+/* Legacy feature rules retain their source order and load with this screen. */
+
+
+.screen-area .assign-am-filters {
+  align-items: stretch;
+  grid-template-columns: minmax(168px, 0.72fr) minmax(160px, 0.72fr) minmax(150px, 0.64fr) minmax(160px, 0.72fr) minmax(250px, 1.28fr) auto;
+}
+
+.screen-area .assign-am-period-filter {
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  height: 42px;
+  padding: 6px 10px;
+}
+
+.screen-area .assign-am-period-filter > span {
+  gap: 2px;
+}
+
+.screen-area .assign-am-period-button {
+  display: block;
+  min-height: 22px;
+}
+
+.screen-area .assign-am-period-button strong {
+  line-height: 1.1;
+}
+
+.screen-area .assign-am-period-button em {
+  align-self: center;
+  background: #eef5ff;
+  border-radius: 999px;
+  display: none;
+  line-height: 1;
+  padding: 4px 7px;
+}
+
+@media (max-width: 1320px) {
+  .screen-area .assign-am-filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .screen-area .assign-am-search {
+    grid-column: 1 / span 3;
+  }
+
+  .screen-area .assign-am-toggle {
+    justify-content: center;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .screen-area .assign-am-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .assign-am-search {
+    grid-column: auto;
+  }
+}
+.screen-area .assign-am-filters.assign-am-search-only {
+  grid-template-columns: minmax(280px, 680px);
+  justify-content: start;
+}
+
+.screen-area .assign-am-filters.assign-am-search-only .assign-am-search {
+  grid-column: 1;
+  width: 100%;
+}
+
+.screen-area .assign-am-history-profile .assign-am-avatar {
+  align-self: center;
+  box-sizing: border-box;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .screen-area .assign-am-filters.assign-am-search-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

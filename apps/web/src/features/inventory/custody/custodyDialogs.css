@@ -1,0 +1,101 @@
+.modal-shell.custody-issue-dialog { width: min(1360px, 100%); }
+.modal-shell.custody-item-dialog { width: min(820px, 100%); }
+.modal-shell.custody-action-dialog { width: min(680px, 100%); }
+.modal-shell.custody-document-dialog { width: min(1260px, 100%); }
+:is(.custody-issue-dialog, .custody-item-dialog, .custody-action-dialog) fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.custody-issue-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(250px, .85fr); align-items: start; gap: 14px; }
+.custody-choice-panel { min-width: 0; }
+.custody-choice-card, .custody-issue-details { display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); }
+.custody-choice-heading { display: flex; align-items: flex-start; gap: 8px; color: var(--ui-blue); }
+.custody-choice-heading > svg { flex: 0 0 18px; margin-top: 2px; }
+.custody-choice-heading > div { min-width: 0; }
+.custody-choice-heading strong { display: block; color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.custody-choice-heading span { display: block; margin-top: 3px; color: var(--ui-muted); font-size: 12px; overflow-wrap: anywhere; }
+.custody-choice-search { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 9px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-muted); }
+.custody-choice-search svg { flex: 0 0 16px; }
+.custody-choice-search input { min-width: 0; width: 100%; min-height: 40px; padding: 8px 0; color: var(--ui-text); border: 0; background: transparent; font: inherit; font-size: 13px; }
+.custody-choice-search:focus-within { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.custody-choice-search input:focus { outline: none; }
+.custody-choice-filters { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 8px; }
+.custody-choice-filters select { min-width: 0; min-height: 40px; width: 100%; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: 13px; padding: 6px; }
+.custody-choice-list { display: grid; align-content: start; gap: 6px; }
+.custody-choice-list button { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; padding: 9px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); text-align: left; cursor: pointer; }
+.custody-choice-list button:is(:hover, .is-selected) { border-color: var(--ui-blue); background: var(--ui-blue-soft); }
+.custody-choice-list button > span:first-child { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--ui-blue-soft); color: var(--ui-blue); font-size: 12px; font-weight: 600; }
+.custody-choice-list strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.custody-choice-list small { display: block; margin-top: 4px; color: var(--ui-muted); font-size: 12px; line-height: 1.4; }
+.custody-choice-empty { color: var(--ui-muted); display: grid; gap: 5px; font-size: 13px; }
+.custody-issue-selection { display: flex; gap: 8px; padding: 10px; border-radius: var(--ui-radius-control); background: var(--ui-blue-soft); }
+.custody-issue-selection > svg { flex: 0 0 18px; color: var(--ui-blue); }
+.custody-issue-selection :is(span, strong, small) { display: block; overflow-wrap: anywhere; }
+.custody-issue-selection span { color: var(--ui-muted); font-size: 12px; }
+.custody-issue-selection strong { color: var(--ui-text); font-size: 13px; font-weight: 600; margin-block: 3px; }
+.custody-issue-selection small { color: var(--ui-muted); font-size: 12px; }
+.custody-issue-details label, .custody-item-fields label { display: grid; min-width: 0; gap: 5px; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.custody-issue-details :is(input, select, textarea), .custody-item-fields :is(input, select, textarea) { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); padding: 9px 10px; font: inherit; font-weight: 400; }
+.custody-issue-details textarea, .custody-item-fields textarea { min-height: 110px; resize: vertical; }
+.custody-issue-note { display: flex; align-items: flex-start; gap: 8px; color: var(--ui-muted); font-size: 12px; line-height: 1.45; }
+.custody-issue-note svg { flex: 0 0 16px; }
+.custody-issue-state { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); padding: 10px; background: var(--ui-surface-muted); color: var(--ui-muted); font-size: 13px; }
+.custody-issue-state.is-error { background: var(--ui-danger-soft); color: var(--ui-danger); }
+.custody-item-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.custody-item-wide { grid-column: 1 / -1; }
+.custody-issue-dialog .custody-choice-list { overflow: visible; max-height: none; padding: 0; }
+.custody-issue-dialog .custody-choice-card { overflow: visible; max-height: none; }
+.custody-issue-dialog .custody-issue-details { align-self: start; position: sticky; top: 0; }
+.custody-issue-dialog .phone-disclosure-toggle { overflow-wrap: anywhere; }
+.custody-picker-pager { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 10px; color: var(--ui-muted); font-size: 12px; flex-wrap: wrap; }
+.custody-group-reference { font-size: 13px; color: var(--ui-muted); }
+.custody-group-reference summary { cursor: pointer; }
+.custody-group-reference ul { display: flex; flex-wrap: wrap; gap: 8px 22px; padding-left: 18px; }
+.custody-refresh-status, .ppe-history-refresh-status { min-height: 18px; margin: 0; color: var(--ui-muted); font-size: 12px; }
+.custody-action-dialog .modal-shell-body { display: flex; flex-direction: column; gap: 16px; }
+.custody-action-dialog label { display: grid; gap: 6px; margin-bottom: 12px; color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.custody-action-dialog :is(select, textarea) { min-width: 0; width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+.custody-action-dialog textarea { resize: vertical; }
+.custody-action-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.custody-action-summary > div { padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); min-width: 0; }
+.custody-action-summary dt { color: var(--ui-muted); font-size: 12px; }
+.custody-action-summary dd { margin: 4px 0 0; color: var(--ui-text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.custody-item-dialog .custody-item-fields { padding: 0; overflow: visible; max-height: none; }
+.custody-document-content { display: grid; gap: 14px; min-width: 0; }
+.custody-document-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-right: auto; }
+.custody-document-dialog .inventory-custody-drawer-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.custody-document-dialog .inventory-custody-history-wrap, .custody-document-dialog .inventory-custody-lines-wrap { max-height: none; overflow-y: visible; }
+.custody-document-dialog .inventory-custody-history-table td { overflow-wrap: anywhere; }
+.custody-document-dialog .inventory-custody-record-row { grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 1fr)) auto; }
+.custody-document-dialog .inventory-custody-record-main strong, .custody-document-dialog .inventory-custody-record-meta strong { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.custody-document-dialog .inventory-custody-record-meta { display: block; }
+.custody-document-dialog .inventory-custody-record-main > span { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; font-size: 13px; font-weight: 400; line-height: 1.45; }
+.custody-document-dialog .inventory-custody-line-actions { flex-wrap: wrap; grid-column: 1 / -1; }
+.modal-shell.ppe-history-event-dialog { width: min(760px, 100%); }
+.ppe-history-event-summary { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); overflow-wrap: anywhere; }
+.ppe-history-event-summary > .ppe-v2-action-badge { justify-self: start; }
+.ppe-history-event-summary > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ppe-history-event-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 16px 0 0; }
+.ppe-history-event-details > div { min-width: 0; }
+.ppe-history-event-details dt { font-size: 12px; color: var(--ui-muted); }
+.ppe-history-event-details dd { margin: 5px 0 0; font-size: 14px; color: var(--ui-text); overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.5; }
+.ppe-history-event-details .is-wide { grid-column: 1 / -1; }
+@media (max-width: 1100px) {
+  .custody-issue-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .custody-issue-dialog .custody-issue-details { grid-column: 1 / -1; position: static; }
+}
+@media (max-width: 767px) {
+  .custody-issue-layout, .custody-action-summary, .ppe-history-event-details { grid-template-columns: minmax(0, 1fr); }
+  .custody-item-dialog .custody-item-fields { grid-template-columns: minmax(0, 1fr); }
+  .custody-document-dialog .inventory-custody-drawer-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .custody-document-dialog .inventory-custody-record-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .custody-document-dialog .inventory-custody-record-main { grid-column: 1 / -1; }
+  :is(.custody-issue-dialog, .custody-item-dialog, .custody-action-dialog) :is(input, select, textarea) { font-size: 16px; min-height: 44px; }
+  .custody-picker-pager .ui-button { min-height: 44px; }
+  .custody-document-dialog .inventory-custody-history-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .custody-document-dialog .inventory-custody-history-table, .custody-document-dialog .inventory-custody-history-table tbody, .custody-document-dialog .inventory-custody-history-table tr { display: block; min-width: 0; width: 100%; }
+  .custody-document-dialog .inventory-custody-history-table tr { padding: 10px; border-bottom: 1px solid var(--ui-border); }
+  .custody-document-dialog .inventory-custody-history-table td { display: grid; grid-template-columns: minmax(80px, 30%) minmax(0, 1fr); gap: 8px; padding: 5px 0; border: 0; }
+  .custody-document-dialog .inventory-custody-history-table td::before { content: attr(data-label); color: var(--ui-muted); font-size: 12px; }
+}
+
+.custody-record-comment { margin-top: 6px; color: var(--ui-muted); font-size: 13px; font-weight: 400; }
+.custody-record-comment summary { cursor: pointer; color: var(--ui-blue); }
+.custody-record-comment p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }

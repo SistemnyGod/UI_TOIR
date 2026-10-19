@@ -25,7 +25,7 @@ export type ScreenId = PatrolScreenId | InventoryScreenId | EmuScreenId | Integr
 
 export type ResultMode = "all" | "issues" | "late" | "photos" | "noPhotos";
 export type ScheduleMode = "week" | "month" | "exceptions";
-export type AccountMode = "accounts" | "sessions" | "bindings";
+export type AccountMode = "accounts" | "sessions" | "bindings" | "security";
 export type RouteMode = "points" | "scheme" | "stats" | "history";
 export type ShiftFilter = "day" | "night";
 export type TerritoryFilter = "north" | "south";
@@ -122,7 +122,7 @@ export interface PatrolResultAttachment {
 export interface PatrolResult {
   id: string;
   assignmentId?: string;
-  status: "Подтверждено" | "Замечание" | "Просрочено" | "Не подтверждено";
+  status: "Подтверждено" | "Замечание" | "Просрочено" | "Не подтверждено" | "skipped" | "manual";
   point: string;
   pointId: string;
   employee: string;
@@ -178,6 +178,7 @@ export interface ServiceRequest {
 }
 
 export interface CreateServiceRequestPayload {
+  clientRequestId?: string;
   sourceResultId?: string;
   employeeId?: string;
   employee: string;
@@ -446,6 +447,7 @@ export interface RouteDirectoryItem {
 }
 
 export interface RouteFormPayload {
+  expectedVersionNo?: number;
   name: string;
   territory: string;
   status: RouteDirectoryItem["status"];
@@ -456,6 +458,7 @@ export interface RouteFormPayload {
 }
 
 export interface RoutePointFormPayload {
+  requiresPhoto?: boolean;
   name: string;
   zone: string;
   type: RoutePoint["type"];
@@ -469,6 +472,9 @@ export interface RoutePointFormPayload {
 
 export interface ScheduleCell {
   id: string;
+  assignmentStatus?: ActivePatrol["status"];
+  description?: string;
+  requestStatus?: ServiceRequest["status"];
   assignmentId?: string;
   requestId?: string;
   employee: string;

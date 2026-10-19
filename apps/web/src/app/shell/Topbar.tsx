@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SessionUserDto } from "../../api/contracts";
+import type { ChangePasswordDto, SessionUserDto } from "../../api/contracts";
 import { Menu } from "lucide-react";
 import { ChromeIcon } from "./ChromeIcon";
 import { MobileSearch } from "./MobileSearch";
+import { UserAccountPanel } from "./UserAccountPanel";
 
 export interface TopbarNotification {
   id: string;
@@ -22,6 +23,10 @@ export function Topbar({
   onSearchQueryChange,
   onNotify,
   onOpenNavigation,
+  mockMode = false,
+  onChangePassword,
+  passwordError,
+  onOpenUserSettings,
 }: {
   currentUser: SessionUserDto | null;
   notifications?: TopbarNotification[];
@@ -31,9 +36,14 @@ export function Topbar({
   onSearchQueryChange: (query: string) => void;
   onNotify: (message: string) => void;
   onOpenNavigation?: () => void;
+  mockMode?: boolean;
+  onChangePassword?: (payload: ChangePasswordDto) => Promise<boolean>;
+  passwordError?: string;
+  onOpenUserSettings?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(() => readNotificationIds());
+  const notificationStorageKey = `patrol360.notifications.read:${currentUser?.id ?? "anonymous"}`;
+  const [readIds, setReadIds] = useState<Set<string>>(() => readNotificationIds(notificationStorageKey));
   const panelRef = useRef<HTMLDivElement>(null);
   const unreadNotifications = useMemo(() => notifications.filter((item) => !readIds.has(item.id)), [notifications, readIds]);
 
@@ -59,7 +69,7 @@ export function Topbar({
 
   function persistReadIds(next: Set<string>) {
     setReadIds(next);
-    safeLocalStorage()?.setItem("patrol360.notifications.read", JSON.stringify([...next]));
+    try { safeLocalStorage()?.setItem(notificationStorageKey, JSON.stringify([...next])); } catch { /* Read state remains available for this session. */ }
   }
 
   function toggleNotifications() {
@@ -155,11 +165,7 @@ export function Topbar({
       </div>
 
       <div className="user-pill">
-        <span className="avatar mini">{getInitial(currentUser?.displayName ?? currentUser?.login)}</span>
-        <div className="user-copy">
-          <strong>{currentUser?.displayName ?? "Пользователь панели"}</strong>
-          <small>{currentUser?.roles[0] ?? "Оператор"}</small>
-        </div>
+        <UserAccountPanel user={currentUser} mockMode={mockMode} onLogout={onLogout} onChangePassword={onChangePassword} passwordError={passwordError} onOpenSettings={onOpenUserSettings} />
         <button className="topbar-logout" onClick={onLogout} title="Выйти из аккаунта" type="button">
           <ChromeIcon name="logout" />
         </button>
@@ -168,13 +174,9 @@ export function Topbar({
   );
 }
 
-function getInitial(value?: string) {
-  return value?.trim()[0]?.toUpperCase() ?? "П";
-}
-
-function readNotificationIds() {
+function readNotificationIds(key: string) {
   try {
-    const parsed = JSON.parse(safeLocalStorage()?.getItem("patrol360.notifications.read") ?? "[]");
+    const parsed = JSON.parse(safeLocalStorage()?.getItem(key) ?? "[]");
     return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []);
   } catch {
     return new Set<string>();

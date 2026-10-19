@@ -53,8 +53,11 @@ export function InventoryCustodyScreen({
     setSelectedDocumentId,
   } = useCustodyJournalState(documentRows);
   const {
+    actionError,
     archiveRecord,
+    closeDrawer,
     busyAction,
+    isMutating,
     downloadFile,
     openDocument,
     openRecordHistory,
@@ -95,13 +98,13 @@ export function InventoryCustodyScreen({
       </header>
 
       {error ? <CustodyState kind="error" text={error} title="API под запись не ответил" /> : null}
-      {loading ? <CustodyState kind="loading" text="Получаем акты, строки, сотрудников, номенклатуру и настройки учета." title="Загрузка данных" /> : null}
+      <div className="custody-refresh-status" role="status">{loading ? documents || records ? "Обновляем данные. Показанные записи остаются доступны." : "Загружаем акты и предметы…" : ""}</div>
+      {error ? <button className="button ghost" type="button" onClick={() => void onReload()}>Повторить загрузку</button> : null}
 
-      {!loading && !error ? (
-        <>
+      <>
           <CustodyComposer employees={employees} items={items} onNotify={onNotify} onReload={onReload} settings={settings} />
 
-          {!documentRows.length && !recordRows.length ? (
+          {!documentRows.length && !recordRows.length && !loading ? (
             <CustodyState
               kind="empty"
               text="Создайте выдачу под ответственность в верхней форме или импортируйте legacy-акты."
@@ -138,15 +141,16 @@ export function InventoryCustodyScreen({
               </div>
             </>
           )}
-        </>
-      ) : null}
+      </>
 
       <CustodyDetailDrawer
         busyAction={busyAction}
+        pending={isMutating}
+        actionError={actionError}
         drawer={drawer}
         employees={employees}
         onArchiveRecord={archiveRecord}
-        onClose={() => setDrawer(null)}
+        onClose={closeDrawer}
         onDownload={downloadFile}
         onOpenRecordHistory={openRecordHistory}
         onTransferRecord={transferRecord}

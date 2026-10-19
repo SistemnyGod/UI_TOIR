@@ -271,7 +271,7 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
     },
 
     getPpeIssueDocument(id: string) {
-      return client.get<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`);
+      return client.get<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`, { cacheMode: "reload" });
     },
 
     createPpeIssueDocument(payload: SavePpeIssueDocumentDto) {
@@ -306,6 +306,8 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get<InventoryPpeNormSetDto[]>(`/api/v1/inventory/ppe/issue-documents/norms${toQueryString({ employeeId, date })}`);
     },
     getPpeKitTemplates() { return client.get<PpeKitTemplateDto[]>("/api/v1/inventory/ppe/kit-templates", { cacheMode: "reload" }); },
+    getLegacyPpeKitTemplates() { return client.get<PpeKitTemplateDto[]>("/api/v1/inventory/ppe/kit-templates/legacy", { cacheMode: "reload" }); },
+    bindLegacyPpeKitTemplate(id: string, payload: { expectedVersion: number; normSetId: string; isShared: boolean; lines: CreatePpeKitTemplateDto["lines"] }) { return client.put<PpeKitTemplateDto, typeof payload>(`/api/v1/inventory/ppe/kit-templates/${id}/bind`, payload); },
     createPpeKitTemplate(payload: CreatePpeKitTemplateDto) { return client.post<PpeKitTemplateDto, CreatePpeKitTemplateDto>("/api/v1/inventory/ppe/kit-templates", payload); },
     updatePpeKitTemplate(id: string, payload: CreatePpeKitTemplateDto & { expectedVersion: number }) { return client.put<PpeKitTemplateDto, CreatePpeKitTemplateDto & { expectedVersion: number }>(`/api/v1/inventory/ppe/kit-templates/${id}`, payload); },
     renamePpeKitTemplate(id: string, expectedVersion: number, name: string) { return client.patch<PpeKitTemplateDto, { expectedVersion: number; name: string }>(`/api/v1/inventory/ppe/kit-templates/${id}/name`, { expectedVersion, name }); },
@@ -562,6 +564,10 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
         `/api/v1/inventory/employees${toQueryString(params)}`,
         options,
       );
+    },
+
+    getEmployee(id: string, options: ApiRequestOptions = {}) {
+      return client.get<InventoryEmployeeDto>(`/api/v1/inventory/employees/${id}`, options);
     },
 
     async createEmployee(payload: CreateEmployeeDto) {

@@ -21,14 +21,14 @@ function assertPackageScript(scriptName) {
 }
 
 [
-  "apps/web/src/App.tsx",
+  "apps/web/src/app/App.tsx",
   "apps/web/src/api/client.ts",
   "apps/web/src/api/contracts.ts",
   "apps/web/src/hooks/usePatrolDataSource.ts",
   "apps/web/src/repositories/patrolDataRepository.ts",
   "apps/web/src/repositories/routesRepository.ts",
   "apps/web/src/repositories/patrolRequestsRepository.ts",
-  "apps/web/src/screens/DashboardScreen.tsx",
+  "apps/web/src/features/dashboard/DashboardScreen.tsx",
   "docs/frontend-improvement-plan.md",
 ].forEach(assertFile);
 

@@ -14,7 +14,7 @@ export function WorkspaceHeader({
   screen: ScreenId;
   onPrimaryAction: () => void;
 }) {
-  if (screen === "dashboard" || screen === "results" || screen === "accounts" || screen.startsWith("inventory-") || screen.startsWith("emu-")) {
+  if (screen === "employees" || screen === "routes" || screen === "schedule" || screen === "assign" || screen === "dashboard" || screen === "results" || screen === "accounts" || screen === "perco-integration" || screen.startsWith("inventory-") || screen.startsWith("emu-")) {
     return null;
   }
 
@@ -22,18 +22,13 @@ export function WorkspaceHeader({
     <PageHeader
       actions={(
         <div className="workspace-actions">
-        {screen === "assign" ? (
-          <Button variant="ghost" onClick={onPrimaryAction}>
-            Проверить маршрут
-          </Button>
-        ) : null}
         <Button
           disabled={!canUsePrimaryAction}
           onClick={onPrimaryAction}
           title={!canUsePrimaryAction ? primaryActionDisabledReason : undefined}
           variant="primary"
         >
-          {screen === "assign" ? "Создать заявку" : currentScreen.createLabel}
+          {currentScreen.createLabel}
         </Button>
         </div>
       )}

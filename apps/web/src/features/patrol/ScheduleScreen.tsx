@@ -1,13 +1,14 @@
 import { ScheduleEditPanel } from "./components/schedule/ScheduleEditPanel";
 import { ScheduleGridPanel } from "./components/schedule/ScheduleGridPanel";
-import { ScheduleSidePanels } from "./components/schedule/ScheduleSidePanels";
 import { ScheduleToolbar } from "./components/schedule/ScheduleToolbar";
+import { filterScheduleCells, scheduleState, type ScheduleStatusFilter } from "./components/schedule/schedulePresentation";
+import "./components/schedule/scheduleWorkspace.css";
 import {
   loadAssignmentFavoriteEmployeeIds,
   subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
 import { useSchedulePlanning } from "../../hooks/useSchedulePlanning";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActivePatrol,
   CancelAssignmentPayload,
@@ -29,6 +30,7 @@ export function ScheduleScreen({
   canManage = true,
   dataSourceMode,
   employeeDirectory,
+  favoriteEmployeeIds: favoriteEmployeeIdsOverride,
   mode,
   onModeChange,
   onNotify,
@@ -45,6 +47,8 @@ export function ScheduleScreen({
   canManage?: boolean;
   dataSourceMode: DataSourceMode;
   employeeDirectory: EmployeeDirectoryItem[];
+  /** Optional externally supplied favorites, e.g. in a preview without storage writes. */
+  favoriteEmployeeIds?: string[];
   mode: ScheduleMode;
   onModeChange: (mode: ScheduleMode) => void;
   onNotify: (message: string) => void;
@@ -63,21 +67,27 @@ export function ScheduleScreen({
 }) {
   const [anchorDate, setAnchorDate] = useState(() => toDateInput(new Date()));
   const [shiftFilter, setShiftFilter] = useState<"all" | "day" | "night">("all");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ScheduleStatusFilter>("all");
+  const [favoritesOnly, setFavoritesOnly] = useState(true);
+  const [dialogCell, setDialogCell] = useState<ScheduleCell>();
+  const draftNumber = useRef(0);
   const [favoriteEmployeeIds] = useState(() => loadAssignmentFavoriteEmployeeIds());
   const [syncedFavoriteEmployeeIds, setSyncedFavoriteEmployeeIds] = useState(() => loadAssignmentFavoriteEmployeeIds());
   const scheduleEmployees = useMemo(() => {
-    const favoriteSet = new Set(syncedFavoriteEmployeeIds);
-    return employeeDirectory.filter((employee) => favoriteSet.has(employee.id));
-  }, [employeeDirectory, syncedFavoriteEmployeeIds]);
+    const favoriteSet = new Set(favoriteEmployeeIdsOverride ?? syncedFavoriteEmployeeIds);
+    return favoritesOnly && favoriteSet.size > 0 ? employeeDirectory.filter((employee) => favoriteSet.has(employee.id)) : employeeDirectory;
+  }, [employeeDirectory, favoriteEmployeeIdsOverride, syncedFavoriteEmployeeIds, favoritesOnly]);
+  const favoriteCount = (favoriteEmployeeIdsOverride ?? syncedFavoriteEmployeeIds).length;
   const {
     errorMessage,
     exceptionCount,
     plannedCount,
     refreshScheduleReferences,
     scheduleCells,
-    selected,
+    selected: selectedFromPlan,
     status,
-    weekDays,
+    days,
   } = useSchedulePlanning({
     activePatrols,
     anchorDate,
@@ -88,61 +98,94 @@ export function ScheduleScreen({
     routeDirectory,
     selectedCellId,
     shiftFilter,
+    restrictToDirectory: favoritesOnly && favoriteCount > 0,
   });
+  const selected = dialogCell ?? selectedFromPlan;
+  const filteredCells = useMemo(() => filterScheduleCells(scheduleCells, query, statusFilter), [scheduleCells, query, statusFilter]);
+  const eligibleEmployees = scheduleEmployees.filter(employee => employee.status !== "Отпуск" && (shiftFilter === "all" || (employee.shift.includes("Ноч") ? "night" : "day") === shiftFilter));
+  const canCreate = scheduleEmployees.some(employee => employee.status !== "Отпуск") && routeDirectory.some(route => route.status !== "Архив");
+  const hasFilters = Boolean(query.trim() || statusFilter !== "all" || shiftFilter !== "all" || (favoriteCount > 0 && favoritesOnly));
+  const completedCount = scheduleCells.filter(cell => scheduleState(cell).tone === "completed").length;
+  const activeCount = scheduleCells.filter(cell => scheduleState(cell).tone === "active").length;
+
+  function createForDay(date = anchorDate, template?: ScheduleCell) {
+    if (!canManage || !canCreate) return;
+    const employee = (template ? scheduleEmployees.find(item => item.id === template.employeeId) : eligibleEmployees[0]) ?? scheduleEmployees.find(item => item.status !== "Отпуск");
+    if (!employee) return;
+    onSelectCell("");
+    setDialogCell({ id: `draft:${++draftNumber.current}`, date, day: new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${date}T00:00:00`)),
+      employee: employee.fullName, employeeId: employee.id, shift: template?.shift ?? (shiftFilter === "night" || (shiftFilter === "all" && employee.shift.includes("Ноч")) ? "Ночная" : "Дневная"), state: "empty", route: "", zone: employee.department });
+  }
+
+  function selectCell(id: string) {
+    setDialogCell(scheduleCells.find(cell => cell.id === id));
+    onSelectCell(id);
+  }
 
   useEffect(() => {
     setSyncedFavoriteEmployeeIds(favoriteEmployeeIds);
     return subscribeAssignmentFavoriteEmployeeIds(setSyncedFavoriteEmployeeIds);
   }, [favoriteEmployeeIds]);
   const selectedResultHistory = useMemo(
-    () => selectScheduleResultHistory(patrolResults, selected),
+    () => selectScheduleResultHistory(patrolResults, selected, { matchSelectedOnly: true }),
     [patrolResults, selected],
   );
 
   return (
-    <div className="screen-stack">
+    <div className="screen-stack schedule-workspace">
+      <header className="plan-page-heading"><div><h1>Плановый обход</h1><p>Расписание сотрудников по маршрутам и сменам</p></div></header>
       <ScheduleToolbar
         canManage={canManage}
+        canCreate={canCreate}
         mode={mode}
         anchorDate={anchorDate}
         shiftFilter={shiftFilter}
-        plannedCount={plannedCount}
         exceptionCount={exceptionCount}
         onAnchorDateChange={setAnchorDate}
         onModeChange={onModeChange}
-        onNotify={onNotify}
+        query={query}
+        statusFilter={statusFilter}
+        favoritesOnly={favoritesOnly}
+        favoriteCount={favoriteCount}
+        onQueryChange={setQuery}
+        onStatusFilterChange={setStatusFilter}
+        onFavoritesOnlyChange={setFavoritesOnly}
+        onCreate={() => createForDay()}
         onShiftFilterChange={setShiftFilter}
       />
 
-      <div className="two-column wide-left">
+      <div className="plan-summary" aria-label="Сводка за выбранный период">
+        <div><span className="plan-summary-dot planned" /><strong>{plannedCount}</strong><span>Запланировано</span></div>
+        <div><span className="plan-summary-dot active" /><strong>{activeCount}</strong><span>В работе</span></div>
+        <div><span className="plan-summary-dot completed" /><strong>{completedCount}</strong><span>Выполнено</span></div>
+        <button aria-label="Показать исключения" onClick={() => onModeChange("exceptions")} type="button"><span className="plan-summary-dot cancelled" /><strong>{exceptionCount}</strong><span>Исключения</span></button>
+      </div>
         <ScheduleGridPanel
           mode={mode}
-          scheduleCells={scheduleCells}
+          scheduleCells={filteredCells}
           status={status}
           errorMessage={errorMessage}
-          weekDays={weekDays}
+          days={days}
           selectedCellId={selectedCellId}
-          onSelectCell={onSelectCell}
-          onNotify={onNotify}
+          onSelectCell={selectCell}
+          canManage={canManage}
+          hasFilters={hasFilters}
+          onCreateDay={createForDay}
+          onResetFilters={() => { setQuery(""); setStatusFilter("all"); setShiftFilter("all"); setFavoritesOnly(false); }}
           onRetry={refreshScheduleReferences}
         />
 
-        <ScheduleSidePanels
-          exceptionCount={exceptionCount}
-          onShowExceptions={() => onModeChange("exceptions")}
-          onNotify={onNotify}
-        />
-      </div>
 
       {selected ? (
         <ScheduleEditPanel
+          key={selected.id}
           canManage={canManage}
           employees={scheduleEmployees}
           resultHistory={selectedResultHistory.results}
           resultHistoryMode={selectedResultHistory.mode}
-          routes={routeDirectory}
+          routes={routeDirectory.filter(route => route.status !== "Архив" || route.id === selected.routeId)}
           selected={selected}
-          onClose={() => onSelectCell("")}
+          onClose={() => { setDialogCell(undefined); onSelectCell(""); }}
           onCreateScheduledRequest={onCreateScheduledRequest}
           onNotify={onNotify}
           onOpenRequestById={onOpenRequestById}
@@ -156,7 +199,7 @@ export function ScheduleScreen({
 const recentHistoryDays = 90;
 const recentHistoryLimit = 10;
 
-export function selectScheduleResultHistory(results: PatrolResult[], selected?: ScheduleCell) {
+export function selectScheduleResultHistory(results: PatrolResult[], selected?: ScheduleCell, { matchSelectedOnly = false }: { matchSelectedOnly?: boolean } = {}) {
   if (!selected) return { mode: "day" as const, results: [] };
   const selectedDateKey = toDateInputKey(selected.date);
   const sortedResults = [...results].sort(
@@ -164,7 +207,10 @@ export function selectScheduleResultHistory(results: PatrolResult[], selected?: 
       toSortableDate(second.actualAt || second.plannedAt).getTime() -
       toSortableDate(first.actualAt || first.plannedAt).getTime(),
   );
-  const dayResults = sortedResults.filter(
+  const relevantResults = matchSelectedOnly ? sortedResults.filter(result =>
+    result.employeeId === selected.employeeId || result.employee === selected.employee ||
+    Boolean(selected.routeId && result.routeId === selected.routeId) || Boolean(selected.route && result.route === selected.route)) : sortedResults;
+  const dayResults = relevantResults.filter(
     (result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey,
   );
   if (dayResults.length > 0) return { mode: "day" as const, results: dayResults };
@@ -172,7 +218,7 @@ export function selectScheduleResultHistory(results: PatrolResult[], selected?: 
   const cutoff = toSortableDate(selected.date);
   cutoff.setDate(cutoff.getDate() - recentHistoryDays);
   const cutoffKey = toDateInput(cutoff);
-  const candidates = sortedResults
+  const candidates = relevantResults
     .filter((result) => {
       const resultDateKey = toDateInputKey(result.actualAt || result.plannedAt);
       return resultDateKey >= cutoffKey && resultDateKey <= selectedDateKey;

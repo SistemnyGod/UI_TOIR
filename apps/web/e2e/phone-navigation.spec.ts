@@ -37,7 +37,7 @@ test("results retain search across resize and expose phone actions", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(search).toHaveValue("Иванов");
   await expect(page.getByRole("button", { name: /Сводка ·/ })).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("button", { name: "Подробнее", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Открыть", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Открыть поиск", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Поиск по обходам" });
   await expect(dialog).toBeVisible();

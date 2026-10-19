@@ -2,33 +2,29 @@ import { useRef, useState } from "react";
 import type { EmuCarryOverWorkSessionDto, EmuCompleteWorkSessionDto, EmuPauseWorkSessionDto, EmuResumeWorkSessionDto, EmuWorkSessionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
-import { Button } from "../../../../shared/ui";
+import { useWorkMutation } from "../useWorkMutation";
+import { WorkFormActions } from "../components/WorkFormActions";
 import { WorkSummary } from "../components/WorkSummary";
 import { activeEmployeeStatus, addDays, employeeStatusLabel, formatEmployeeShortName, toDateInput, toLocalIso, toTimeInput, toggle } from "../workAccountingUtils";
 
 export function PauseWorkModal({ initialEmployeeId = "", onClose, onNotify, workspace, work }: { initialEmployeeId?: string; onClose: () => void; onNotify: (message: string) => void; workspace: EmuWorkspace; work: EmuWorkSessionDto }) {
   const workingEmployees = work.employees.filter((employee) => !employee.finishedAt && activeEmployeeStatus(employee) === "Работает");
   const [employeeIds, setEmployeeIds] = useState(initialEmployeeId ? [initialEmployeeId] : workingEmployees.map((employee) => employee.employeeId));
-  const [waitReasonId, setWaitReasonId] = useState(workspace.settings.waitReasons[0]?.id ?? "");
+  const [waitReasonId, setWaitReasonId] = useState(workspace.settings.waitReasons.find(reason => reason.isActive)?.id ?? "");
   const [comment, setComment] = useState("");
   const [markAsOtherWork, setMarkAsOtherWork] = useState(false);
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { employeeIds: [...employeeIds].sort(), waitReasonId, comment, markAsOtherWork } });
   const otherWorkRef = useRef<HTMLInputElement | null>(null);
   const allWorkingEmployeesSelected = workingEmployees.length > 0 && employeeIds.length === workingEmployees.length;
 
   async function submit() {
     const shouldMarkAsOtherWork = markAsOtherWork || otherWorkRef.current?.checked === true;
-    const payload: EmuPauseWorkSessionDto = { comment, employeeIds, markAsOtherWork: shouldMarkAsOtherWork, rowVersion: work.rowVersion, waitReasonId };
-    try {
-      await workspace.actions.pauseWorkSession(work.id, payload);
-      onNotify(shouldMarkAsOtherWork ? "Сотрудники отмечены на другой работе" : "Работа поставлена на паузу");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось поставить работу на паузу");
-    }
+    const payload: EmuPauseWorkSessionDto = { comment, employeeIds, markAsOtherWork: shouldMarkAsOtherWork, rowVersion: mutation.rowVersion, waitReasonId };
+    await mutation.run(() => workspace.actions.pauseWorkSession(mutation.workId, payload), shouldMarkAsOtherWork ? "Сотрудники отмечены на другой работе" : "Работа поставлена на паузу");
   }
 
   return (
-    <ModalFrame className="emu-work-pause-modal" onClose={onClose} title="Поставить на паузу" wide>
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Пауза" disabled={employeeIds.length === 0 || !waitReasonId} />} className="emu-work-pause-modal" onClose={mutation.close} title="Поставить на паузу" wide>
       <WorkSummary work={work} />
       <section className="emu-pause-people" aria-label="Сотрудники для паузы">
         <div className="emu-pause-section-heading">
@@ -71,10 +67,6 @@ export function PauseWorkModal({ initialEmployeeId = "", onClose, onNotify, work
         </label>
       </section>
       <label className="emu-textarea-label">Комментарий к паузе<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Например: нет кабеля, ожидаем склад" /></label>
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={employeeIds.length === 0 || !waitReasonId} onClick={() => void submit()} variant="primary">Пауза</Button>
-      </div>
     </ModalFrame>
   );
 }
@@ -87,25 +79,20 @@ export function ResumeWorkModal({ initialEmployeeId = "", onClose, onNotify, wor
   const [employeeIds, setEmployeeIds] = useState(initialEmployeeId ? [initialEmployeeId] : pausedEmployees.map((employee) => employee.employeeId));
   const [comment, setComment] = useState("");
   const [time, setTime] = useState(toTimeInput(new Date()));
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { employeeIds: [...employeeIds].sort(), comment, time } });
 
   async function submit() {
     const payload: EmuResumeWorkSessionDto = {
       comment,
       employeeIds,
       resumedAt: toLocalIso(toDateInput(new Date()), time),
-      rowVersion: work.rowVersion,
+      rowVersion: mutation.rowVersion,
     };
-    try {
-      await workspace.actions.resumeWorkSession(work.id, payload);
-      onNotify("Работа продолжена");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось продолжить работу");
-    }
+    await mutation.run(() => workspace.actions.resumeWorkSession(mutation.workId, payload), "Работа продолжена");
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Продолжить работу">
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Продолжить" disabled={employeeIds.length === 0 || !time} />} onClose={mutation.close} title="Продолжить работу">
       <WorkSummary work={work} />
       <label>Время возврата<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button className="emu-now-button" onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
       <div className="emu-check-list">
@@ -118,10 +105,6 @@ export function ResumeWorkModal({ initialEmployeeId = "", onClose, onNotify, wor
       </div>
       {pausedEmployees.length === 0 ? <div className="emu-card-warning">В карточке нет сотрудников на паузе или на другой работе.</div> : null}
       <label className="emu-textarea-label">Комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Причина ожидания устранена" /></label>
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={employeeIds.length === 0} onClick={() => void submit()} variant="primary">Продолжить</Button>
-      </div>
     </ModalFrame>
   );
 }
@@ -134,12 +117,13 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
   const [notCompletedReasonId, setNotCompletedReasonId] = useState<string>("");
   const [completedDate, setCompletedDate] = useState(toDateInput(new Date()));
   const [completedTime, setCompletedTime] = useState(toTimeInput(new Date()));
-  const completedAtValue = toLocalIso(completedDate, completedTime);
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { employeeIds: [...employeeIds].sort(), resultStatus, resultComment, notCompletedReasonId, completedDate, completedTime } });
+  const completedAtValue = completedDate && completedTime ? toLocalIso(completedDate, completedTime) : "";
   const selectedEmployees = work.employees.filter((employee) => employeeIds.includes(employee.employeeId) && !employee.finishedAt);
-  const earliestArrival = selectedEmployees.length
-    ? Math.min(...selectedEmployees.map((employee) => new Date(employee.arrivedAt).getTime()))
+  const latestArrival = selectedEmployees.length
+    ? Math.max(...selectedEmployees.map((employee) => new Date(employee.arrivedAt).getTime()))
     : new Date(work.arrivedAt).getTime();
-  const completionBeforeArrival = new Date(completedAtValue).getTime() < earliestArrival;
+  const completionBeforeArrival = new Date(completedAtValue).getTime() < latestArrival;
   const allEmployeesSelected = unfinishedEmployees.length > 0 && employeeIds.length === unfinishedEmployees.length;
 
   function setCompletedNow() {
@@ -155,21 +139,15 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
       notCompletedReasonId: resultStatus === "Не выполнено" ? notCompletedReasonId : null,
       resultComment,
       resultStatus,
-      rowVersion: work.rowVersion,
+      rowVersion: mutation.rowVersion,
     };
-    try {
-      await workspace.actions.completeWorkSession(work.id, payload);
-      onNotify("Работа завершена");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось завершить работу");
-    }
+    await mutation.run(() => workspace.actions.completeWorkSession(mutation.workId, payload), "Работа завершена");
   }
 
   const reasonRequired = resultStatus === "Не выполнено";
 
   return (
-    <ModalFrame className="emu-work-complete-modal" onClose={onClose} title="Завершить работу" wide>
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Завершить работу" disabled={employeeIds.length === 0 || !resultComment.trim() || (reasonRequired && !notCompletedReasonId) || completionBeforeArrival || !completedAtValue} />} className="emu-work-complete-modal" onClose={mutation.close} title="Завершить работу" wide>
       <WorkSummary work={work} />
       <section className="emu-complete-people" aria-label="Сотрудники для завершения">
         <div className="emu-complete-section-heading">
@@ -202,10 +180,6 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
       </div>
       <label className="emu-textarea-label">Результат и описание выполненной работы<textarea value={resultComment} onChange={(event) => setResultComment(event.target.value)} placeholder="Опишите выполненные действия, результат и важные детали" /></label>
       {completionBeforeArrival ? <div className="emu-card-warning">Время окончания не может быть раньше времени прихода выбранных сотрудников.</div> : null}
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={employeeIds.length === 0 || !resultComment.trim() || (reasonRequired && !notCompletedReasonId) || completionBeforeArrival} onClick={() => void submit()} variant="primary">Завершить работу</Button>
-      </div>
     </ModalFrame>
   );
 }
@@ -213,26 +187,21 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
 export function CarryOverWorkModal({ onClose, onNotify, workspace, work }: { onClose: () => void; onNotify: (message: string) => void; workspace: EmuWorkspace; work: EmuWorkSessionDto }) {
   const [toDate, setToDate] = useState(addDays(work.workDate, 1));
   const [comment, setComment] = useState("");
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { toDate, comment } });
   const isInvalidDate = toDate <= work.workDate;
 
   async function submit() {
     const payload: EmuCarryOverWorkSessionDto = {
       comment,
-      rowVersion: work.rowVersion,
+      rowVersion: mutation.rowVersion,
       toDate,
     };
 
-    try {
-      await workspace.actions.carryOverWorkSession(work.id, payload);
-      onNotify("Работа перенесена без изменения номера карточки");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось перенести работу");
-    }
+    await mutation.run(() => workspace.actions.carryOverWorkSession(mutation.workId, payload), "Работа перенесена без изменения номера карточки");
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Перенести работу">
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Перенести" disabled={!comment.trim() || isInvalidDate} />} onClose={mutation.close} title="Перенести работу">
       <WorkSummary work={work} />
       <div className="emu-card-warning">
         Карточка останется активной с тем же номером {work.workNumber}. В блоке «Перенесенные» она будет видна как незавершенная работа новой смены.
@@ -243,34 +212,21 @@ export function CarryOverWorkModal({ onClose, onNotify, workspace, work }: { onC
       </div>
       <label className="emu-textarea-label">Причина переноса<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Например: не успели закончить до конца смены, перенос на следующую смену" /></label>
       {isInvalidDate ? <div className="emu-card-warning">Новая дата должна быть позже текущей даты работы.</div> : null}
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={!comment.trim() || isInvalidDate} onClick={() => void submit()} variant="primary">Перенести</Button>
-      </div>
     </ModalFrame>
   );
 }
 
 export function DeleteWorkModal({ onClose, onNotify, workspace, work }: { onClose: () => void; onNotify: (message: string) => void; workspace: EmuWorkspace; work: EmuWorkSessionDto }) {
   const [reason, setReason] = useState("");
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { reason } });
   async function submit() {
-    try {
-      await workspace.actions.deleteWorkSession(work.id, { reason, rowVersion: work.rowVersion });
-      onNotify("Работа удалена и сохранена в истории");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось удалить работу");
-    }
+    await mutation.run(() => workspace.actions.deleteWorkSession(mutation.workId, { reason, rowVersion: mutation.rowVersion }), "Работа удалена и сохранена в истории");
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Удалить работу">
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Удалить" disabled={!reason.trim()} danger />} onClose={mutation.close} title="Удалить работу">
       <WorkSummary work={work} />
       <label className="emu-textarea-label">Причина удаления<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={!reason.trim()} onClick={() => void submit()} variant="danger">Удалить</Button>
-      </div>
     </ModalFrame>
   );
 }

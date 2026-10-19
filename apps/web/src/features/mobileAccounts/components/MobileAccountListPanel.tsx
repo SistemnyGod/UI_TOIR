@@ -1,581 +1,147 @@
-import { useMemo, useState } from "react";
-import { getMobileAccountAccessLabel, getMobileAccountBindingCount } from "../../../domain/mobileAccounts";
-import type { AccountMode, DataSourceStatus, MobileAccount } from "../../../types";
-import { Chip, EmptyState, SectionTabs } from "../../../shared/ui";
+import { LockKeyhole, MoreHorizontal, Pencil, RotateCcw, Search, Smartphone, Trash2, UserRoundPlus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { AccountMode, DataSourceStatus, MobileAccount, MobileAccountSecurityEvent, MobileAccountSession } from "../../../types";
+import { EmptyState, SectionTabs } from "../../../shared/ui";
+import { accountBindingLabel, accountInitials } from "../accountPresentation";
+import { AccountActivityNotice, AccountConnection, AccountRefresh, MobileAccountEvents, MobileAccountSessions } from "./MobileAccountActivity";
 
 type MaybePromise<T> = T | Promise<T>;
 export type MobileAccountWorkspacePanel = "create" | "link" | "edit" | "password" | "view" | "delete";
-
-export function MobileAccountListPanel({
-  activePanel,
-  accounts,
-  canManage = true,
-  errorMessage,
-  isBusy = false,
-  mode,
-  selectedAccountId,
-  status = "idle",
-  onModeChange,
-  onDetachEmployee,
-  onNotify,
-  onOpenPanel,
-  onRetry,
-  onSelectAccount,
-  onToggleBlockAccount,
-}: {
+type Props = {
   activePanel: MobileAccountWorkspacePanel | null;
-  accounts: MobileAccount[];
-  canManage?: boolean;
-  errorMessage?: string;
-  isBusy?: boolean;
-  mode: AccountMode;
-  selectedAccountId: string;
-  status?: DataSourceStatus;
+  accounts: MobileAccount[]; canManage?: boolean; errorMessage?: string; isBusy?: boolean;
+  mode: AccountMode; selectedAccountId: string; status?: DataSourceStatus;
+  sessions?: MobileAccountSession[]; events?: MobileAccountSecurityEvent[];
+  securityStatus?: DataSourceStatus; securityErrorMessage?: string;
+  onRefreshSecurity?: () => MaybePromise<void>;
   onDeleteAccount: () => MaybePromise<void>;
   onDetachEmployee: (employeeId?: string, accountId?: string) => MaybePromise<void>;
-  onModeChange: (mode: AccountMode) => void;
-  onNotify: (message: string) => void;
-  onOpenPanel: (panel: MobileAccountWorkspacePanel) => void;
-  onRetry?: () => MaybePromise<void>;
-  onSelectAccount: (id: string) => void;
+  onModeChange: (mode: AccountMode) => void; onNotify: (message: string) => void;
+  onOpenPanel: (panel: MobileAccountWorkspacePanel, accountId?: string) => void;
+  onRetry?: () => MaybePromise<void>; onSelectAccount: (id: string) => void;
   onToggleBlockAccount: (accountId?: string) => MaybePromise<void>;
-}) {
+};
+
+export function MobileAccountListPanel({ accounts, canManage = true, errorMessage, isBusy = false, mode, selectedAccountId, status = "idle", sessions = [], events = [], securityStatus = "idle", securityErrorMessage, onRefreshSecurity = () => undefined, onModeChange, onNotify, onOpenPanel, onRetry, onSelectAccount, onToggleBlockAccount }: Props) {
   const selected = accounts.find((account) => account.id === selectedAccountId);
-  const isLoading = status === "loading";
-  const isError = status === "error";
-  const hasCachedAccounts = accounts.length > 0;
-  const onlineSessions = accounts.filter((account) => isOnline(account.session)).length;
-  const boundAccounts = accounts.filter((account) => account.boundEmployees.length > 0 || account.employeeScope === "all").length;
-  const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [accountStatusFilter, setAccountStatusFilter] = useState("all");
-  const [sessionStatusFilter, setSessionStatusFilter] = useState("all");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("all");
+  const [accountStatus, setAccountStatus] = useState("all");
+  const [device, setDevice] = useState("all");
+  const [connection, setConnection] = useState("all");
+  const [page, setPage] = useState(1);
+  const [menuAccountId, setMenuAccountId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const menuRootRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const ownSessions = sessions.filter((session) => session.accountId === selectedAccountId);
+  const ownEvents = events.filter((event) => event.accountId === selectedAccountId);
+  const filteredAccounts = useMemo(() => accounts.filter((account) => {
+    const text = [account.login, account.role, account.employee, ...account.boundEmployees].join(" ").toLocaleLowerCase("ru-RU");
+    return text.includes(query.trim().toLocaleLowerCase("ru-RU")) && (role === "all" || account.role === role) &&
+      (accountStatus === "all" || account.status === accountStatus) && (device === "all" || account.device === device) &&
+      (connection === "all" || account.session === connection);
+  }), [accounts, query, role, accountStatus, device, connection]);
+  const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / 25));
+  const currentPage = Math.min(page, pageCount);
+  const shownAccounts = filteredAccounts.slice((currentPage - 1) * 25, currentPage * 25);
 
-  const roles = useMemo(() => uniqueSorted(accounts.map((account) => account.role)), [accounts]);
-  const accountStatuses = useMemo(() => uniqueSorted(accounts.map((account) => account.status)), [accounts]);
-  const sessionStatuses = useMemo(() => uniqueSorted(accounts.map((account) => account.session)), [accounts]);
-  const filteredAccounts = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    return accounts.filter((account) => {
-      const employeeText = [account.employee, ...(account.boundEmployees ?? [])].join(" ").toLowerCase();
-      const matchesSearch =
-        query.length === 0 ||
-        account.login.toLowerCase().includes(query) ||
-        displayKnownValue(account.role).toLowerCase().includes(query) ||
-        employeeText.includes(query);
-      const matchesRole = roleFilter === "all" || account.role === roleFilter;
-      const matchesAccountStatus = accountStatusFilter === "all" || account.status === accountStatusFilter;
-      const matchesSessionStatus = sessionStatusFilter === "all" || account.session === sessionStatusFilter;
-
-      return matchesSearch && matchesRole && matchesAccountStatus && matchesSessionStatus;
-    });
-  }, [accountStatusFilter, accounts, roleFilter, searchQuery, sessionStatusFilter]);
-
-  function resetFilters() {
-    setSearchQuery("");
-    setRoleFilter("all");
-    setAccountStatusFilter("all");
-    setSessionStatusFilter("all");
-  }
-
-  function openPanelForAccount(panel: MobileAccountWorkspacePanel, account?: MobileAccount) {
-    if (account) onSelectAccount(account.id);
-    if (!canManage && panel !== "view") {
-      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
-      setOpenMenuId(null);
-      return;
+  useEffect(() => { setPage(1); setMenuAccountId(null); }, [query, role, accountStatus, device, connection, mode]);
+  useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
+  useEffect(() => {
+    if (!menuAccountId) return;
+    function positionMenu() {
+      const trigger = menuTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const height = menuRootRef.current?.offsetHeight || 228;
+      setMenuPosition({
+        left: Math.max(8, Math.min(rect.right - 240, window.innerWidth - 248)),
+        top: Math.max(8, rect.bottom + height + 8 <= window.innerHeight ? rect.bottom + 6 : rect.top - height - 6),
+      });
     }
-
-    onOpenPanel(panel);
-    setOpenMenuId(null);
-  }
-
-  async function detachFirstEmployee(account?: MobileAccount) {
-    if (!canManage) {
-      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
-      setOpenMenuId(null);
-      return;
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    menuRootRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    function closeOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !menuRootRef.current?.contains(event.target) && !menuTriggerRef.current?.contains(event.target)) setMenuAccountId(null);
     }
-
-    if (account) onSelectAccount(account.id);
-    setOpenMenuId(null);
-    const employeeId = account?.boundEmployeeIds?.[0];
-    if (!employeeId && !account?.boundEmployees?.length) {
-      onNotify("У аккаунта нет привязанных сотрудников.");
-      return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); setMenuAccountId(null); menuTriggerRef.current?.focus(); }
     }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeOnEscape); window.removeEventListener("resize", positionMenu); window.removeEventListener("scroll", positionMenu, true); };
+  }, [menuAccountId]);
 
-    await onDetachEmployee(employeeId, account?.id);
+  function resetFilters() { setQuery(""); setRole("all"); setAccountStatus("all"); setDevice("all"); setConnection("all"); }
+  function open(panel: MobileAccountWorkspacePanel, account: MobileAccount) {
+    if (isBusy || (!canManage && panel !== "view")) return;
+    onSelectAccount(account.id); onOpenPanel(panel, account.id); setMenuAccountId(null);
   }
-
-  async function toggleBlock(account?: MobileAccount) {
-    if (!canManage) {
-      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
-      setOpenMenuId(null);
-      return;
-    }
-
-    if (account) onSelectAccount(account.id);
-    setOpenMenuId(null);
-    await onToggleBlockAccount(account?.id);
+  async function toggleBlock(account: MobileAccount) {
+    setMenuAccountId(null);
+    try { await onToggleBlockAccount(account.id); } catch (error) { onNotify(error instanceof Error ? error.message : "Не удалось изменить доступ аккаунта."); }
   }
-
-  return (
-    <section className="mobile-am-panel mobile-am-accounts-panel">
-      <div className="mobile-am-panel-head">
-        <div>
-          <h2>Аккаунты телефона</h2>
-          <p>Создание, управление и привязка сотрудников к мобильным аккаунтам</p>
+  const failedWithoutData = status === "error" && accounts.length === 0;
+  const initiallyLoading = status === "loading" && accounts.length === 0;
+  return <div className="aui-list-workspace">
+    <div className="aui-tabs"><SectionTabs value={mode} onChange={(next) => { if (!isBusy) onModeChange(next); }} tabs={[
+      { id: "accounts", label: "Аккаунты", count: accounts.length },
+      { id: "sessions", label: "Сессии", count: ownSessions.length },
+      { id: "bindings", label: "Привязки", count: selected?.boundEmployees.length ?? 0 },
+      { id: "security", label: "События безопасности" },
+    ]} /></div>
+    <section className="aui-list-panel">
+      {mode === "accounts" || mode === "bindings" ? <>
+        <div className="aui-filters">
+          <label className="aui-search"><span className="aui-sr-only">Поиск аккаунта</span><Search aria-hidden="true" size={18} /><input onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Поиск по логину или сотруднику..." value={query} /></label>
+          <AccountFilter label="Роль" allLabel="Все роли" value={role} onChange={setRole} values={accounts.map((account) => account.role)} />
+          <AccountFilter label="Статус аккаунта" allLabel="Все статусы" value={accountStatus} onChange={setAccountStatus} values={accounts.map((account) => account.status)} />
+          <AccountFilter label="Устройство" allLabel="Все устройства" value={device} onChange={setDevice} values={accounts.map((account) => account.device)} />
+          <button className="aui-link aui-reset" onClick={resetFilters} type="button"><RotateCcw aria-hidden="true" size={18} />Сбросить</button>
         </div>
-        <div className="mobile-am-actions">
-          <button className={activePanel === "create" ? "primary" : ""} disabled={!canManage || isBusy} onClick={() => onOpenPanel("create")} type="button">
-            <span aria-hidden="true">+</span> Создать аккаунт
-          </button>
-          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("link")} type="button">
-            <span aria-hidden="true">↔</span> Привязать сотрудника
-          </button>
-          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("password")} type="button">
-            <span aria-hidden="true">⌘</span> Изменить пароль
-          </button>
-          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("edit")} type="button">
-            <span aria-hidden="true">✎</span> Редактировать
-          </button>
-          <button disabled={isBusy || !selected} onClick={() => onOpenPanel("view")} type="button">
-            <span aria-hidden="true">◎</span> Просмотр
-          </button>
-          <button className="danger" disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("delete")} type="button">
-            <span aria-hidden="true">×</span> Удалить
-          </button>
-        </div>
-      </div>
-
-      <div className="mobile-am-filters">
-        <label className="mobile-am-search">
-          <span>Поиск</span>
-          <input
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Поиск по логину или сотруднику..."
-            value={searchQuery}
-          />
-        </label>
-        <FilterSelect label="Роль" onChange={setRoleFilter} value={roleFilter} values={roles} />
-        <FilterSelect label="Статус аккаунта" onChange={setAccountStatusFilter} value={accountStatusFilter} values={accountStatuses} />
-        <FilterSelect label="Статус сессии" onChange={setSessionStatusFilter} value={sessionStatusFilter} values={sessionStatuses} />
-        <button className="mobile-am-reset" disabled={isBusy} onClick={resetFilters} type="button">
-          Сбросить фильтры
-        </button>
-      </div>
-
-      <div className="mobile-am-tabs-row">
-        <SectionTabs
-          value={mode}
-          onChange={(nextMode) => { if (!isBusy) onModeChange(nextMode); }}
-          tabs={[
-            { id: "accounts", label: "Аккаунты", count: filteredAccounts.length },
-            { id: "sessions", label: "Сессии", count: onlineSessions },
-            { id: "bindings", label: "Привязки", count: boundAccounts },
-          ]}
-        />
-        <span>{filteredAccounts.length} из {accounts.length}</span>
-      </div>
-
-      {isLoading && !hasCachedAccounts ? (
-        <EmptyState
-          title="Мобильные аккаунты загружаются"
-          description="Получаем список из backend API. Локальные записи в API mode не подмешиваются."
-        />
-      ) : null}
-
-      {isError && !hasCachedAccounts ? (
-        <EmptyState
-          title="Мобильные аккаунты API не загружены"
-          description={errorMessage ?? "Проверьте доступность backend API и повторите загрузку."}
-          action={
-            onRetry ? (
-              <button className="button ghost" disabled={isBusy} onClick={() => void onRetry()} type="button">
-                Повторить загрузку
-              </button>
-            ) : undefined
-          }
-        />
-      ) : null}
-
-      {isError && hasCachedAccounts ? (
-        <div aria-live="polite" className="mobile-am-inline-error" role="status">
-          <span>Не удалось обновить список. Показаны последние загруженные данные.</span>
-          {onRetry ? (
-            <button disabled={isBusy} onClick={() => void onRetry()} type="button">Повторить</button>
-          ) : null}
-        </div>
-      ) : null}
-      {(!isLoading || hasCachedAccounts) && mode === "accounts" ? (
-        filteredAccounts.length > 0 ? (
-          <MobileAccountsTable
-            accounts={filteredAccounts}
-            canManage={canManage}
-            isBusy={isBusy}
-            openMenuId={openMenuId}
-            selectedAccountId={selected?.id ?? ""}
-            setOpenMenuId={setOpenMenuId}
-            onDetachEmployee={detachFirstEmployee}
-            onOpenPanel={openPanelForAccount}
-            onSelectAccount={onSelectAccount}
-            onToggleBlockAccount={toggleBlock}
-          />
-        ) : (
-          <EmptyState
-            title={accounts.length > 0 ? "Аккаунты не найдены" : "Мобильных аккаунтов нет"}
-            description={accounts.length > 0 ? "Сбросьте фильтры или измените поисковый запрос." : "Создайте первый аккаунт или подключите список из backend API."}
-            action={
-              <button
-                className="button ghost"
-                disabled={accounts.length === 0 && !canManage}
-                onClick={accounts.length > 0 ? resetFilters : () => onOpenPanel("create")}
-                type="button"
-              >
-                {accounts.length > 0 ? "Сбросить фильтры" : "Создать аккаунт"}
-              </button>
-            }
-          />
-        )
-      ) : null}
-
-      {(!isLoading || hasCachedAccounts) && mode === "sessions" ? (
-        filteredAccounts.length > 0 ? (
-          <div className="mobile-am-card-grid">
-            {filteredAccounts.map((account) => (
-              <button
-                className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
-                key={account.id}
-                disabled={isBusy}
-                onClick={() => onSelectAccount(account.id)}
-                type="button"
-              >
-                <strong>{account.login}</strong>
-                <span>{isOnline(account.session) ? "Активная сессия" : "Сессия не активна"}</span>
-                <em>{formatDevice(account)}</em>
-                <Chip>{displaySession(account.session)}</Chip>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="Активных сессий нет" description="Сессии появятся после первого входа из мобильного приложения." />
-        )
-      ) : null}
-
-      {(!isLoading || hasCachedAccounts) && mode === "bindings" ? (
-        filteredAccounts.length > 0 ? (
-          <div className="mobile-am-card-grid">
-            {filteredAccounts.map((account) => (
-              <button
-                className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
-                key={account.id}
-                disabled={isBusy}
-                onClick={() => onSelectAccount(account.id)}
-                type="button"
-              >
-                <strong>{getMobileAccountAccessLabel(account)}</strong>
-                <span>{account.login}</span>
-                <em>{getMobileAccountBindingCount(account)}</em>
-                <Chip>{displayStatus(account.status)}</Chip>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="Привязок нет" description="Привязка появится после создания аккаунта и выбора сотрудника." />
-        )
-      ) : null}
+        <details className="aui-extra-filter"><summary>Фильтр по связи{connection !== "all" ? ` · ${connection}` : ""}</summary><AccountFilter label="Статус сессии" allLabel="Любое состояние связи" value={connection} onChange={setConnection} values={["Онлайн", "Офлайн", "-"]} /></details>
+        {status === "loading" && accounts.length > 0 ? <div className="aui-source-notice" role="status">Обновляем список…</div> : null}
+        {status === "error" && accounts.length > 0 ? <div className="aui-source-notice error" role="status"><span>Не удалось обновить список. Показаны последние загруженные данные.</span>{onRetry ? <button className="aui-link" onClick={() => void Promise.resolve().then(onRetry).catch(() => undefined)} type="button">Повторить</button> : null}</div> : null}
+        {initiallyLoading ? <EmptyState title="Мобильные аккаунты загружаются" description="Получаем список аккаунтов с сервера." /> : failedWithoutData ? <EmptyState title="Не удалось загрузить мобильные аккаунты" description={errorMessage || "Не удалось получить список аккаунтов."} action={onRetry ? <button className="aui-button" onClick={() => void Promise.resolve().then(onRetry).catch(() => undefined)} type="button">Повторить загрузку</button> : undefined} /> : !filteredAccounts.length ? <EmptyState title={accounts.length ? "Аккаунты не найдены" : "Мобильных аккаунтов нет"} description={accounts.length ? "Измените запрос или сбросьте фильтры." : "Создайте аккаунт для входа в мобильное приложение."} action={accounts.length ? <button className="aui-button" onClick={resetFilters} type="button">Сбросить фильтры</button> : canManage ? <button className="aui-button" disabled={isBusy} onClick={() => onOpenPanel("create")} type="button">Создать аккаунт</button> : undefined} /> : <>
+          <div className="aui-table-wrap"><table className="aui-account-table"><thead><tr><th>Логин</th><th>Сотрудники</th><th>Роль</th><th>Доступ</th><th>Устройство и связь</th><th>Последняя активность</th><th>Действия</th></tr></thead><tbody>
+            {shownAccounts.map((account) => <tr className={selectedAccountId === account.id ? "selected" : ""} key={account.id} onClick={() => { if (!isBusy) onSelectAccount(account.id); }}>
+              <td data-label="Логин"><button className="aui-login" disabled={isBusy} onClick={(event) => { event.stopPropagation(); open("view", account); }} type="button">{account.login}</button></td>
+              <td data-label="Сотрудники">{mode === "bindings" ? <div className="aui-bound-names">{account.employeeScope === "all" ? "Все сотрудники" : account.boundEmployees.length ? account.boundEmployees.map((name) => <span key={name}>{name}</span>) : "Сотрудники не привязаны"}{canManage ? <button className="aui-link" disabled={isBusy} onClick={(event) => { event.stopPropagation(); open("link", account); }} type="button">Управлять привязками</button> : null}</div> : <div className="aui-employee-summary"><div className="aui-avatar-list">{account.boundEmployees.slice(0, 4).map((name) => <span className="aui-avatar" key={name} title={name}>{accountInitials(name)}</span>)}{account.boundEmployees.length > 4 ? <span className="aui-avatar">+{account.boundEmployees.length - 4}</span> : null}</div><span>{accountBindingLabel(account)}</span></div>}</td>
+              <td data-label="Роль">{account.role}</td>
+              <td data-label="Доступ"><AccountAccess value={account.status} /></td>
+              <td data-label="Устройство и связь"><div className="aui-account-device"><Smartphone aria-hidden="true" size={23} /><div><strong>{account.device || "Устройство не определено"}</strong><span>Приложение {account.version || "—"}</span><AccountConnection value={account.session} /></div></div></td>
+              <td data-label="Последняя активность"><time>{account.lastSeen || "—"}</time></td>
+              <td className="aui-row-actions" data-label="Действия"><button aria-label={`Открыть аккаунт ${account.login}`} className="aui-button" disabled={isBusy} onClick={(event) => { event.stopPropagation(); open("view", account); }} type="button">Открыть</button>{canManage ? <button aria-label={`Действия ${account.login}`} aria-expanded={menuAccountId === account.id} className="aui-icon-button" disabled={isBusy} onClick={(event) => { event.stopPropagation(); menuTriggerRef.current = event.currentTarget; setMenuAccountId(menuAccountId === account.id ? null : account.id); }} type="button"><MoreHorizontal aria-hidden="true" size={20} /></button> : null}
+                {menuAccountId === account.id && canManage ? createPortal(<div className="aui-action-menu aui-menu-portal" style={menuPosition} aria-label={`Команды аккаунта ${account.login}`} ref={menuRootRef} onClick={(event) => event.stopPropagation()}>
+                  <button disabled={isBusy} onClick={() => open("edit", account)} type="button"><Pencil aria-hidden="true" size={17} />Редактировать</button>
+                  <button disabled={isBusy} onClick={() => open("link", account)} type="button"><UserRoundPlus aria-hidden="true" size={17} />Управлять привязками</button>
+                  <button disabled={isBusy} onClick={() => open("password", account)} type="button"><LockKeyhole aria-hidden="true" size={17} />Изменить пароль</button>
+                  <button disabled={isBusy} onClick={() => void toggleBlock(account)} type="button"><LockKeyhole aria-hidden="true" size={17} />{account.status === "Заблокирован" ? "Разблокировать" : "Заблокировать"}</button>
+                  <button className="danger" disabled={isBusy} onClick={() => open("delete", account)} type="button"><Trash2 aria-hidden="true" size={17} />Удалить аккаунт</button>
+                </div>, document.body) : null}
+              </td>
+            </tr>)}
+          </tbody></table></div>
+          <footer className="aui-list-footer"><span>Показано аккаунтов: {shownAccounts.length} из {filteredAccounts.length}{filteredAccounts.length !== accounts.length ? ` · всего ${accounts.length}` : ""}</span>{pageCount > 1 ? <div className="aui-paging"><button className="aui-button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} type="button">Назад</button><span>{currentPage} / {pageCount}</span><button className="aui-button" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} type="button">Далее</button></div> : null}</footer>
+        </>}
+      </> : <>
+        <header className="aui-activity-head"><div><h2>{mode === "sessions" ? "Сессии" : "События безопасности"}{selected ? ` · ${selected.login}` : ""}</h2><p>Данные выбранного аккаунта. Выберите другой во вкладке «Аккаунты».</p></div><AccountRefresh status={securityStatus} onRefresh={onRefreshSecurity} /></header>
+        <AccountActivityNotice status={securityStatus} errorMessage={securityErrorMessage} onRefresh={onRefreshSecurity} />
+        {!selected ? <div className="aui-empty"><strong>Выберите аккаунт</strong><span>Активность появится после выбора аккаунта из списка.</span></div> : mode === "sessions" ? <MobileAccountSessions sessions={ownSessions} /> : <MobileAccountEvents events={ownEvents} detailed />}
+      </>}
     </section>
-  );
+  </div>;
 }
 
-function FilterSelect({
-  label,
-  onChange,
-  value,
-  values,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-  values: string[];
-}) {
-  return (
-    <label>
-      <span>{label}</span>
-      <select onChange={(event) => onChange(event.target.value)} value={value}>
-        <option value="all">Все</option>
-        {values.map((item) => (
-          <option key={item} value={item}>
-            {displayKnownValue(item)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+function AccountFilter({ label, allLabel, values, value, onChange }: { label: string; allLabel: string; values: string[]; value: string; onChange: (value: string) => void }) {
+  const options = [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
+  return <label className="aui-filter"><span className="aui-sr-only">{label}</span><select value={value} onChange={(event) => onChange(event.currentTarget.value)}><option value="all">{allLabel}</option>{options.map((option) => <option value={option} key={option}>{option === "-" ? "Нет данных" : option}</option>)}</select></label>;
 }
 
-function MobileAccountsTable({
-  accounts,
-  canManage,
-  isBusy,
-  openMenuId,
-  selectedAccountId,
-  setOpenMenuId,
-  onDetachEmployee,
-  onOpenPanel,
-  onSelectAccount,
-  onToggleBlockAccount,
-}: {
-  accounts: MobileAccount[];
-  canManage: boolean;
-  isBusy: boolean;
-  openMenuId: string | null;
-  selectedAccountId: string;
-  setOpenMenuId: (id: string | null) => void;
-  onDetachEmployee: (account?: MobileAccount) => MaybePromise<void>;
-  onOpenPanel: (panel: MobileAccountWorkspacePanel, account?: MobileAccount) => void;
-  onSelectAccount: (id: string) => void;
-  onToggleBlockAccount: (account?: MobileAccount) => MaybePromise<void>;
-}) {
-  return (
-    <div className="mobile-am-table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Логин</th>
-            <th>Привязанные сотрудники</th>
-            <th>Роль</th>
-            <th>Статус аккаунта</th>
-            <th>Статус сессии</th>
-            <th>Последняя активность</th>
-            <th>Устройство</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((account) => (
-            <tr
-              className={selectedAccountId === account.id ? "selected" : ""}
-              key={account.id}
-              onClick={() => { if (!isBusy) onSelectAccount(account.id); }}
-            >
-              <td data-label="Логин">
-                <strong className="mobile-am-login">{account.login}</strong>
-              </td>
-              <td data-label="Сотрудники">
-                <EmployeeChipList account={account} />
-              </td>
-              <td data-label="Роль">{displayKnownValue(account.role)}</td>
-              <td data-label="Статус аккаунта">
-                <StatusBadge value={account.status} />
-              </td>
-              <td data-label="Статус сессии">
-                <SessionBadge value={account.session} />
-              </td>
-              <td data-label="Последняя активность">{account.lastSeen || "-"}</td>
-              <td data-label="Устройство">
-                <span className="mobile-am-device">{account.device || "-"}</span>
-                <span className="muted-line">{account.version || ""}</span>
-              </td>
-              <td className="mobile-am-actions-cell" data-label="Действия">
-                <button
-                  aria-label={`Просмотр ${account.login}`}
-                  disabled={isBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenPanel("view", account);
-                  }}
-                  type="button"
-                >
-                  ◎
-                </button>
-                <button
-                  aria-label={`Редактировать ${account.login}`}
-                  disabled={!canManage || isBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenPanel("edit", account);
-                  }}
-                  type="button"
-                >
-                  ✎
-                </button>
-                <button
-                  aria-label={`Действия ${account.login}`}
-                  disabled={!canManage || isBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setOpenMenuId(openMenuId === account.id ? null : account.id);
-                  }}
-                  type="button"
-                >
-                  ⋯
-                </button>
-                {openMenuId === account.id ? (
-                  <AccountActionMenu
-                    account={account}
-                    isBusy={isBusy}
-                    onDetachEmployee={onDetachEmployee}
-                    onOpenPanel={onOpenPanel}
-                    onToggleBlockAccount={onToggleBlockAccount}
-                  />
-                ) : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mobile-am-list-footer">Показано аккаунтов: {accounts.length}</div>
-    </div>
-  );
-}
-
-function EmployeeChipList({ account }: { account: MobileAccount }) {
-  const employees = account.employeeScope === "all" ? ["Все сотрудники"] : account.boundEmployees ?? [];
-
-  if (employees.length === 0) {
-    return (
-      <span className="mobile-am-empty-binding">
-        -
-        <small>Нет привязанных сотрудников</small>
-      </span>
-    );
-  }
-
-  return (
-    <div className="mobile-am-employee-list">
-      {employees.slice(0, 4).map((employee) => (
-        <span className="mobile-am-avatar" key={employee} title={employee}>
-          {getInitials(employee)}
-        </span>
-      ))}
-      {employees.length > 4 ? <span className="mobile-am-more">+{employees.length - 4}</span> : null}
-      <span className="mobile-am-binding-count">{getMobileAccountBindingCount(account)}</span>
-    </div>
-  );
-}
-
-function StatusBadge({ value }: { value: MobileAccount["status"] }) {
-  return <span className={`mobile-am-badge ${statusTone(value)}`}>{displayStatus(value)}</span>;
-}
-
-function SessionBadge({ value }: { value: MobileAccount["session"] }) {
-  if (displaySession(value) === "-") return <span className="mobile-am-session-empty">-</span>;
-
-  return (
-    <span className={`mobile-am-session ${isOnline(value) ? "online" : "offline"}`}>
-      <span />
-      {displaySession(value)}
-    </span>
-  );
-}
-
-function AccountActionMenu({
-  account,
-  isBusy,
-  onDetachEmployee,
-  onOpenPanel,
-  onToggleBlockAccount,
-}: {
-  account: MobileAccount;
-  isBusy: boolean;
-  onDetachEmployee: (account?: MobileAccount) => MaybePromise<void>;
-  onOpenPanel: (panel: MobileAccountWorkspacePanel, account?: MobileAccount) => void;
-  onToggleBlockAccount: (account?: MobileAccount) => MaybePromise<void>;
-}) {
-  const isBlocked = isAccountStatus(account.status, "blocked");
-
-  return (
-    <div className="mobile-am-menu" onClick={(event) => event.stopPropagation()}>
-      <button disabled={isBusy} onClick={() => onOpenPanel("view", account)} type="button">◎ Просмотр</button>
-      <button disabled={isBusy} onClick={() => onOpenPanel("edit", account)} type="button">✎ Редактировать</button>
-      <button disabled={isBusy} onClick={() => onOpenPanel("password", account)} type="button">⌘ Изменить пароль</button>
-      <button disabled={isBusy} onClick={() => onOpenPanel("link", account)} type="button">+ Привязать сотрудника</button>
-      <button disabled={isBusy} onClick={() => onDetachEmployee(account)} type="button">- Отвязать сотрудника</button>
-      <hr />
-      <button className="danger-text" disabled={isBusy} onClick={() => onToggleBlockAccount(account)} type="button">
-        ! {isBlocked ? "Разблокировать" : "Заблокировать"}
-      </button>
-      <button className="danger-text" disabled={isBusy} onClick={() => onOpenPanel("delete", account)} type="button">
-        × Удалить
-      </button>
-    </div>
-  );
-}
-
-function uniqueSorted(values: string[]) {
-  return [...new Set(values.filter(Boolean))].sort((left, right) => displayKnownValue(left).localeCompare(displayKnownValue(right), "ru"));
-}
-
-function getInitials(value: string) {
-  const words = value
-    .replace(/[+0-9]/g, "")
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (words.length === 0) return "АК";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
-}
-
-function isOnline(value: string) {
-  return normalizeValue(value).includes("онлайн");
-}
-
-function isAccountStatus(value: string, status: "active" | "blocked" | "unbound") {
-  const normalized = normalizeValue(value);
-  if (status === "active") return normalized.includes("актив");
-  if (status === "blocked") return normalized.includes("заблок");
-  return normalized.includes("не привязан");
-}
-
-function statusTone(value: string) {
-  if (isAccountStatus(value, "active")) return "green";
-  if (isAccountStatus(value, "blocked")) return "red";
-  if (isAccountStatus(value, "unbound")) return "orange";
-  return "slate";
-}
-
-function displayStatus(value: string) {
-  if (isAccountStatus(value, "active")) return "Активен";
-  if (isAccountStatus(value, "blocked")) return "Заблокирован";
-  if (isAccountStatus(value, "unbound")) return "Не привязан";
-  return displayKnownValue(value);
-}
-
-function displaySession(value: string) {
-  const normalized = normalizeValue(value);
-  if (normalized.includes("онлайн")) return "Онлайн";
-  if (normalized.includes("офлайн")) return "Оффлайн";
-  return "-";
-}
-
-function displayKnownValue(value: string) {
-  return decodeMojibake(value);
-}
-
-function formatDevice(account: MobileAccount) {
-  return [account.device, account.version].filter(Boolean).join(" / ") || "-";
-}
-
-function normalizeValue(value: string) {
-  return decodeMojibake(value).toLowerCase();
-}
-
-function decodeMojibake(value: string) {
-  const map: Record<string, string> = {
-    "Активен": "Активен",
-    "Не привязан": "Не привязан",
-    "Заблокирован": "Заблокирован",
-    "Онлайн": "Онлайн",
-    "Офлайн": "Оффлайн",
-    "Маршрутный обходчик": "Маршрутный обходчик",
-    "Оператор": "Оператор",
-    "Администратор мобильного доступа": "Администратор мобильного доступа",
-  };
-
-  return map[value] ?? value;
+export function AccountAccess({ value }: { value: MobileAccount["status"] }) {
+  return <span className={`aui-access ${value === "Активен" ? "active" : value === "Заблокирован" ? "blocked" : "unbound"}`}><span aria-hidden="true" />{value}</span>;
 }

@@ -5,7 +5,9 @@ import { EmployeeMobileAccessPanel } from "./components/employees/EmployeeMobile
 import { EmployeeProfileDrawer } from "./components/employees/EmployeeProfileDrawer";
 import { employeesFallback, findEmployee } from "../../repositories/employeesRepository";
 import { createApiAssignmentsRepository } from "../../repositories/assignmentsRepository";
-import { Button, ModalShell } from "../../shared/ui";
+import { Button, PageHeader } from "../../shared/ui";
+import { PatrolEmployeePickerModal } from "./components/employees/PatrolEmployeePickerModal";
+export { PatrolEmployeePickerModal } from "./components/employees/PatrolEmployeePickerModal";
 import {
   loadAssignmentFavoriteEmployeeIds,
   saveAssignmentFavoriteEmployeeIds,
@@ -22,6 +24,8 @@ type EmployeeFormState =
 export function EmployeesScreen({
   employees,
   canManage = true,
+  canAssign = true,
+  canManageAccounts = false,
   dataSourceMode,
   employeeCreateIntent,
   selectedEmployeeId,
@@ -34,6 +38,8 @@ export function EmployeesScreen({
 }: {
   employees: EmployeeDirectoryItem[];
   canManage?: boolean;
+  canAssign?: boolean;
+  canManageAccounts?: boolean;
   dataSourceMode: DataSourceMode;
   employeeCreateIntent: number;
   selectedEmployeeId: string;
@@ -76,6 +82,7 @@ export function EmployeesScreen({
     void apiAssignments
       .getSettings({ signal: controller.signal })
       .then((settings) => {
+        if (controller.signal.aborted) return;
         const serverEmployeeIds = settings.favoriteEmployeeIds ?? [];
         setPatrolEmployeeIds(serverEmployeeIds);
         saveAssignmentFavoriteEmployeeIds(serverEmployeeIds);
@@ -171,7 +178,10 @@ export function EmployeesScreen({
 
   return (
     <div className="screen-stack employees-screen employees-workspace-screen">
-      <EmployeeMobileAccessPanel onNavigate={onNavigate} onNotify={onNotify} />
+      <PageHeader title="Сотрудники" description="Рабочий список обходчиков, профили и мобильный доступ." actions={<>
+        <EmployeeMobileAccessPanel canManageAccounts={canManageAccounts} onNavigate={onNavigate} />
+        <Button disabled={!canManage || isPatrolListSaving} onClick={() => setFormState({ mode: "create" })} variant="primary">Создать сотрудника</Button>
+      </>} />
 
       <div className="two-column wide-left employees-workspace">
         <EmployeeDirectoryPanel
@@ -179,6 +189,7 @@ export function EmployeesScreen({
           canManage={canManage}
           allEmployeesCount={allEmployees.length}
           isSaving={isPatrolListSaving}
+          showCreateAction={false}
           onOpenAddFromAccounting={() => setPickerOpen(true)}
           onOpenCreate={() => {
             if (!canManage) {
@@ -187,12 +198,17 @@ export function EmployeesScreen({
             }
             setFormState({ mode: "create" });
           }}
-          onSelectEmployee={onSelectEmployee}
+          onSelectEmployee={id => {
+            onSelectEmployee(id);
+            if (window.matchMedia("(max-width: 720px)").matches) requestAnimationFrame(() => document.querySelector(".employee-profile-drawer")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          }}
           selectedEmployeeId={selected?.id}
         />
         <EmployeeProfileDrawer
+          key={selected?.id ?? "empty"}
           employee={selected}
           canManage={canManage}
+          canAssign={canAssign}
           isSaving={isPatrolListSaving}
           onDeactivateEmployee={deactivateEmployee}
           onEditEmployee={(employee) => {
@@ -209,10 +225,10 @@ export function EmployeesScreen({
 
       {formState ? (
         <EmployeeFormModal
+          key={formState.mode === "edit" ? formState.employeeId : "create"}
           employee={editedEmployee}
           mode={formState.mode}
           onClose={() => setFormState(null)}
-          onDelete={deactivateEmployee}
           onSubmit={submitEmployee}
           referenceOptions={referenceOptions}
         />
@@ -228,113 +244,6 @@ export function EmployeesScreen({
         />
       ) : null}
     </div>
-  );
-}
-
-export function PatrolEmployeePickerModal({
-  allEmployees,
-  initialSelectedIds,
-  isSaving = false,
-  onApply,
-  onClose,
-}: {
-  allEmployees: EmployeeDirectoryItem[];
-  initialSelectedIds: string[];
-  isSaving?: boolean;
-  onApply: (ids: string[]) => Promise<boolean> | boolean;
-  onClose: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [draftIds, setDraftIds] = useState(() => Array.from(new Set(initialSelectedIds)));
-  const [isApplying, setIsApplying] = useState(false);
-  const selectedSet = useMemo(() => new Set(draftIds), [draftIds]);
-  const visibleEmployees = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return allEmployees
-      .filter((employee) => {
-        if (!normalizedQuery) return true;
-        return [employee.fullName, employee.personnelNo, employee.position, employee.department, employee.employeeGroup]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
-      })
-      .slice(0, 120);
-  }, [allEmployees, query]);
-
-  function toggle(employeeId: string) {
-    setDraftIds((current) =>
-      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
-    );
-  }
-
-  async function applySelection() {
-    if (isApplying || isSaving) return;
-    setIsApplying(true);
-    try {
-      const applied = await onApply(draftIds);
-      if (applied) onClose();
-    } finally {
-      setIsApplying(false);
-    }
-  }
-
-  const pending = isApplying || isSaving;
-
-  return (
-    <ModalShell
-      className="patrol-employee-picker-modal"
-      title="Сотрудники для обходов"
-      subtitle="Выберите сотрудников из общего справочника. Изменения применятся одной операцией после сохранения."
-      onClose={pending ? () => undefined : onClose}
-      actions={(
-        <>
-          <Button disabled={pending || draftIds.length === 0} onClick={() => setDraftIds([])} variant="ghost">
-            Очистить выбор
-          </Button>
-          <Button disabled={pending} onClick={onClose} variant="ghost">Отмена</Button>
-          <Button disabled={pending} isLoading={pending} onClick={applySelection} variant="primary">
-            Сохранить список
-          </Button>
-        </>
-      )}
-    >
-        <div className="patrol-employee-picker-toolbar">
-          <label>
-            Поиск
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder="ФИО, табельный номер, должность, подразделение"
-            />
-          </label>
-          <strong>{draftIds.length} выбрано из {allEmployees.length}</strong>
-        </div>
-
-        <div className="patrol-employee-picker-list">
-          {visibleEmployees.length > 0 ? visibleEmployees.map((employee) => {
-            const selected = selectedSet.has(employee.id);
-            return (
-              <button
-                aria-pressed={selected}
-                className={`patrol-employee-picker-row ${selected ? "selected" : ""}`}
-                key={employee.id}
-                onClick={() => toggle(employee.id)}
-                type="button"
-              >
-                <span className="avatar small">{employee.initials}</span>
-                <span>
-                  <strong>{employee.fullName}</strong>
-                  <small>{employee.position}</small>
-                  <em>{employee.department || employee.zone || "Без подразделения"}</em>
-                </span>
-                <b>{selected ? "Выбран" : "Выбрать"}</b>
-              </button>
-            );
-          }) : <p className="patrol-employee-picker-empty">По запросу сотрудники не найдены.</p>}
-        </div>
-
-    </ModalShell>
   );
 }
 

@@ -1,0 +1,115 @@
+/* Module-scoped rules moved from styles.css; order retained within the module. */
+
+@media (max-width: 760px) {
+
+  .emu-history-v2,
+  .emu-history-v2-header,
+  .emu-history-view-actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .emu-history-v2-header {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .emu-history-v2-header h2,
+  .emu-history-v2-header p {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .emu-history-view-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .emu-history-view-actions > * {
+    min-width: 0;
+  }
+}
+
+.emu-shift-remarks-panel {
+  margin-top: 14px;
+}
+
+.emu-shift-remark-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.emu-shift-remark-card {
+  background: #f8fbff;
+  border: 1px solid var(--ui-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.emu-shift-remark-card header {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.emu-shift-remark-card header div {
+  display: grid;
+  gap: 3px;
+}
+
+.emu-shift-remark-card strong {
+  color: var(--ui-text);
+  font-size: 14px;
+}
+
+.emu-shift-remark-card span,
+.emu-shift-remark-card p,
+.emu-shift-remark-card dd {
+  color: var(--ui-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.emu-shift-remark-card p {
+  margin: 0;
+}
+
+.emu-shift-remark-card dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin: 0;
+}
+
+.emu-shift-remark-card dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.emu-shift-remark-card dd {
+  margin: 0;
+}
+
+.emu-shift-remark-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.emu-shift-remark-attachments a,
+.emu-shift-remark-attachments span {
+  background: #fff;
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  color: var(--ui-blue);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  text-decoration: none;
+}

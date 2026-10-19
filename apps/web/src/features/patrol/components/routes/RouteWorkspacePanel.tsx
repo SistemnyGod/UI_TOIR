@@ -1,6 +1,6 @@
-import type { FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import type { RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePoint, ScreenId } from "../../../../types";
-import { Button, EmptyState, Panel, SectionTabs } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel, SectionTabs, PaginationBar, type PageSizeOption } from "../../../../shared/ui";
 import { RouteEditorForm } from "./RouteEditorForm";
 import { RoutePointTable } from "./RoutePointTable";
 
@@ -63,6 +63,7 @@ export function RouteWorkspacePanel({
             <Button className="compact-button" disabled={!canAssign} onClick={() => onNavigate("assign")} variant="ghost">
               Назначить
             </Button>
+            <Button className="compact-button" onClick={() => onNavigate("results")} variant="ghost">Результаты обходов</Button>
           </>
         ) : null
       }
@@ -81,7 +82,7 @@ export function RouteWorkspacePanel({
       {!selectedRoute ? (
         <EmptyState
           title="Нет выбранного маршрута"
-          description="Редактор точек, схема маршрута и история появятся после создания или выбора маршрута."
+          description="Выберите маршрут слева или создайте новый с контрольными точками."
           action={
             <Button disabled={!canManage} onClick={onStartRouteCreate} variant="primary">
               Создать маршрут
@@ -96,9 +97,7 @@ export function RouteWorkspacePanel({
             onChange={onModeChange}
             tabs={[
               { id: "points", label: "Точки маршрута", count: routePoints.length },
-              { id: "scheme", label: "Схема маршрута" },
-              { id: "stats", label: "Статистика обходов" },
-              { id: "history", label: "История изменений" },
+              { id: "scheme", label: "Порядок обхода" },
             ]}
           />
 
@@ -113,13 +112,7 @@ export function RouteWorkspacePanel({
             onStartPointCreate={onStartPointCreate}
           />
 
-          <div className="notice info-soft">
-            <strong>Одна и та же NFC-метка может использоваться в разных маршрутах.</strong>
-            <span>
-              Интерфейс не блокирует повтор метки: это допустимый сценарий для общего оборудования и одинаковых
-              контрольных мест.
-            </span>
-          </div>
+          <details className="route-tag-help"><summary>Правила NFC / QR-меток</summary><p>Код метки уникален внутри маршрута. Общая метка оборудования может встречаться в разных маршрутах. Точки ручного контроля не требуют сканирования.</p></details>
         </>
       )}
     </Panel>
@@ -130,9 +123,9 @@ function RouteFacts({ route, routePoints }: { route: RouteDirectoryItem; routePo
   return (
     <div className="route-facts">
       <div><span>Точек в маршруте</span><strong>{routePoints.length}</strong></div>
-      <div><span>NFC-меток</span><strong>{routePoints.filter((point) => point.type === "NFC").length}</strong></div>
-      <div><span>Длина маршрута</span><strong>{route.distance}</strong></div>
-      <div><span>Типов точек</span><strong>{new Set(routePoints.map((point) => point.type)).size}</strong></div>
+      <div><span>Без NFC / QR-метки</span><strong>{routePoints.filter((point) => point.type !== "Ручной контроль" && !point.tag.trim()).length}</strong></div>
+      <div><span>Длительность</span><strong>{route.duration || "—"}</strong></div>
+      <div><span>Статус</span><Chip>{route.status}</Chip></div>
     </div>
   );
 }
@@ -156,6 +149,15 @@ function RouteModeContent({
   onSelectPoint: (pointId: string) => void;
   onStartPointCreate: () => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(25);
+  const orderedPoints = useMemo(() => [...routePoints].sort((a, b) => a.order - b.order), [routePoints]);
+  const filtered = useMemo(() => orderedPoints.filter(point => (
+    !query.trim() || [point.name, point.zone, point.tag, point.description, point.instruction].join(" ").toLowerCase().includes(query.trim().toLowerCase())
+  ) && (type === "all" || (type === "missing" ? point.type !== "Ручной контроль" && !point.tag.trim() : point.type === type))), [orderedPoints, query, type]);
+  const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   if (mode === "points") {
     return (
       <div className="route-point-section">
@@ -165,10 +167,15 @@ function RouteModeContent({
             + Добавить точку
           </Button>
         </div>
+        <div className="route-point-filters">
+          <label>Поиск точки<input type="search" value={query} placeholder="Название, зона, код метки" onChange={event => { setQuery(event.currentTarget.value); setPage(1); }} /></label>
+          <label>Тип контроля<select value={type} onChange={event => { setType(event.currentTarget.value); setPage(1); }}><option value="all">Все точки</option><option>NFC</option><option>QR-код</option><option>Ручной контроль</option><option value="missing">Без NFC / QR-метки</option></select></label>
+          {query || type !== "all" ? <Button variant="ghost" onClick={() => { setQuery(""); setType("all"); setPage(1); }}>Сбросить</Button> : null}
+        </div>
         {routePoints.length > 0 ? (
           <RoutePointTable
             canManage={canManage}
-            points={routePoints}
+            points={filtered.slice((safePage - 1) * pageSize, safePage * pageSize)}
             route={route}
             selectedPointId={selectedPointId}
             onMovePoint={onMovePoint}
@@ -185,6 +192,7 @@ function RouteModeContent({
             }
           />
         )}
+        {routePoints.length ? <PaginationBar page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} /> : null}
       </div>
     );
   }
@@ -192,11 +200,11 @@ function RouteModeContent({
   if (mode === "scheme") {
     return routePoints.length > 0 ? (
       <ol className="route-point-list">
-        {routePoints.map((point) => (
+        {orderedPoints.map((point) => (
           <li className={selectedPointId === point.id ? "active" : ""} key={point.id}>
             <span>{point.order}</span>
             <button onClick={() => onSelectPoint(point.id)} type="button">
-              {point.name} / {point.type} / {point.tag || "без метки"}
+              <strong>{point.name}</strong><small>{point.zone || "Зона не указана"} · {point.type} · {point.tag || "без метки"}</small>
             </button>
           </li>
         ))}
@@ -207,13 +215,13 @@ function RouteModeContent({
   }
 
   if (mode === "stats") {
-    return <EmptyState title="Статистики обходов нет" description="Показатели появятся после выполнения маршрута." />;
+    return <EmptyState title="Результаты доступны в отдельной вкладке" description="Перейдите в «Результаты обходов», чтобы просмотреть выполненные обходы и замечания." />;
   }
 
   return (
     <EmptyState
-      title="История изменений пуста"
-      description="История начнет заполняться после сохранения маршрута и точек."
+      title="История изменений здесь недоступна"
+      description="Для управления маршрутом откройте «Точки маршрута» или «Порядок обхода»."
     />
   );
 }

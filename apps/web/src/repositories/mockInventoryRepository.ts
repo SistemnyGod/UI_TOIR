@@ -1063,6 +1063,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       return pageRows(rows, params);
     },
 
+    async getEmployee(id: string) { return required(readStore().employees.find(row => row.id === id), "Сотрудник не найден"); },
     async getEmployees(params = {}) {
       const store = readStore();
       let rows = store.employees;

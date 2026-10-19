@@ -62,7 +62,7 @@ export function createRoutePointDraft({
     name: payload.name.trim(),
     zone: payload.zone.trim() || "Зона не указана",
     type: payload.type,
-    tag: payload.tag.trim() || "Без метки",
+    tag: payload.tag.trim(),
     description: payload.description.trim(),
     instruction: payload.instruction.trim(),
     interval: payload.interval.trim() || "00:10",

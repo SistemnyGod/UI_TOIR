@@ -14,7 +14,7 @@ test("full PPE journal paginates and opens employee history on desktop and phone
     const size = Number(url.searchParams.get("pageSize")); const current = Number(url.searchParams.get("page"));
     return route.fulfill({ json: { items: [{ id: "doc", employeeId: "exact-id", employeeName: "Иванов Иван Иванович", personnelNo: "001", department: "Очень длинное название производственного подразделения", status: "confirmed", version: 1, linesCount: 0, totalMinor: 0, documentDate: "2026-09-14" }], total: 230, page: current, pageSize: size, pageCount: Math.ceil(230 / size), departments: ["Цех"], summary: { total: 230, confirmed: 200, draft: 30, overdue: 0, cancelled: 0 } } });
   });
-  await page.route("**/issue-documents/doc", route => route.fulfill({ json: { id: "doc", status: "confirmed", content: { employee: { id: "exact-id", fullName: "Иванов Иван Иванович", personnelNo: "001" }, documentDate: "2026-09-14", lines: [] } } }));
+  await page.route("**/issue-documents/doc", route => route.fulfill({ json: { id: "doc", status: "confirmed", content: { employee: { id: "exact-id", fullName: "Иванов Иван Иванович", personnelNo: "001" }, documentDate: "2026-09-14", normRows: [], lines: [] } } }));
   await page.goto("/#inventory-ppe");
   await expect(page.getByText("1 / 23")).toBeVisible();
   await page.getByRole("button", { name: "Далее", exact: true }).click();

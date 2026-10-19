@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { ApiError } from "../../../../api/client";
 import type { CreateServiceRequestPayload, EmployeeDirectoryItem, PatrolResult, RouteDirectoryItem } from "../../../../types";
-import { Button, Chip, ModalShell } from "../../../../shared/ui";
+import { Button, Chip, ModalShell, useDialogCloseGuard } from "../../../../shared/ui";
 import { buildNotificationText, getDateInputValue } from "./requestModalUtils";
+import "./requestCreateModal.css";
 
 export function RequestCreateModal({
   sourceResult,
@@ -24,9 +26,22 @@ export function RequestCreateModal({
   const [routeId, setRouteId] = useState(() => findRouteOption(routeOptions, sourceResult?.route)?.id ?? routeOptions[0]?.id ?? "");
   const [scheduledDate, setScheduledDate] = useState(getDateInputValue(new Date()));
   const [scheduledTime, setScheduledTime] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const busy = useRef(false);
+  const operation = useRef<{ fingerprint: string; id: string } | null>(null);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [description, setDescription] = useState(
     sourceResult ? `Повторно проверить точку ${sourceResult.point}. Комментарий результата: ${sourceResult.comment}` : "",
   );
+  const formId = useId();
+  const initial = useRef({ employeeId, routeId, scheduledDate, scheduledTime, description });
+  const { requestClose, discardDialog } = useDialogCloseGuard({
+    dirty: () => JSON.stringify({ employeeId, routeId, scheduledDate, scheduledTime, description }) !== JSON.stringify(initial.current),
+    pending,
+    onClose,
+  });
   const selectedEmployee = useMemo(() => employeeOptions.find((item) => item.id === employeeId), [employeeId, employeeOptions]);
   const selectedRoute = useMemo(() => routeOptions.find((item) => item.id === routeId), [routeId, routeOptions]);
   const defaultNotificationText = useMemo(
@@ -39,56 +54,82 @@ export function RequestCreateModal({
   }
 
   useEffect(() => {
-    if (!employeeOptions.length || selectedEmployee) {
+    if (!employeeOptions.length || employeeId) {
       return;
     }
 
-    setEmployeeId(findEmployeeOption(employeeOptions, sourceResult?.employee)?.id ?? employeeOptions[0].id);
-  }, [employeeOptions, selectedEmployee, sourceResult?.employee]);
+    const id = findEmployeeOption(employeeOptions, sourceResult?.employee)?.id ?? employeeOptions[0].id;
+    initial.current.employeeId = id;
+    setEmployeeId(id);
+  }, [employeeOptions, employeeId, sourceResult?.employee]);
 
   useEffect(() => {
-    if (!routeOptions.length || selectedRoute) {
+    if (!routeOptions.length || routeId) {
       return;
     }
 
-    setRouteId(findRouteOption(routeOptions, sourceResult?.route)?.id ?? routeOptions[0].id);
-  }, [routeOptions, selectedRoute, sourceResult?.route]);
+    const id = findRouteOption(routeOptions, sourceResult?.route)?.id ?? routeOptions[0].id;
+    initial.current.routeId = id;
+    setRouteId(id);
+  }, [routeOptions, routeId, sourceResult?.route]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedEmployee || !selectedRoute) {
-      return;
-    }
+    if (busy.current) return;
+    if (!selectedEmployee || !selectedRoute) { setError("Выбранный сотрудник или маршрут недоступен. Проверьте выбор перед отправкой."); return; }
 
     const plannedAt = scheduledTime ? new Date(`${scheduledDate}T${scheduledTime}:00`) : null;
-    if (plannedAt && Number.isNaN(plannedAt.getTime())) {
+    if (!plannedAt || Number.isNaN(plannedAt.getTime())) {
+      setError("Укажите дату и время старта обхода.");
       return;
     }
-
-    onSubmitCreate({
-      employeeId: selectedEmployee.id,
-      employee: selectedEmployee.fullName,
-      routeId: selectedRoute.id,
-      route: selectedRoute.name,
-      sourceResultId: sourceResult?.id ?? sourceResultId,
-      scheduledDate,
-      scheduledTime,
-      plannedAt: plannedAt?.toISOString(),
-      shift: selectedEmployee.shift,
-      notifyEmployee: true,
-      notificationText: defaultNotificationText,
-      description: description.trim() || "Заявка на проведение обхода территории.",
-    });
+    busy.current = true;
+    setPending(true);
+    setError("");
+    try {
+      const payload: CreateServiceRequestPayload = {
+        employeeId: selectedEmployee.id,
+        employee: selectedEmployee.fullName,
+        routeId: selectedRoute.id,
+        route: selectedRoute.name,
+        sourceResultId: sourceResult?.id ?? sourceResultId,
+        scheduledDate,
+        scheduledTime,
+        plannedAt: plannedAt.toISOString(),
+        shift: selectedEmployee.shift,
+        notifyEmployee: true,
+        notificationText: defaultNotificationText,
+        description: description.trim() || "Заявка на проведение обхода территории.",
+      };
+      const fingerprint = JSON.stringify(payload);
+      if (operation.current?.fingerprint !== fingerprint) operation.current = { fingerprint, id: crypto.randomUUID() };
+      await onSubmitCreate({ ...payload, clientRequestId: operation.current.id });
+      if (alive.current) onDirtyChange(false);
+    } catch (failure) {
+      if (!alive.current) return;
+      const fields = failure instanceof ApiError ? Object.values(failure.errors ?? {}).flat().join(" ") : "";
+      setError(fields || (failure instanceof Error ? failure.message : "Не удалось создать заявку. Повторите попытку."));
+    } finally {
+      busy.current = false;
+      if (alive.current) setPending(false);
+    }
   }
 
   return (
-    <ModalShell
+    <><ModalShell
       className="request-create-modal"
-      onClose={onClose}
+      onClose={() => { if (!busy.current) requestClose(); }}
+      pending={pending}
       subtitle="Выберите сотрудника, маршрут и дату. Уведомление сотруднику отправляется автоматически после создания заявки."
       title="Заявка на проведение обхода"
+      actions={<>
+        <Button disabled={pending} onClick={requestClose} variant="ghost">Отмена</Button>
+        <Button disabled={pending} form={formId} type="submit" variant="primary">{pending ? "Отправляем…" : "Создать заявку"}</Button>
+      </>}
     >
-      <form className="request-modal request-create-form" onSubmit={submit}>
+      <form id={formId} aria-busy={pending} className="request-modal request-create-form" onSubmit={submit}>
+      {error ? <div className="error-banner" role="alert">{error}</div> : null}
+      <fieldset className="request-create-fields" disabled={pending}>
 
       {sourceResult ? (
         <div className="source-card">
@@ -117,6 +158,7 @@ export function RequestCreateModal({
                 value={employeeId}
               >
                 {employeeOptions.length === 0 ? <option value="">Сотрудники не загружены</option> : null}
+                {employeeId && !selectedEmployee ? <option value={employeeId}>Сотрудник недоступен — выберите другого</option> : null}
                 {employeeOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.fullName}
@@ -136,6 +178,7 @@ export function RequestCreateModal({
                 value={routeId}
               >
                 {routeOptions.length === 0 ? <option value="">Маршруты не загружены</option> : null}
+                {routeId && !selectedRoute ? <option value={routeId}>Маршрут недоступен — выберите другой</option> : null}
                 {routeOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -165,9 +208,10 @@ export function RequestCreateModal({
                   setScheduledTime(event.currentTarget.value);
                 }}
                 type="time"
+                required
                 value={scheduledTime}
               />
-              <span className="field-help">Можно оставить пустым</span>
+              <span className="field-help">Обязательно для назначения обхода</span>
             </label>
             <label className="full-label">
               Комментарий к заявке
@@ -202,25 +246,18 @@ export function RequestCreateModal({
           <div className="request-summary-row">
             <span>План</span>
             <strong>{formatRequestDateTime(scheduledDate, scheduledTime)}</strong>
-            <small>Время можно не указывать</small>
+            <small>Время старта обязательно</small>
           </div>
-          <div className="request-notification-preview">
-            <strong>Сообщение сотруднику</strong>
-            <span>{defaultNotificationText}</span>
-          </div>
+          <details className="request-notification-preview">
+            <summary>Сообщение сотруднику</summary>
+            <p>{defaultNotificationText}</p>
+          </details>
         </aside>
       </div>
 
-      <div className="modal-actions">
-        <Button onClick={onClose} variant="ghost">
-          Отмена
-        </Button>
-        <Button type="submit" variant="primary">
-          Создать заявку
-        </Button>
-      </div>
+      </fieldset>
       </form>
-    </ModalShell>
+    </ModalShell>{discardDialog}</>
   );
 }
 

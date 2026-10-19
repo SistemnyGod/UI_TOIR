@@ -1,0 +1,30 @@
+.modal-shell.ppe-document-actions-dialog { width: min(620px, 100%); }
+.modal-shell.ppe-document-confirm-dialog { width: min(620px, 100%); }
+.modal-shell.ppe-document-print-dialog { width: min(1480px, 100%); }
+.ppe-document-actions-dialog .modal-shell-body, .ppe-document-confirm-dialog .modal-shell-body { display: grid; align-content: start; gap: 16px; }
+.ppe-document-command { display: grid; justify-items: start; gap: 10px; min-width: 0; padding-bottom: 16px; border-bottom: 1px solid var(--ui-border); }
+.ppe-document-command:last-of-type { padding-bottom: 0; border-bottom: 0; }
+.ppe-document-command summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ui-blue); }
+.ppe-document-command[open] > :not(summary) { margin-top: 12px; }
+.ppe-document-command p, .ppe-document-confirm-dialog p { margin: 0; color: var(--ui-text); line-height: 1.55; font-size: 14px; overflow-wrap: anywhere; }
+.ppe-document-command p { color: var(--ui-muted); font-size: 13px; }
+.ppe-document-command label, .ppe-document-print-controls label { display: grid; gap: 6px; width: 100%; min-width: 0; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.ppe-document-command input, .ppe-document-print-controls select { width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+.ppe-document-command :is(input, summary):focus-visible, .ppe-document-print-controls select:focus-visible, .ppe-document-print-canvas:focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.ppe-document-confirm-dialog .field-error, .ppe-document-actions-dialog .field-error { color: var(--ui-danger); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ppe-document-print-controls { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
+.ppe-document-print-canvas { min-width: 0; max-width: 100%; overflow: auto; padding: 12px; background: var(--ui-surface-muted); border-radius: var(--ui-radius-control); }
+.ppe-document-dialog-hint { margin-right: auto; color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+.ppe-document-save-state { min-height: 20px; margin: 0 0 10px; color: var(--ui-muted); font-size: 12px; }
+.ppe-norm-change-lines { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ppe-norm-change-lines li { display: flex; justify-content: space-between; align-items: start; gap: 8px 16px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); font-size: 13px; overflow-wrap: anywhere; }
+.ppe-norm-change-lines strong { font-weight: 500; min-width: 0; }
+.ppe-norm-change-lines span { flex-shrink: 0; color: var(--ui-muted); }
+.ppe-document-norm-state { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-muted); background: var(--ui-surface-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-document-norm-state.is-error { color: var(--ui-danger); background: var(--ui-danger-soft); }
+@media (max-width: 767px) {
+  .ppe-document-print-controls { grid-template-columns: minmax(0, 1fr); }
+  .ppe-document-command input, .ppe-document-print-controls select { min-height: 44px; font-size: 16px; }
+  .ppe-document-command summary, .ppe-document-actions-dialog .ui-button { min-height: 44px; }
+  .ppe-document-print-canvas { padding: 8px; }
+}

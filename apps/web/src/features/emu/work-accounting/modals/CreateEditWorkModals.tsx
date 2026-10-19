@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { EmuUpdateWorkSessionDto, EmuWorkSessionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { useStoredState } from "../../../../hooks/useStoredState";
+import { writeStoredState } from "../../../../repositories/browserStorageRepository";
+import { useWorkMutation } from "../useWorkMutation";
+import { WorkFormActions } from "../components/WorkFormActions";
 import { EmployeePicker } from "../components/EmployeePicker";
 import { ModalFrame } from "../components/ModalFrame";
 import { Button } from "../../../../shared/ui";
@@ -17,6 +20,7 @@ export function CreateWorkModal({
   onClose,
   onNotify,
   workspace,
+  draftStorageKey = emuCreateWorkDraftKey,
 }: {
   employeeOptions: EmuEmployeeOption[];
   initialEmployeeId?: string;
@@ -24,6 +28,7 @@ export function CreateWorkModal({
   onClose: () => void;
   onNotify: (message: string) => void;
   workspace: EmuWorkspace;
+  draftStorageKey?: string;
 }) {
   const today = new Date();
   const sections = activeSections(workspace);
@@ -35,7 +40,7 @@ export function CreateWorkModal({
     time: toTimeInput(today),
     workDate: toDateInput(today),
   };
-  const [storedDraft, setStoredDraft] = useStoredState<EmuCreateWorkDraft>(emuCreateWorkDraftKey, emptyDraft, {
+  const [storedDraft, setStoredDraft] = useStoredState<EmuCreateWorkDraft>(draftStorageKey, emptyDraft, {
     validate: isEmuCreateWorkDraft,
     version: 1,
   });
@@ -46,7 +51,7 @@ export function CreateWorkModal({
   const [employeeIds, setEmployeeIds] = useState<string[]>(initialEmployeeId ? [initialEmployeeId] : storedDraft.employeeIds);
   const [search, setSearch] = useState("");
   const [showAllEmployees, setShowAllEmployees] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const mutation = useWorkMutation({ onClose, onNotify, values: { workDate, time, sectionId, taskDescription, employeeIds: [...employeeIds].sort() }, leaveMessage: "Работа ещё не создана на сервере. При закрытии локальный черновик останется в браузере, если сохранение доступно.", leaveLabel: "Закрыть форму" });
 
   const { employees: availableEmployeeOptions, favoriteIds: favoriteEmployeeIds } = useMemo(
     () => buildCreateWorkEmployeeOptions(employeeOptions, workspace.settings.favoriteEmployees),
@@ -98,36 +103,37 @@ export function CreateWorkModal({
   }
 
   async function submit() {
-    if (isSaving) return;
-    setIsSaving(true);
-    try {
-      await workspace.actions.createWorkSession({
+    await mutation.run(() => workspace.actions.createWorkSession({
         arrivedAt: toLocalIso(workDate, time),
         employeeIds,
         sectionId,
         taskDescription,
         workDate,
+      }), "Работа создана и отправлена в работу", () => {
+        // Persist before unmounting; an effect cannot clear storage after close.
+        writeStoredState(draftStorageKey, { ...emptyDraft, employeeIds: [], taskDescription: "" }, 1);
       });
-      onNotify("Работа создана и отправлена в работу");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось создать работу");
-    } finally {
-      setIsSaving(false);
-    }
   }
 
   const missingRequirements = [
     !sectionId ? "участок" : "",
     employeeIds.length === 0 ? "сотрудника" : "",
     !taskDescription.trim() ? "задачу" : "",
+    !workDate ? "дату" : "",
+    !time ? "время" : "",
   ].filter(Boolean);
 
   return (
-    <ModalFrame
+    <ModalFrame leaveDialog={mutation.leaveDialog}
       className="emu-create-work-modal"
       wide
-      onClose={onClose}
+      onClose={mutation.close}
+      pending={mutation.pending}
+      actions={<div className="emu-modal-actions emu-create-actions">
+        {mutation.error ? <p className="emu-work-form-error" role="alert">{mutation.error}</p> : null}
+        <div className="emu-create-actions-secondary"><Button disabled={mutation.pending} onClick={clearForm} variant="ghost">Очистить</Button><Button disabled={mutation.pending} onClick={mutation.close} variant="ghost">Отмена</Button></div>
+        <div className="emu-create-actions-primary">{missingRequirements.length > 0 && !hasConflict ? <span>Заполните: {missingRequirements.join(", ")}</span> : null}<Button className="emu-action-submit" disabled={mutation.pending || missingRequirements.length > 0 || hasConflict} isLoading={mutation.pending} onClick={() => void submit()} variant="primary">Создать работу</Button></div>
+      </div>}
       subtitle="Заполните участок, время прихода, выберите сотрудников и опишите задачу."
       title="Создать работу"
     >
@@ -159,6 +165,7 @@ export function CreateWorkModal({
               if (value.trim()) setShowAllEmployees(true);
             }} placeholder="Фамилия, должность, подразделение или табельный номер" /></label>
           <EmployeePicker
+            allEmployees={availableEmployeeOptions}
             currentWorkId=""
             employees={quickEmployees}
             favoriteCount={favoriteEmployeeIds.size}
@@ -193,16 +200,6 @@ export function CreateWorkModal({
           <label className="emu-textarea-label">Задача / ожидаемый результат<textarea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} placeholder="Опишите задачу, объем работ и ожидаемый результат..." /></label>
         </section>
       </div>
-      <div className="emu-modal-actions emu-create-actions">
-        <div className="emu-create-actions-secondary">
-          <button className="emu-action-clear" onClick={clearForm} type="button"><span>↺</span> Очистить</button>
-          <button className="emu-action-cancel" onClick={onClose} type="button"><span>×</span> Отмена</button>
-        </div>
-        <div className="emu-create-actions-primary">
-          {missingRequirements.length > 0 && !hasConflict ? <span>Заполните: {missingRequirements.join(", ")}</span> : null}
-          <Button className="emu-action-submit" disabled={isSaving || missingRequirements.length > 0 || hasConflict} onClick={() => void submit()} variant="primary"><span>＋</span> {isSaving ? "Создаём..." : "Создать работу"}</Button>
-        </div>
-      </div>
     </ModalFrame>
   );
 }
@@ -229,6 +226,7 @@ export function EditWorkModal({
   const [search, setSearch] = useState("");
   const [showAllEmployees, setShowAllEmployees] = useState(false);
   const [comment, setComment] = useState("");
+  const mutation = useWorkMutation({ onClose, onNotify, work, values: { workDate, time, sectionId, taskDescription, employeeIds: [...employeeIds].sort(), comment } });
   const filteredEmployees = filterEmployees(employeeOptions, search);
   const favoriteEmployeeIds = useMemo(
     () => new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId)),
@@ -250,23 +248,17 @@ export function EditWorkModal({
       arrivedAt: toLocalIso(workDate, time),
       comment,
       employeeIds,
-      rowVersion: work.rowVersion,
+      rowVersion: mutation.rowVersion,
       sectionId,
       taskDescription,
       workDate,
     };
 
-    try {
-      await workspace.actions.updateWorkSession(work.id, payload);
-      onNotify("Карточка изменена");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось изменить карточку");
-    }
+    await mutation.run(() => workspace.actions.updateWorkSession(mutation.workId, payload), "Карточка изменена");
   }
 
   return (
-    <ModalFrame className="emu-edit-work-modal" onClose={onClose} title="Изменить карточку работы" wide>
+    <ModalFrame leaveDialog={mutation.leaveDialog} className="emu-edit-work-modal" onClose={mutation.close} pending={mutation.pending} title="Изменить карточку работы" wide actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} disabled={!workDate || !time || !sectionId || employeeIds.length === 0 || !taskDescription.trim() || hasConflict || needsCorrectionComment} label="Сохранить" />}>
       <WorkSummary work={work} />
       <div className="emu-form-grid">
         <label>Дата работ<input type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} /></label>
@@ -280,6 +272,7 @@ export function EditWorkModal({
         }} placeholder="ФИО, должность, участок" /></label>
       {hasConflict ? <div className="emu-card-warning">Сотрудник одновременно работает в другой карточке: {conflicts.join(", ")}</div> : null}
       <EmployeePicker
+        allEmployees={employeeOptions}
         currentWorkId={work.id}
         employees={quickEmployees}
         favoriteCount={favoriteEmployeeIds.size}
@@ -293,10 +286,6 @@ export function EditWorkModal({
       <label className="emu-textarea-label">Задача<textarea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} /></label>
       <label className="emu-textarea-label">Комментарий к изменению<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Например: скорректировано время прихода оператором" /></label>
       {needsCorrectionComment ? <div className="emu-card-warning">Для ручной корректировки даты или времени нужен комментарий.</div> : null}
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={!sectionId || employeeIds.length === 0 || !taskDescription.trim() || hasConflict || needsCorrectionComment} onClick={() => void submit()} variant="primary">Сохранить</Button>
-      </div>
     </ModalFrame>
   );
 }

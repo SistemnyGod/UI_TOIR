@@ -1,0 +1,16 @@
+.emu-history-employee-modal.modal-shell { width: min(1180px, calc(100vw - 32px)); border-radius: var(--radius-dialog); box-shadow: var(--shadow-modal); }
+.emu-history-employee-modal.modal-shell .modal-shell-body { padding: 16px 20px; }
+.emu-history-employee-modal .modal-shell-body > nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 12px; }
+.emu-history-employee-modal .modal-shell-body > nav button { min-height: 40px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text-default); background: var(--color-surface-subtle); font: inherit; font-size: 14px; cursor: pointer; }
+.emu-history-employee-modal .modal-shell-body > nav button.active { background: var(--color-brand-500); border-color: var(--color-brand-500); color: var(--color-surface); }
+.emu-history-modal-kpis, .emu-history-employee-section-report { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.emu-history-modal-kpis article, .emu-history-employee-section-report article { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); font-size: 14px; overflow-wrap: anywhere; }
+.emu-history-employee-modal .emu-history-work-table-wrap { max-width: 100%; overflow: auto; }
+@media (max-width: 640px) {
+  .emu-history-employee-modal.modal-shell { width: calc(100vw - 20px); }
+  .emu-history-employee-modal.modal-shell .modal-shell-body { padding: 12px; }
+  .emu-history-employee-modal .modal-shell-body > nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .emu-history-employee-modal .modal-shell-body > nav button { min-height: 44px; }
+  .emu-history-modal-kpis, .emu-history-employee-section-report { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .emu-history-modal-kpis article, .emu-history-employee-section-report article { padding: 10px; font-size: 13px; }
+}

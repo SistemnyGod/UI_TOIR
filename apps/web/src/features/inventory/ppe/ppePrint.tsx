@@ -1,89 +1,9 @@
-import { useEffect, useState } from "react";
-import { Printer } from "lucide-react";
 import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus, sortPpeSignatureLines } from "./ppeCommon";
 import { PPE_STATUS } from "./ppeStatusCatalog";
 import type { PrintData, PrintLine, PrintMode } from "./ppeTypes";
-import { PpeButton, PpeModalShell } from "./PpeUi";
 
 export const PPE_NORM_TEXT =
   "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н \"Об утверждении Типовых норм бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты работникам промышленности строительных материалов, стекольной и фарфоро-фаянсовой промышленности, занятым на работах с вредными и (или) опасными условиями труда, а также на работах, выполняемых в особых температурных условиях или связанных с загрязнением\" (Зарегистрировано в Минюсте России 01.03.2018 N 50193); Межотраслевыми правилами обеспечения работников специальной одеждой, специальной обувью и другими средствами индивидуальной защиты (утв. Приказом Минздравсоцразвития России от 01.06.2009 N 290н).";
-
-export function PrintPreviewModal({
-  data,
-  mode,
-  onClose,
-  onModeChange,
-  onPrint,
-  printing = false,
-}: {
-  data: PrintData;
-  mode: PrintMode;
-  onClose: () => void;
-  onModeChange: (mode: PrintMode) => void;
-  onPrint: (data: PrintData, mode: PrintMode) => void;
-  printing?: boolean;
-}) {
-  const [draftData, setDraftData] = useState(data);
-  const [localPrinting, setLocalPrinting] = useState(false);
-  const printBusy = printing || localPrinting;
-
-  useEffect(() => {
-    setDraftData(data);
-  }, [data]);
-
-  function closeModal() {
-    if (!printBusy) onClose();
-  }
-
-  function handlePrint() {
-    if (printBusy) return;
-    setLocalPrinting(true);
-    try {
-      onPrint(draftData, mode);
-    } finally {
-      window.setTimeout(() => setLocalPrinting(false), 1200);
-    }
-  }
-  function patchLine(index: number, patch: Partial<PrintLine>) {
-    setDraftData((current) => ({
-      ...current,
-      lines: current.lines.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)),
-    }));
-  }
-
-  return (
-    <PpeModalShell
-      ariaLabel="Предпросмотр печати"
-      bodyClassName="inventory-ppe-print-modal-body"
-      className="inventory-ppe-picker inventory-ppe-print-modal"
-      closeDisabled={printBusy}
-      description="Проверьте сотрудника, строки выдачи и подписи перед печатью."
-      eyebrow="Печатные формы СИЗ"
-      footer={
-        <>
-          <PpeButton disabled={printBusy} onClick={closeModal} variant="ghost">Закрыть</PpeButton>
-          <PpeButton disabled={printBusy} icon={<Printer size={16} />} loading={printBusy} onClick={handlePrint} variant="primary">
-            Печать
-          </PpeButton>
-        </>
-      }
-      onClose={closeModal}
-      title="Предпросмотр документа"
-    >
-      <div className="inventory-ppe-preview-tabs">
-        <button className={mode === "card" ? "is-active" : ""} disabled={printBusy} onClick={() => onModeChange("card")} type="button">
-          Личная карточка
-        </button>
-        <button className={mode === "sheet" ? "is-active" : ""} disabled={printBusy} onClick={() => onModeChange("sheet")} type="button">
-          Лист подписи
-        </button>
-      </div>
-      <div className="inventory-ppe-print-scroll">
-        <PrintPaper data={draftData} mode={mode} onPatchLine={patchLine} />
-      </div>
-    </PpeModalShell>
-  );
-}
 
 export function PrintPaper({
   data,
@@ -107,7 +27,7 @@ export function PrintPaper({
 
 export function printDocument(data: PrintData, mode: PrintMode) {
   const popup = window.open("", "_blank", "width=1200,height=900");
-  if (!popup) return;
+  if (!popup) throw new Error("Браузер заблокировал окно печати. Разрешите всплывающие окна для приложения и повторите попытку.");
 
   popup.document.open();
   popup.document.write(buildPrintHtml(data, mode));
@@ -462,7 +382,7 @@ function signatureLines(lines: PrintLine[]) {
   );
 }
 
-function signatureRows(lines: PrintLine[]) {
+export function signatureRows(lines: PrintLine[]) {
   return lines
     .map((line, sourceIndex) => ({ line, sourceIndex }))
     .filter(({ line }) => !line.isSectionTitle && isPpeSignatureLineStatus(line.status))

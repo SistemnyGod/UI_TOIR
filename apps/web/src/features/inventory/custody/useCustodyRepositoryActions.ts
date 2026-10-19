@@ -1,146 +1,73 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { InventoryCustodyRecordDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import { recordStatusLabel, saveApiFile } from "./custodyCommon";
 import type { CustodyDocumentAction, CustodyDrawer } from "./custodyTypes";
 
-export function useCustodyRepositoryActions({
-  onNotify,
-  onReload,
-  setDrawer,
-}: {
-  onNotify: (message: string) => void;
-  onReload: () => Promise<void>;
-  setDrawer: (drawer: CustodyDrawer) => void;
-}) {
-  const inventoryRepository = useInventoryRepository();
-  const [busyAction, setBusyAction] = useState("");
-
+export function useCustodyRepositoryActions({ onNotify, onReload, setDrawer }: { onNotify: (message: string) => void; onReload: () => Promise<void>; setDrawer: (drawer: CustodyDrawer) => void }) {
+  const repository = useInventoryRepository();
+  const [busyAction, setBusyAction] = useState(""), [actionError, setActionError] = useState("");
+  const [isMutating, setIsMutating] = useState(false);
+  const mounted = useRef(true), readRevision = useRef(0), busyRevision = useRef(0), mutating = useRef(false), shown = useRef<CustodyDrawer>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; readRevision.current += 1; }; }, []);
+  function begin(key: string) { const token=++busyRevision.current; setBusyAction(key); return token; }
+  function finish(token: number) { if (mounted.current && token===busyRevision.current) setBusyAction(""); }
+  function publish(value: CustodyDrawer) { shown.current=value; setDrawer(value); }
+  function closeDrawer() { readRevision.current += 1; publish(null); setActionError(""); }
   async function openDocument(documentId: string) {
+    const revision=++readRevision.current, token=begin(`open-${documentId}`);
     try {
-      setBusyAction(`open-${documentId}`);
-      const [detail, history] = await Promise.all([
-        inventoryRepository.getCustodyDocument(documentId),
-        inventoryRepository.getCustodyDocumentHistory(documentId, { pageSize: 50 }),
-      ]);
-      setDrawer({ type: "document", detail: { ...detail, history: history.rows } });
-    } catch (loadError) {
-      onNotify(loadError instanceof Error ? loadError.message : "Не удалось открыть акт под запись");
-    } finally {
-      setBusyAction("");
-    }
+      const [detail, history] = await Promise.all([repository.getCustodyDocument(documentId), repository.getCustodyDocumentHistory(documentId, { pageSize: 50 })]);
+      if (mounted.current && revision===readRevision.current) publish({type:"document",detail:{...detail,history:history.rows}});
+    } catch (failure) { if (mounted.current && revision===readRevision.current) onNotify(failure instanceof Error ? failure.message : "Не удалось открыть акт под запись"); }
+    finally { finish(token); }
   }
-
   async function openRecordHistory(row: InventoryCustodyRecordDto) {
+    const revision=++readRevision.current, token=begin(`history-${row.id}`);
     try {
-      setBusyAction(`history-${row.id}`);
-      const history = await inventoryRepository.getCustodyRecordHistory(row.id, { pageSize: 50 });
-      setDrawer({
-        type: "history",
-        title: `История строки: ${row.itemName}`,
-        rows: history.rows,
-        meta: [
-          ["Сотрудник", row.employeeName],
-          ["Позиция", row.itemName],
-          ["Статус", recordStatusLabel(row.status)],
-        ],
-      });
-    } catch (loadError) {
-      onNotify(loadError instanceof Error ? loadError.message : "Не удалось открыть историю строки");
-    } finally {
-      setBusyAction("");
-    }
+      const history = await repository.getCustodyRecordHistory(row.id, { pageSize: 50 });
+      if (mounted.current && revision===readRevision.current) publish({ type:"history", title:`История строки: ${row.itemName}`, rows:history.rows, meta:[["Сотрудник",row.employeeName],["Позиция",row.itemName],["Статус",recordStatusLabel(row.status)]] });
+    } catch (failure) { if (mounted.current && revision===readRevision.current) onNotify(failure instanceof Error ? failure.message : "Не удалось открыть историю строки"); }
+    finally { finish(token); }
   }
-
-  async function updateRecordStatus(row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) {
+  async function mutate(key: string, operation: () => Promise<unknown>, message: string, documentId?: string, closeAfter = false, reportError = false) {
+    if (mutating.current) return false;
+    mutating.current=true; setIsMutating(true);
+    const revision=readRevision.current, token=begin(key);
+    setActionError("");
     try {
-      setBusyAction(`${status}-${row.id}`);
-      await inventoryRepository.updateCustodyRecordStatus(row.id, {
-        comment: comment?.trim() ? comment.trim() : null,
-        status,
-      });
-      onNotify(status === "returned"
-        ? "Возврат под запись зафиксирован"
-        : status === "written_off"
-          ? "Списание под запись зафиксировано"
-          : status === "lost"
-            ? "Неисправность предмета зафиксирована"
-            : "Статус строки под запись обновлен");
-      await onReload();
-      if (documentId) await openDocument(documentId);
-    } catch (updateError) {
-      onNotify(updateError instanceof Error ? updateError.message : "Не удалось обновить строку под запись");
-    } finally {
-      setBusyAction("");
-    }
+      await operation();
+      if (!mounted.current) return false;
+      onNotify(message);
+      try { await onReload(); }
+      catch { if (mounted.current) setActionError("Операция сохранена. Не удалось обновить список — повторите загрузку."); }
+      if (!mounted.current) return true;
+      if (documentId && revision===readRevision.current && shown.current?.type==="document" && shown.current.detail.id===documentId) {
+        if (closeAfter) closeDrawer(); else void openDocument(documentId);
+      }
+      return true;
+    } catch (failure) {
+      if (!mounted.current) return false;
+      if (!reportError) throw failure;
+      const message = failure instanceof Error ? failure.message : "Не удалось выполнить операцию с актом";
+      setActionError(message); return false;
+    } finally { mutating.current=false; if (mounted.current) setIsMutating(false); finish(token); }
   }
-
-  async function transferRecord(row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) {
-    try {
-      setBusyAction(`transfer-${row.id}`);
-      await inventoryRepository.transferCustodyRecord(row.id, {
-        comment: comment?.trim() ? comment.trim() : null,
-        toEmployeeId: employeeId,
-      });
-      onNotify("Передача предмета зафиксирована");
-      await onReload();
-      if (documentId) setDrawer(null);
-    } catch (transferError) {
-      onNotify(transferError instanceof Error ? transferError.message : "Не удалось передать предмет");
-    } finally {
-      setBusyAction("");
-    }
+  function updateRecordStatus(row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) {
+    return mutate(`${status}-${row.id}`, () => repository.updateCustodyRecordStatus(row.id,{status,comment:comment?.trim()||null}), status==="returned" ? "Возврат под запись зафиксирован" : status==="written_off" ? "Списание под запись зафиксировано" : status==="lost" ? "Неисправность предмета зафиксирована" : "Статус строки обновлён", documentId);
   }
-
-  async function archiveRecord(row: InventoryCustodyRecordDto, documentId?: string) {
-    try {
-      setBusyAction(`archive-${row.id}`);
-      await inventoryRepository.archiveCustodyRecord(row.id);
-      onNotify("Строка под запись перенесена в архив");
-      await onReload();
-      if (documentId) await openDocument(documentId);
-    } catch (archiveError) {
-      onNotify(archiveError instanceof Error ? archiveError.message : "Не удалось архивировать строку");
-    } finally {
-      setBusyAction("");
-    }
+  function transferRecord(row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) {
+    return mutate(`transfer-${row.id}`, () => repository.transferCustodyRecord(row.id,{toEmployeeId:employeeId,comment:comment?.trim()||null}), "Передача предмета зафиксирована", documentId, true);
   }
-
-  async function updateDocumentState(documentId: string, action: CustodyDocumentAction) {
-    try {
-      setBusyAction(`${action}-${documentId}`);
-      if (action === "close") await inventoryRepository.closeCustodyDocument(documentId);
-      if (action === "open") await inventoryRepository.openCustodyDocument(documentId);
-      if (action === "archive") await inventoryRepository.archiveCustodyDocument(documentId);
-
-      onNotify(action === "close" ? "Акт закрыт" : action === "open" ? "Акт открыт" : "Акт перенесен в архив");
-      await onReload();
-      if (action === "archive") setDrawer(null);
-      else await openDocument(documentId);
-    } catch (updateError) {
-      onNotify(updateError instanceof Error ? updateError.message : "Не удалось изменить статус акта");
-    } finally {
-      setBusyAction("");
-    }
+  function archiveRecord(row: InventoryCustodyRecordDto, documentId?: string) {
+    return mutate(`archive-${row.id}`, () => repository.archiveCustodyRecord(row.id), "Строка под запись перенесена в архив", documentId);
   }
-
-  async function downloadFile(action: () => Promise<{ blob: Blob; fileName: string }>) {
-    try {
-      saveApiFile(await action());
-      onNotify("Файл сформирован");
-    } catch (downloadError) {
-      onNotify(downloadError instanceof Error ? downloadError.message : "Не удалось сформировать файл");
-    }
+  function updateDocumentState(documentId: string, action: CustodyDocumentAction) {
+    return mutate(`${action}-${documentId}`, () => action==="close" ? repository.closeCustodyDocument(documentId) : action==="open" ? repository.openCustodyDocument(documentId) : repository.archiveCustodyDocument(documentId), action==="close" ? "Акт закрыт" : action==="open" ? "Акт открыт" : "Акт перенесён в архив", documentId, action==="archive", true);
   }
-
-  return {
-    archiveRecord,
-    busyAction,
-    downloadFile,
-    openDocument,
-    openRecordHistory,
-    transferRecord,
-    updateDocumentState,
-    updateRecordStatus,
-  };
+  async function downloadFile(operation: () => Promise<{ blob: Blob; fileName: string }>) {
+    try { const file=await operation(); if (mounted.current) { saveApiFile(file); onNotify("Файл сформирован"); } }
+    catch (failure) { if (mounted.current) onNotify(failure instanceof Error ? failure.message : "Не удалось сформировать файл"); }
+  }
+  return { actionError, archiveRecord, busyAction, isMutating, closeDrawer, downloadFile, openDocument, openRecordHistory, transferRecord, updateDocumentState, updateRecordStatus };
 }

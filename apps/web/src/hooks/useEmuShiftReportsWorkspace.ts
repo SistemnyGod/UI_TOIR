@@ -32,9 +32,12 @@ export function useEmuShiftReportsWorkspace({ historyEnabled, optionsEnabled }: 
   const detailRequestsRef = useRef<Record<string, Promise<EmuShiftReportDetailDto>>>({});
   const historyAbortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    historyAbortRef.current?.abort();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      historyAbortRef.current?.abort();
+    };
   }, []);
 
   const loadOptions = useCallback(async () => {

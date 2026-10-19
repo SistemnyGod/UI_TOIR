@@ -5,20 +5,21 @@ export type PpeNormSettingsIntent = {
 };
 
 export function savePpeNormSettingsIntent(position: string) {
-  window.sessionStorage.setItem(PPE_NORM_SETTINGS_INTENT_KEY, JSON.stringify({ position: position.trim() }));
+  writeDocumentStorage("sessionStorage", PPE_NORM_SETTINGS_INTENT_KEY, JSON.stringify({ position: position.trim() }));
 }
 
 export function readPpeNormSettingsIntent(): PpeNormSettingsIntent | null {
   try {
-    const value: unknown = JSON.parse(window.sessionStorage.getItem(PPE_NORM_SETTINGS_INTENT_KEY) ?? "null");
+    const value: unknown = JSON.parse(readDocumentStorage("sessionStorage", PPE_NORM_SETTINGS_INTENT_KEY) ?? "null");
     if (!value || typeof value !== "object") return null;
     const position = (value as Partial<PpeNormSettingsIntent>).position;
-    return typeof position === "string" && position.trim() ? { position: position.trim() } : null;
+    return typeof position === "string" ? { position: position.trim() } : null;
   } catch {
     return null;
   }
 }
 
 export function clearPpeNormSettingsIntent() {
-  window.sessionStorage.removeItem(PPE_NORM_SETTINGS_INTENT_KEY);
+  writeDocumentStorage("sessionStorage", PPE_NORM_SETTINGS_INTENT_KEY);
 }
+import { readDocumentStorage, writeDocumentStorage } from "./documentStorage";

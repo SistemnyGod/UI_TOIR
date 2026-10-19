@@ -1,0 +1,17 @@
+.modal-shell.perco-modal { width: min(620px, calc(100vw - 40px)); color: var(--ui-text); }
+.modal-shell.perco-confirm-modal { width: min(540px, calc(100vw - 40px)); }
+.perco-modal .modal-shell-body { display: grid; align-content: start; gap: 14px; }
+.perco-modal .perco-warning-text { margin: 0; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-muted); background: var(--ui-surface-muted); font-size: 13px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.perco-modal .perco-warning-text.is-danger { color: var(--ui-danger); border-color: var(--ui-danger); background: var(--ui-danger-soft); }
+.perco-modal .perco-field { min-width: 0; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.perco-modal :is(input, textarea) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-text); background: var(--ui-surface); font: inherit; font-weight: 400; }
+.perco-modal textarea { min-height: 96px; resize: vertical; }
+.perco-modal .perco-button { min-height: 42px; font-size: 14px; font-weight: 500; }
+.perco-modal .perco-duration-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); }
+.perco-modal .perco-duration-summary small { display: block; margin-bottom: 4px; color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.perco-modal .perco-duration-summary strong { color: var(--ui-text); font-size: 17px; font-weight: 600; }
+@media (max-width: 767px) {
+  .modal-shell.perco-modal, .modal-shell.perco-confirm-modal { width: calc(100vw - 20px); }
+  .perco-modal :is(input, textarea) { font-size: 16px; }
+  .perco-modal .perco-button { min-height: 44px; }
+}

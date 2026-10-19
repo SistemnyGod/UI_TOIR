@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { SiteUserAccessCatalogDto } from "../../../api/contracts";
 import type { SiteUser } from "../../../types";
 import type { SiteUserFormPayload } from "../../../repositories/siteUsersRepository";
 import { SITE_USER_ROLES, SITE_USER_STATUSES } from "../../../repositories/siteUsersRepository";
+
+import { Button, ModalShell, useDialogCloseGuard } from "../../../shared/ui";
+import "./siteUserForm.css";
 
 const defaultPayload: SiteUserFormPayload = {
   confirmPassword: "",
@@ -18,7 +21,7 @@ const defaultPayload: SiteUserFormPayload = {
 };
 
 function payloadFromUser(user?: SiteUser): SiteUserFormPayload {
-  if (!user) return defaultPayload;
+  if (!user) return { ...defaultPayload, enabledModuleKeys: [], permissionCodes: [], permissionOverrides: [] };
   return {
     ...defaultPayload,
     fullName: user.fullName,
@@ -54,13 +57,22 @@ export function SiteUserFormPanel({
   const [saving, setSaving] = useState(false);
   const isEdit = mode === "edit" && Boolean(initialUser);
 
+  const baseline = useRef(JSON.stringify(payload));
+  const modulesInitialized = useRef(false);
+  const submitting = useRef(false);
+  const mounted = useRef(true);
+  const [saveError, setSaveError] = useState("");
+  const formId = useId();
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty: JSON.stringify(payload) !== baseline.current, pending: saving, onClose: () => onClose?.() });
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    const next = payloadFromUser(initialUser);
-    if (!initialUser && catalog?.modules.length && !next.enabledModuleKeys?.length) {
-      next.enabledModuleKeys = catalog.modules.map((module) => module.key);
-    }
-    setPayload(next);
-  }, [catalog, initialUser]);
+    if (initialUser || modulesInitialized.current || !catalog?.modules.length) return;
+    modulesInitialized.current = true;
+    const enabledModuleKeys = catalog.modules.map(module => module.key);
+    baseline.current = JSON.stringify({ ...JSON.parse(baseline.current), enabledModuleKeys });
+    // A late access catalog adds its defaults without replacing the profile being typed.
+    setPayload(current => ({ ...current, enabledModuleKeys }));
+  }, [catalog, initialUser?.id]);
 
   const password = payload.initialPassword?.trim() ?? "";
   const confirmation = payload.confirmPassword?.trim() ?? "";
@@ -81,32 +93,32 @@ export function SiteUserFormPanel({
   }
 
   async function submit() {
+    if (submitting.current || !canManage) return;
     if (!valid) {
       onNotify("Заполните обязательные поля и проверьте совпадение паролей.");
       return;
     }
 
-    setSaving(true);
+    submitting.current = true; setSaving(true); setSaveError("");
     try {
       if (isEdit && initialUser) await onUpdateUser?.(initialUser.id, payload);
       else await onCreateUser?.(payload);
+    } catch (error) {
+      if (mounted.current) setSaveError(error instanceof Error ? error.message : "Не удалось сохранить пользователя. Введённые данные остались в форме.");
     } finally {
-      setSaving(false);
+      submitting.current = false; if (mounted.current) setSaving(false);
     }
   }
 
   return (
-    <div className="site-user-form">
-      <header className="site-user-form-header">
-        <div>
-          <span className="eyebrow">Администрирование</span>
-          <h2 id="site-user-form-title">{isEdit ? "Редактирование пользователя" : "Новый пользователь"}</h2>
-          <p>Создайте учётную запись и назначьте базовый доступ.</p>
-        </div>
-        <button className="icon-button" onClick={onClose} type="button" aria-label="Закрыть">×</button>
-      </header>
-
-      <div className="site-user-form-grid">
+    <><ModalShell title={isEdit ? "Редактирование пользователя" : "Новый пользователь"} subtitle="Профиль учётной записи и базовый доступ." className="site-user-editor" pending={saving} onClose={requestClose} actions={<>
+      <Button disabled={saving} onClick={requestClose} variant="ghost">Отмена</Button>
+      <Button disabled={!canManage || !valid || saving} isLoading={saving} form={formId} type="submit" variant="primary">{isEdit ? "Сохранить изменения" : "Создать пользователя"}</Button>
+    </>}>
+      <form id={formId} onSubmit={event => { event.preventDefault(); void submit(); }}>
+      {saveError ? <p role="alert" className="site-user-editor-error">{saveError}</p> : null}
+      <fieldset disabled={saving || !canManage} className="site-user-editor-fields">
+      <div className="site-user-editor-grid">
         <section className="site-user-form-section">
           <h3>Профиль</h3>
           <label>Логин *<input autoComplete="username" value={payload.login} onChange={(event) => update("login", event.target.value)} placeholder="Введите логин" /></label>
@@ -116,7 +128,7 @@ export function SiteUserFormPanel({
               {SITE_USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           </label>
-          <label>Status
+          <label>Статус
             <select value={payload.status} onChange={(event) => update("status", event.target.value as SiteUser["status"])}>
               {SITE_USER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
@@ -136,7 +148,7 @@ export function SiteUserFormPanel({
 
         <section className="site-user-form-section">
           <div className="site-user-form-section-heading">
-            <div><h3>Быстрый доступ</h3><p>Role rights remain the baseline. Selected modules get базовых прав просмотра.</p></div>
+            <div><h3>Быстрый доступ</h3><p>Права роли действуют по умолчанию. Выбранные модули добавляют базовые права просмотра.</p></div>
             <strong>{selectedModules.size}/{catalog?.modules.length ?? 0}</strong>
           </div>
           <div className="site-user-role-cards">
@@ -166,12 +178,7 @@ export function SiteUserFormPanel({
         </section>
       </div>
 
-      <footer className="site-user-modal-actions">
-        <button className="button ghost" onClick={onClose} type="button">Отмена</button>
-        <button className="button primary" disabled={!canManage || !valid || saving} onClick={() => void submit()} type="button">
-          {saving ? "Сохранение..." : isEdit ? "Сохранить изменения" : "Создать пользователя"}
-        </button>
-      </footer>
-    </div>
+      </fieldset></form>
+    </ModalShell>{discardDialog}</>
   );
 }

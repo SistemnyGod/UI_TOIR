@@ -1,5 +1,9 @@
 .ppe-journal-summary { display:flex; flex-wrap:wrap; gap:18px; align-items:center; padding:18px 0; border-bottom:1px solid #d8e0e8; }
 .ppe-journal-summary button { margin-left:auto; }
+.ppe-journal-loading { min-height: 32px; padding: 6px 0; color: #52627a; font-size: 13px; }
+.ppe-journal-column-settings .modal-shell-body > label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.ppe-ref-modal.ppe-template-modal.ppe-journal-column-settings { width: min(440px, calc(100vw - 24px)); }
+.ppe-journal-column-settings input[type=checkbox] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; padding: 0; accent-color: #0865db; }
 .ppe-journal-filters { grid-template-columns:2fr 1.5fr 1.7fr 1.2fr auto; margin:18px 0; }
 .ppe-journal-table { max-width:100%; overflow:auto; border:1px solid #d8e0e8; border-radius:8px; background:#fff; }
 .ppe-journal-table table { border-collapse:collapse; width:100%; min-width:700px; text-align:left; font-size:14px; }
@@ -16,7 +20,7 @@
 @media(max-width:1200px) { .ppe-journal-filters { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:767px) {
  .ppe-journal-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
- .ppe-journal-filters label:first-child { grid-column:1/-1; }
+ .ppe-journal-filters label:first-child,.ppe-journal-filters label:nth-child(2) { grid-column:1/-1; }
  .ppe-journal-table { border:0; background:transparent; overflow:visible; }
  .ppe-journal-table table,.ppe-journal-table tbody { display:block; min-width:0; }
  .ppe-journal-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { RouteFormPayload, RoutePoint, RoutePointFormPayload } from "../../../../types";
 import { createClientUuid } from "../../../../shared/clientUuid";
-import { Button, ModalShell } from "../../../../shared/ui";
+import { Button, ModalShell, useDialogCloseGuard } from "../../../../shared/ui";
 import { emptyPointDraft } from "./PointEditorForm";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -17,12 +17,16 @@ const pointTypeOptions = ["NFC", "QR-код", "Ручной контроль"] a
 export function RouteCreateModal({
   draft,
   isOpen,
+  isSaving = false,
+  serverError = "",
   onCancel,
   onChange,
   onSubmit,
 }: {
   draft: RouteFormPayload;
   isOpen: boolean;
+  isSaving?: boolean;
+  serverError?: string;
   onCancel: () => void;
   onChange: (draft: RouteFormPayload) => void;
   onSubmit: (routeDraft: RouteFormPayload, points: RoutePointFormPayload[]) => MaybePromise<void>;
@@ -31,20 +35,33 @@ export function RouteCreateModal({
   const [points, setPoints] = useState<DraftPoint[]>([]);
   const [editingPointId, setEditingPointId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const submitting = useRef(false);
+  const [localSaving, setLocalSaving] = useState(false);
+  const pending = localSaving || isSaving;
+  const initialDraft = useRef(JSON.stringify(draft));
+  const initialPointDraft = useRef(JSON.stringify({ ...emptyPointDraft, zone: draft.territory }));
+  const { requestClose, discardDialog } = useDialogCloseGuard({
+    dirty: points.length > 0 || JSON.stringify(draft) !== initialDraft.current || JSON.stringify(pointDraft) !== initialPointDraft.current,
+    pending: pending || submitting.current,
+    onClose: onCancel,
+  });
 
   function closeModal(event?: Pick<ReactMouseEvent, "preventDefault" | "stopPropagation">) {
     event?.preventDefault();
     event?.stopPropagation();
-    onCancel();
+    if (pending || submitting.current) return;
+    requestClose();
   }
 
   useEffect(() => {
     if (!isOpen) return;
+    initialDraft.current = JSON.stringify(draft);
+    initialPointDraft.current = JSON.stringify({ ...emptyPointDraft, zone: draft.territory });
     setPointDraft({ ...emptyPointDraft, zone: draft.territory });
     setPoints([]);
     setEditingPointId(null);
     setError("");
-  }, [draft.territory, isOpen]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -92,6 +109,7 @@ export function RouteCreateModal({
 
   function editPoint(point: DraftPoint) {
     setPointDraft({
+      requiresPhoto: false,
       expectedTime: point.expectedTime,
       interval: point.interval,
       name: point.name,
@@ -126,6 +144,7 @@ export function RouteCreateModal({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current || isSaving) return;
     setError("");
 
     if (!draft.name.trim()) {
@@ -133,13 +152,17 @@ export function RouteCreateModal({
       return;
     }
 
-    await onSubmit(
+    submitting.current = true;
+    setLocalSaving(true);
+    try { await onSubmit(
       {
         ...draft,
         duration: draft.duration.trim() || "00:30",
       },
       points.map(({ id: _id, order: _order, ...point }) => point),
-    );
+    ); }
+    catch (error) { setError(error instanceof Error ? error.message : "Не удалось создать маршрут. Заполненные данные сохранены в форме."); }
+    finally { submitting.current = false; setLocalSaving(false); }
   }
 
   const normalizedPointTag = pointDraft.tag.trim().toLowerCase();
@@ -148,15 +171,16 @@ export function RouteCreateModal({
     points.some((point) => point.id !== editingPointId && point.tag.trim().toLowerCase() === normalizedPointTag);
 
   return (
-    <ModalShell
+    <><ModalShell
       className="route-create-modal"
+      pending={pending}
       onClose={() => closeModal()}
       subtitle="Заполните маршрут, добавьте контрольные точки и расставьте порядок обхода перед сохранением."
       title="Создание маршрута"
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} aria-busy={pending}>
 
-          <div className="route-create-body">
+          <div className="route-create-body"><fieldset className="patrol-route-fields" disabled={pending}>
             <section className="route-create-section">
               <div className="section-line-title">
                 <h3>Параметры маршрута</h3>
@@ -175,6 +199,8 @@ export function RouteCreateModal({
                   Описание
                   <textarea value={draft.description} onChange={(event) => onChange({ ...draft, description: event.currentTarget.value })} />
                 </label>
+                <label>Статус маршрута<select aria-label="Статус маршрута" value={draft.status} onChange={event => onChange({ ...draft, status: event.currentTarget.value as RouteFormPayload["status"] })}><option>Активен</option><option>Черновик</option></select></label>
+                <label>Длительность обхода<input value={draft.duration} placeholder="Например, 00:30" onChange={event => onChange({ ...draft, duration: event.currentTarget.value })} /></label>
               </div>
             </section>
 
@@ -216,7 +242,6 @@ export function RouteCreateModal({
               </Button>
             </section>
 
-            {error ? <div className="notice danger-soft route-create-error"><strong>{error}</strong></div> : null}
             {hasDuplicateTag ? (
               <div className="notice info-soft route-create-error">
                 <strong>NFC/QR-код уже есть в этом маршруте.</strong>
@@ -253,14 +278,15 @@ export function RouteCreateModal({
                 </div>
               )}
             </section>
-          </div>
+          </fieldset></div>
 
           <footer className="route-create-footer">
-            <Button onClick={closeModal} variant="ghost">Отмена</Button>
-            <Button type="submit" variant="primary">Создать маршрут{points.length ? ` с точками (${points.length})` : ""}</Button>
+            {error || serverError ? <p role="alert" className="route-form-error">{error || serverError}</p> : null}
+            <Button disabled={pending} onClick={closeModal} variant="ghost">Отмена</Button>
+            <Button disabled={pending} isLoading={pending} type="submit" variant="primary">Создать маршрут{points.length ? ` с точками (${points.length})` : ""}</Button>
           </footer>
       </form>
-    </ModalShell>
+    </ModalShell>{discardDialog}</>
   );
 }
 

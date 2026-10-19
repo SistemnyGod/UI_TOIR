@@ -1,173 +1,79 @@
-.employees-workspace-screen {
-  min-width: 0;
+/* Employee roster and profile share a desktop workspace. */
+.employees-workspace-screen { min-width: 0; }
+body .screen-area .employees-workspace-screen .employees-workspace.two-column.wide-left { display: grid; grid-template-columns: minmax(0, 1fr) 340px; align-items: start; gap: 18px; }
+.employees-workspace-screen .ui-page-header__actions { flex-wrap: wrap; }
+.employees-workspace-screen .employee-access-help-row { display: contents; }
+body .screen-area .employees-workspace-screen .employee-profile-drawer { display: block; position: sticky; top: 16px; width: 100%; max-width: none; max-height: none; min-width: 0; padding: 20px; overflow: visible; background: white; border: 1px solid var(--ui-border); border-radius: 14px; box-shadow: 0 10px 26px rgb(29 72 128 / 6%); }
+.employees-workspace-screen .employee-directory-panel { min-width: 0; overflow: hidden; }
+.employees-workspace-screen .employee-directory-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface-muted); }
+.employees-workspace-screen .employee-directory-summary span { color: var(--ui-muted); font-size: 12px; font-weight: 500; }
+.employees-workspace-screen .employee-directory-summary strong { display: block; color: var(--ui-text); font-size: 22px; font-weight: 700; margin-bottom: 3px; }
+body .screen-area .employees-workspace-screen .employee-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; padding: 14px 16px; border-bottom: 1px solid var(--ui-border); }
+.employees-workspace-screen .employee-filters .wide-filter { flex: 1 1 280px; min-width: 0; }
+.employees-workspace-screen .employee-filters label { font-size: 12px; font-weight: 600; }
+.employees-workspace-screen .employee-more-filters { flex: 1 0 100%; order: 2; }
+.employees-workspace-screen .employee-more-filters summary { cursor: pointer; width: fit-content; color: var(--ui-primary, #1769ff); padding: 8px 0; font-weight: 600; }
+.employees-workspace-screen .employee-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
+body .screen-area .employees-workspace-screen .employee-roster-list { max-height: 570px; overflow-y: auto; padding: 10px; scrollbar-width: thin; }
+body .screen-area .employees-workspace-screen .employee-roster-row { grid-template-columns: minmax(0, 1fr) 125px 105px; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; text-align: left; min-width: 0; }
+.employees-workspace-screen .employee-roster-identity > div { min-width: 0; }
+body .screen-area .employees-workspace-screen .employee-roster-row strong { font-size: 13px; font-weight: 650; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+body .screen-area .employees-workspace-screen .employee-roster-row .muted-line, body .screen-area .employees-workspace-screen .employee-roster-meta span { font-size: 11px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+body .screen-area .employees-workspace-screen .employee-roster-meta, body .screen-area .employees-workspace-screen .employee-roster-badges { grid-column: auto; grid-row: auto; }
+.employees-workspace-screen .employee-roster-badges { display: flex; flex-direction: column; align-items: end; gap: 5px; }
+.employees-workspace-screen .employee-roster-badges .chip { white-space: normal; text-align: center; font-size: 11px; }
+body .screen-area .employees-workspace-screen .employee-profile-head { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px 12px; margin-bottom: 16px; }
+.employees-workspace-screen .employee-profile-head > .chip { grid-column: 2; justify-self: start; }
+.employees-workspace-screen .employee-profile-head .profile-avatar { width: 44px; height: 44px; }
+.employees-workspace-screen .employee-profile-title { flex: 1 1 170px; }
+.employees-workspace-screen .employee-profile-title h2 { font-size: 19px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.employees-workspace-screen .employee-profile-title p { font-size: 13px; font-weight: 500; line-height: 1.5; }
+.employees-workspace-screen .employee-profile-primary-action .ui-button { width: 100%; justify-content: center; min-height: 42px; }
+body .screen-area .employees-workspace-screen .employee-profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; background: none; border-bottom: 1px solid var(--ui-border); padding: 12px 0 16px; }
+.employees-workspace-screen .employee-profile-actions .ui-button { flex: 1 1 120px; font-size: 12px; }
+.employees-workspace-screen .employee-profile-actions .danger-text { flex-basis: 100%; color: #a33a47; border-color: transparent; background: none; }
+.employees-workspace-screen .employee-mobile-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; padding: 14px 0; border-bottom: 1px solid var(--ui-border); }
+.employees-workspace-screen .employee-mobile-summary small { flex-basis: 100%; color: var(--ui-muted); line-height: 1.5; }
+.employees-workspace-screen .employee-profile-section { margin-top: 18px; }
+.employees-workspace-screen .employee-profile-section h3 { font-size: 13px; margin: 0 0 12px; }
+.employees-workspace-screen .employee-hr-details summary { cursor: pointer; }
+.employees-workspace-screen .employee-hr-details summary h3 { display: inline; }
+.employees-workspace-screen .employee-hr-details[open] summary { margin-bottom: 12px; }
+.employees-workspace-screen .employee-profile-section dt, .employees-workspace-screen .employee-profile-section dd { font-size: 12px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+body .screen-area .employees-workspace-screen .employee-back-to-list { display: none; }
+.employee-form-error { padding: 12px 16px; color: #a13241; background: #fff3f4; border: 1px solid #f1cbd0; border-radius: 9px; font-size: 13px; line-height: 1.5; }
+.employees-workspace-screen .pagination-bar, .patrol-employee-picker-modal .pagination-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--ui-border); font-size: 12px; }
+.employees-workspace-screen .pagination-bar select, .patrol-employee-picker-modal .pagination-bar select { width: auto; }
+body .modal-backdrop .patrol-employee-picker-modal { display: flex; flex-direction: column; width: min(850px, calc(100vw - 32px)); height: min(780px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
+body .modal-backdrop .patrol-employee-picker-modal .modal-shell-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 0; }
+.patrol-employee-picker-modal .patrol-employee-picker-toolbar, .patrol-employee-picker-modal .pagination-bar { flex: 0 0 auto; }
+body .modal-backdrop .patrol-employee-picker-modal .patrol-employee-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; scrollbar-width: thin; }
+.patrol-employee-picker-modal .patrol-employee-picker-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: end; padding: 16px; }
+.patrol-employee-picker-modal .patrol-employee-picker-list { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 0 16px 16px; }
+.patrol-employee-picker-modal .patrol-employee-picker-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; text-align: left; gap: 12px; padding: 12px; min-height: 72px; border: 1px solid var(--ui-border); background: #fff; border-radius: 10px; }
+.patrol-employee-picker-modal .patrol-employee-picker-row.selected { border-color: #6099f2; background: #eef5ff; }
+.patrol-employee-picker-modal .patrol-employee-picker-row strong { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.patrol-employee-picker-modal .patrol-employee-picker-row small, .patrol-employee-picker-modal .patrol-employee-picker-row em { display: block; font-style: normal; color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+.patrol-employee-picker-modal .patrol-employee-picker-empty { padding: 24px; text-align: center; color: var(--ui-muted); }
+body .modal-backdrop .employee-form-modal label, body .modal-backdrop .employee-form-modal input, body .modal-backdrop .employee-form-modal select { font-weight: 500; font-size: 13px; }
+.employee-deactivate-modal { width: min(540px, calc(100vw - 24px)); }
+.employee-deactivate-modal p { line-height: 1.6; }
+@media (max-width: 1150px) {
+  body .screen-area .employees-workspace-screen .employees-workspace.two-column.wide-left { grid-template-columns: minmax(0, 1fr); }
+  body .screen-area .employees-workspace-screen .employee-profile-drawer { position: static; }
 }
-
-.employees-workspace-screen .employee-access-help-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: -4px;
-}
-
-.employees-workspace-screen .employee-directory-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--ui-border);
-  background: var(--ui-surface-muted);
-}
-
-.employees-workspace-screen .employee-directory-summary span {
-  min-width: 0;
-  color: var(--ui-muted);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.employees-workspace-screen .employee-directory-summary strong {
-  margin-right: 4px;
-  color: var(--ui-text);
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.employees-workspace-screen .employee-filters {
-  padding: 12px;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.employees-workspace-screen .employee-roster-row {
-  border-radius: 10px;
-}
-
-.employees-workspace-screen .employee-roster-row:focus-visible,
-.employees-workspace-screen .patrol-employee-picker-row:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--ui-primary, #1769ff) 28%, transparent);
-  outline-offset: 2px;
-}
-
-.employees-workspace-screen .employee-directory-footer {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--ui-border);
-  color: var(--ui-muted);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.employees-workspace-screen .employee-directory-footer .link-button {
-  min-height: 36px;
-}
-
-.employees-workspace-screen .employee-profile-primary-action {
-  margin-bottom: 8px;
-}
-
-.employees-workspace-screen .employee-profile-primary-action .button {
-  width: 100%;
-  min-height: 44px;
-  justify-content: center;
-}
-
-.employees-workspace-screen .employee-profile-actions {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.employees-workspace-screen .employee-profile-actions .danger-text {
-  margin-top: 4px;
-}
-
-.patrol-employee-picker-modal .patrol-employee-picker-empty {
-  grid-column: 1 / -1;
-  margin: auto;
-  padding: 30px 16px;
-  color: var(--ui-muted);
-  text-align: center;
-}
-
-@media (max-width: 1050px) {
-  .employees-workspace-screen .employee-directory-summary {
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
-  }
-}
-
 @media (max-width: 720px) {
-  .employees-workspace-screen .employee-access-help-row {
-    margin-bottom: 0;
-  }
-
-  .employees-workspace-screen .employee-access-help-row .button {
-    min-height: 44px;
-  }
-
-  .employees-workspace-screen .employee-directory-summary {
-    grid-template-columns: 1fr;
-    gap: 5px;
-  }
-
-  .employees-workspace-screen .employee-directory-summary span {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .employees-workspace-screen .employee-filters {
-    gap: 10px;
-  }
-
-  .employees-workspace-screen .employee-roster-list {
-    padding: 8px;
-  }
-
-  .employees-workspace-screen .employee-roster-row {
-    min-height: 44px;
-    padding: 12px;
-  }
-
-  .employees-workspace-screen .employee-directory-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .employees-workspace-screen .employee-directory-footer .link-button {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .employees-workspace-screen .employee-profile-actions .button,
-  .employees-workspace-screen .employee-profile-primary-action .button {
-    min-height: 44px;
-  }
-
-  .screen-area .patrol-employee-picker-modal {
-    width: 100%;
-    max-width: none;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-
-  .screen-area .patrol-employee-picker-toolbar,
-  .screen-area .patrol-employee-picker-list {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .screen-area .patrol-employee-picker-row {
-    grid-template-columns: 40px minmax(0, 1fr);
-    height: auto;
-    min-height: 82px;
-  }
-
-  .screen-area .patrol-employee-picker-row b {
-    grid-column: 2;
-    justify-self: start;
-  }
-
+  .employees-workspace-screen .ui-page-header__actions { width: 100%; }
+  .employees-workspace-screen .employee-directory-summary { padding: 12px; gap: 6px; }
+  body .screen-area .employees-workspace-screen .employee-roster-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  body .screen-area .employees-workspace-screen .employee-roster-badges { flex-direction: row; align-items: start; }
+  body .screen-area .employees-workspace-screen .employee-roster-meta { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 42px; }
+  .employees-workspace-screen .employee-filter-grid { grid-template-columns: 1fr; }
+  body .screen-area .employees-workspace-screen .employee-back-to-list { display: block; margin-bottom: 16px; min-height: 44px; }
+  body .screen-area .employees-workspace-screen .employee-roster-list { max-height: 560px; }
+  .employees-workspace-screen .pagination-bar-actions, .patrol-employee-picker-modal .pagination-bar-actions { width: 100%; justify-content: space-between; }
+  body .modal-backdrop .patrol-employee-picker-modal { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .patrol-employee-picker-modal .patrol-employee-picker-toolbar { grid-template-columns: 1fr; }
+  .patrol-employee-picker-modal .patrol-employee-picker-row { grid-template-columns: 32px minmax(0, 1fr); }
+  .patrol-employee-picker-modal .patrol-employee-picker-row b { grid-column: 2; }
 }

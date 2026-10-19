@@ -25,7 +25,7 @@ describe("PPE standards picker", () => {
     render(<DocumentKit canManageTemplates={false} currentUserId="user" normSetId="norm" rows={[row] as never} allRows={[row] as never} lines={[]} editable date="2026-09-14" onLines={vi.fn()} onAddFullKit={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Добавить СИЗ" }));
     expect(screen.getByText(/ГОСТ 12\.4\.128-83 — Каски защитные/)).toBeInTheDocument();
-    const search = screen.getByPlaceholderText("По наименованию, артикулу или стандарту");
+    const search = screen.getByRole("searchbox", { name: "Поиск" });
     await user.type(search, "ТР ТС 019/2011");
     expect(screen.getByRole("button", { name: /Каска Альфа/ })).toBeInTheDocument();
     await user.clear(search);

@@ -12,6 +12,7 @@ test("mobile account password operations use one-time panel without password toa
   const login = `local-smoke-${Date.now()}`;
   const chosenPassword = "SmokePass123!";
   await createForm.getByPlaceholder(/Введите логин/).fill(login);
+  await createForm.getByRole("radio", { name: "Задать вручную" }).check();
   await createForm.getByPlaceholder("Введите пароль").fill(chosenPassword);
   await createForm.getByPlaceholder("Повторите пароль").fill(chosenPassword);
   await createForm.getByRole("combobox").first().selectOption({ label: "Оператор" });
@@ -23,6 +24,7 @@ test("mobile account password operations use one-time panel without password toa
   await expect(panel).toBeHidden();
   await expect(page.locator(".toast")).not.toContainText(chosenPassword);
 
+  await page.getByRole("button", { name: `Действия ${login}`, exact: true }).click();
   await page.getByRole("button", { name: "Изменить пароль" }).click();
   const passwordForm = page.getByRole("dialog", { name: "Изменение пароля мобильного аккаунта" });
   await passwordForm.getByRole("button", { name: "Сбросить пароль" }).click();

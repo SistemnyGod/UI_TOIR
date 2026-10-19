@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ModalShell } from "../../shared/ui/ModalShell";
+import { useDialogCloseGuard } from "../../shared/ui/useDialogCloseGuard";
 import { ApiError } from "../../api/client";
-import type { ClosePercoPresenceIntervalDto, PercoAccessEventDiagnosticsDto, PercoConnectionTestResultDto, PercoDiagnosticsDto, PercoIntegrationLogDto, PercoIntegrationSettingsDto, PercoPresenceIntervalDiagnosticsDto, PercoSecretStatusDto, PercoSyncResultDto, PercoUnmatchedEmployeeDto, SessionUserDto } from "../../api/contracts";
+import type { ClosePercoPresenceIntervalDto, PercoAccessEventDiagnosticsDto, PercoConnectionTestResultDto, PercoDiagnosticsDto, PercoIntegrationSettingsDto, PercoPresenceIntervalDiagnosticsDto, PercoSecretStatusDto, PercoSyncResultDto, PercoUnmatchedEmployeeDto, SessionUserDto } from "../../api/contracts";
 import type { EmployeeDirectoryItem } from "../../types";
 
 export type PercoTab = "dashboard" | "connection" | "sync" | "matching" | "diagnostics" | "logs";
@@ -127,11 +129,11 @@ export function SettingsStatus({ settings }: { settings: PercoIntegrationSetting
         </div>
         <div>
           <dt>Секрет API</dt>
-          <dd>{settings.secretStatus?.apiStatus || "не проверен"}</dd>
+          <dd>{formatStatus(settings.secretStatus?.apiStatus || "UNKNOWN")}</dd>
         </div>
         <div>
           <dt>Секрет worker</dt>
-          <dd>{settings.secretStatus?.workerStatus || "не проверен"}</dd>
+          <dd>{formatStatus(settings.secretStatus?.workerStatus || "UNKNOWN")}</dd>
         </div>
         <div>
           <dt>Последняя проверка</dt>
@@ -139,7 +141,7 @@ export function SettingsStatus({ settings }: { settings: PercoIntegrationSetting
         </div>
         <div>
           <dt>Статус</dt>
-          <dd>{settings.lastConnectionStatus || "нет данных"}</dd>
+          <dd>{formatStatus(settings.lastConnectionStatus || "idle")}</dd>
         </div>
       </dl>
       {settings.lastConnectionError ? (
@@ -200,201 +202,40 @@ export function SyncSummary({ result }: { result: PercoSyncResultDto }) {
   );
 }
 
-export function ConfirmIgnoreEmployeeModal({
-  employee,
-  onCancel,
-  onConfirm,
-}: {
-  employee: PercoUnmatchedEmployeeDto;
-  onCancel: () => void;
-  onConfirm: () => void;
+export function ConfirmIgnoreEmployeeModal({ employee, onCancel, onConfirm, pending = false, errorMessage }: {
+  employee: PercoUnmatchedEmployeeDto; onCancel: () => void; onConfirm: () => void; pending?: boolean; errorMessage?: string | null;
 }) {
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
-
-  useEffect(() => {
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onCancelRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    window.requestAnimationFrame(() => cancelButtonRef.current?.focus());
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, []);
-
-  return (
-    <div className="perco-modal-backdrop" onMouseDown={onCancel}>
-      <section
-        aria-describedby="perco-ignore-description"
-        aria-labelledby="perco-ignore-title"
-        aria-modal="true"
-        className="perco-modal perco-confirm-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        ref={dialogRef}
-        role="alertdialog"
-      >
-        <header>
-          <div>
-            <h2 id="perco-ignore-title">Игнорировать сотрудника PERCO?</h2>
-            <span>{employee.fullName || "Сотрудник без ФИО"} · {employee.personnelNo || "без табельного номера"}</span>
-          </div>
-        </header>
-        <p className="perco-warning-text" id="perco-ignore-description">
-          Запись будет исключена из текущей очереди сопоставления. Используйте это действие только если сотрудника действительно не нужно связывать со справочником проекта.
-        </p>
-        <div className="perco-modal-actions">
-          <button className="perco-button perco-button-secondary" onClick={onCancel} ref={cancelButtonRef} type="button">
-            Отмена
-          </button>
-          <button className="perco-button perco-button-danger" onClick={onConfirm} type="button">
-            Игнорировать
-          </button>
-        </div>
-      </section>
-    </div>
-  );
+  return <ModalShell className="perco-modal perco-confirm-modal" title="Игнорировать сотрудника PERCO?" subtitle={`${employee.fullName || "Сотрудник без ФИО"} · таб. ${employee.personnelNo || "—"}`} onClose={onCancel} pending={pending}
+    actions={<><button className="perco-button perco-button-secondary" type="button" disabled={pending} onClick={onCancel}>Отмена</button><button className="perco-button perco-button-danger" type="button" disabled={pending} onClick={onConfirm}>{pending ? "Сохраняем…" : "Игнорировать"}</button></>}>
+    <p className="perco-warning-text">Запись будет исключена из текущей очереди сопоставления. Используйте это действие только если сотрудника действительно не нужно связывать со справочником проекта.</p>
+    {errorMessage ? <p className="perco-warning-text is-danger" role="alert">{errorMessage}</p> : null}
+  </ModalShell>;
 }
 
-export function ClosePresenceModal({
-  form,
-  interval,
-  onCancel,
-  onChange,
-  onSubmit,
-}: {
-  form: ClosePercoPresenceIntervalDto;
-  interval: PercoPresenceIntervalDiagnosticsDto;
-  onCancel: () => void;
-  onChange: (value: ClosePercoPresenceIntervalDto) => void;
-  onSubmit: () => void;
+export function ClosePresenceModal({ form, interval, busy = false, errorMessage, onCancel, onChange, onSubmit }: {
+  form: ClosePercoPresenceIntervalDto; interval: PercoPresenceIntervalDiagnosticsDto; busy?: boolean;
+  errorMessage?: string | null;
+  onCancel: () => void; onChange: (value: ClosePercoPresenceIntervalDto) => void; onSubmit: () => void;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
-  const endedAtTimestamp = new Date(form.endedAt).getTime();
-  const startedAtTimestamp = new Date(interval.startedAt).getTime();
-  const previewDurationMinutes = Math.max(
-    0,
-    Math.round((endedAtTimestamp - startedAtTimestamp) / 60000),
-  );
-  const durationIsTooLong = previewDurationMinutes > 18 * 60;
-  const endedAtIsInvalid =
-    Number.isNaN(endedAtTimestamp) ||
-    endedAtTimestamp <= startedAtTimestamp ||
-    endedAtTimestamp > Date.now() + 60_000;
-  const canSubmit = !durationIsTooLong && !endedAtIsInvalid && Boolean(form.comment.trim());
-
-  useEffect(() => {
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onCancelRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus());
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, []);
-
-  return (
-    <div className="perco-modal-backdrop" onMouseDown={onCancel}>
-      <section
-        aria-describedby="perco-close-description perco-close-duration"
-        aria-labelledby="perco-close-title"
-        className="perco-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-      >
-        <header>
-          <div>
-            <h2 id="perco-close-title">Закрыть присутствие вручную</h2>
-            <span>{interval.employeeName} · вход {formatDateTime(interval.startedAt)}</span>
-          </div>
-          <button className="perco-icon-button" onClick={onCancel} type="button" aria-label="Закрыть">
-            ×
-          </button>
-        </header>
-        <p className="perco-warning-text" id="perco-close-description">
-          Используйте только когда PERCo не прислал выход с завода или направление прохода было распознано неверно.
-        </p>
-        <p className={`perco-warning-text ${durationIsTooLong || endedAtIsInvalid ? "is-danger" : ""}`} id="perco-close-duration">
-          Расчетная длительность: {formatDuration(previewDurationMinutes)}. Максимум для ручного закрытия: 18 ч.
-          {endedAtIsInvalid ? " Время выхода должно быть позже входа и не может быть в будущем." : ""}
-        </p>
-        <Field label="Время выхода">
-          <input
-            aria-invalid={endedAtIsInvalid}
-            onChange={(event) => onChange({ ...form, endedAt: event.target.value })}
-            type="datetime-local"
-            value={form.endedAt}
-          />
-        </Field>
-        <Field label="Причина">
-          <textarea
-            aria-invalid={!form.comment.trim()}
-            onChange={(event) => onChange({ ...form, comment: event.target.value })}
-            placeholder="Например: сотрудник вышел на обед, событие выхода не пришло из PERCo"
-            required
-            value={form.comment}
-          />
-        </Field>
-        <div className="perco-modal-actions">
-          <button className="perco-button perco-button-secondary" onClick={onCancel} type="button">
-            Отмена
-          </button>
-          <button className="perco-button perco-button-primary" disabled={!canSubmit} onClick={onSubmit} type="button">
-            Закрыть интервал
-          </button>
-        </div>
-      </section>
-    </div>
-  );
+  const initial = useRef(JSON.stringify(form));
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty: JSON.stringify(form) !== initial.current, pending: busy, onClose: onCancel });
+  const endedAt = new Date(form.endedAt).getTime();
+  const startedAt = new Date(interval.startedAt).getTime();
+  const minutes = Math.max(0, Math.round((endedAt - startedAt) / 60000));
+  const invalidTime = !Number.isFinite(endedAt) || endedAt <= startedAt || endedAt > Date.now() + 60_000;
+  const tooLong = minutes > 18 * 60;
+  const canSubmit = !busy && !invalidTime && !tooLong && Boolean(form.comment.trim());
+  return <><ModalShell className="perco-modal" title="Закрыть присутствие вручную" subtitle={`${interval.employeeName} · таб. ${interval.personnelNo || "—"}`} onClose={requestClose} pending={busy}
+    actions={<><button className="perco-button perco-button-secondary" type="button" disabled={busy} onClick={requestClose}>Отмена</button><button className="perco-button perco-button-primary" type="button" disabled={!canSubmit} onClick={onSubmit}>{busy ? "Сохраняем…" : "Закрыть интервал"}</button></>}>
+    <div className="perco-duration-summary"><div><small>Вход</small><strong>{formatDateTime(interval.startedAt)}</strong></div><div><small>Длительность после закрытия</small><strong>{invalidTime ? "—" : formatDuration(minutes)}</strong></div></div>
+    <p className="perco-warning-text">Ручное закрытие нужно, когда PERCo не прислал корректный выход. Укажите фактическое время и причину. Максимальная длительность — 18 часов.</p>
+    {errorMessage ? <div className="perco-warning-text is-danger" role="alert">{errorMessage}</div> : null}
+    <Field label="Время выхода"><input disabled={busy} aria-invalid={invalidTime || tooLong} aria-describedby={invalidTime || tooLong ? "perco-close-error" : undefined} type="datetime-local" value={form.endedAt} onChange={event => onChange({ ...form, endedAt: event.target.value })} /></Field>
+    {invalidTime || tooLong ? <p className="perco-warning-text is-danger" role="status" id="perco-close-error">{invalidTime ? "Выход должен быть позже входа и не может быть в будущем." : "Интервал превышает 18 часов. Укажите фактический выход в день входа."}</p> : null}
+    <Field label="Причина"><textarea disabled={busy} required placeholder="Почему интервал закрывается вручную" value={form.comment} onChange={event => onChange({ ...form, comment: event.target.value })} /></Field>
+  </ModalShell>{discardDialog}</>;
 }
+
 export function PercoFlowChart({ points }: { points: PercoHourlyFlowPoint[] }) {
   const max = Math.max(1, ...points.flatMap((point) => [point.inCount, point.outCount]));
   const hasData = points.some((point) => point.inCount > 0 || point.outCount > 0);
@@ -584,7 +425,7 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`perco-status-pill ${normalized}`}>{formatStatus(status)}</span>;
 }
 
-export function usePercoPagination<T>(items: T[], initialPageSize: PercoPageSize = defaultListPageSize) {
+export function usePercoPagination<T>(items: T[], initialPageSize: PercoPageSize = defaultListPageSize, resetKey = "") {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PercoPageSize>(initialPageSize);
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
@@ -593,7 +434,7 @@ export function usePercoPagination<T>(items: T[], initialPageSize: PercoPageSize
 
   useEffect(() => {
     setPage(1);
-  }, [items]);
+  }, [resetKey]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -705,12 +546,14 @@ export function buildPercoQuality(diagnostics: PercoDiagnosticsDto | null, analy
   const events = diagnostics?.recentEventsCount ?? 0;
   const unmatched = diagnostics?.unmatchedEventsCount ?? 0;
   const unmatchedPercent = events ? Math.round((unmatched / events) * 100) : 0;
-  const stalePercent = analytics.employees.length ? Math.round((analytics.staleCount / analytics.employees.length) * 100) : 0;
+  const intervals = diagnostics?.presenceIntervals ?? [];
+  const currentCount = intervals.filter(interval => !isOldOpenInterval(interval)).length;
+  const stalePercent = currentCount ? Math.round((analytics.staleCount / currentCount) * 100) : 0;
   return [
     { label: "несопоставленных проходов", tone: unmatched > 0 ? "warning" : "success", value: `${unmatchedPercent}%` },
-    { label: "смен требуют проверки", tone: analytics.staleCount > 0 ? "danger" : "success", value: `${stalePercent}%` },
+    { label: "актуальных интервалов требуют проверки", tone: analytics.staleCount > 0 ? "danger" : "success", value: `${stalePercent}%` },
     { label: "старых открытых входов", tone: (diagnostics?.oldOpenPresenceCount ?? 0) > 0 ? "warning" : "success", value: diagnostics?.oldOpenPresenceCount ?? 0 },
-    { label: "интервалов построено", tone: analytics.employees.length > 0 ? "success" : "muted", value: analytics.employees.length },
+    { label: "интервалов в выборке", tone: intervals.length > 0 ? "success" : "muted", value: intervals.length },
   ];
 }
 
@@ -866,6 +709,12 @@ export function buildSuggestedMatches(items: ReadonlyArray<PercoUnmatchedEmploye
   return Object.fromEntries(items.map((item) => [item.percoEmployeeId, item.suggestedEmployeeId ?? null]));
 }
 
+export function preserveMatchSelection(items: ReadonlyArray<PercoUnmatchedEmployeeDto>, selected: Record<string, string | null>) {
+  return Object.fromEntries(items.map(item => [item.percoEmployeeId,
+    Object.hasOwn(selected, item.percoEmployeeId) ? selected[item.percoEmployeeId] : item.suggestedEmployeeId ?? null,
+  ]));
+}
+
 export function getMatchSuggestionReason(item: PercoUnmatchedEmployeeDto, employeeOptions: EmployeeDirectoryItem[]) {
   const suggested = item.suggestedEmployeeId
     ? employeeOptions.find((employee) => employee.id === item.suggestedEmployeeId)
@@ -919,15 +768,17 @@ export function normalizeStatusTone(status: string) {
 
 export function formatStatus(status: string) {
   const value = status || "нет данных";
-  if (value === "success") return "Активно";
-  if (value === "error") return "Ошибка";
-  if (value === "warning") return "Внимание";
-  if (value === "idle") return "Нет данных";
+  const normalized = value.toLowerCase();
+  if (normalized === "success" || normalized === "ok") return "Успешно";
+  if (normalized === "error") return "Ошибка";
+  if (normalized === "warning") return "Внимание";
+  if (normalized === "unknown") return "Не проверено";
+  if (normalized === "idle") return "Нет данных";
   return value;
 }
 
 export function formatSecretStatus(status: PercoSecretStatusDto) {
-  return `API: ${status.apiStatus}; worker: ${status.workerStatus}`;
+  return `API: ${formatStatus(status.apiStatus)}; worker: ${formatStatus(status.workerStatus)}`;
 }
 
 export function formatOperation(value: string) {

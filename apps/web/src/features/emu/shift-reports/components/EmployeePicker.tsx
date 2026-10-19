@@ -5,6 +5,7 @@ import type { EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto } from '..
 import { employeeCategoryLabel, filterAndSortEmployees } from '../employeeDirectorySearch';
 
 type EmployeePickerProps = {
+  inputId?: string;
   category: EmuShiftReportCategory;
   employees: EmuShiftReportEmployeeOptionDto[];
   favoriteEmployees: EmuFavoriteEmployeeDto[];
@@ -19,6 +20,7 @@ type EmployeePickerProps = {
 };
 
 export function EmployeePicker({
+  inputId,
   category,
   employees,
   favoriteEmployees,
@@ -31,7 +33,8 @@ export function EmployeePicker({
   onManageFavorites,
   onRetryFavorites,
 }: EmployeePickerProps) {
-  const pickerId = useId();
+  const generatedId = useId();
+  const pickerId = inputId ?? generatedId;
   const shellRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'favorites' | 'all'>('all');

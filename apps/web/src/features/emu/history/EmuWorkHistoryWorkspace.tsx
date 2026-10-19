@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock3,
   Grid3X3,
@@ -34,6 +34,8 @@ import { EmuHistoryTabs } from "./EmuHistoryTabs";
 import { EmuHistoryWorkTable } from "./EmuHistoryWorkTable";
 import { statusFilterOptions, type DisplayMode, type EmuHistoryPreferences, type HistoryView } from "./emuHistoryTypes";
 import { formatDate, formatDateTime, formatMinutes, formatScopedEmployees, formatTime, initials, operationalStatus } from "./emuHistoryUtils";
+import { useHistoryReadScope } from './useHistoryReadScope';
+import './employeeReportDialog.css';
 
 const emuHistoryPreferencesKey = "patrol360.emu.history.preferences.v1";
 
@@ -77,17 +79,22 @@ export function EmuWorkHistoryWorkspace({
   const [appliedQuery, setAppliedQuery] = useState<ReturnType<typeof buildHistoryQuery> | null>(null);
   const [pagedResult, setPagedResult] = useState<EmuListResponseDto<EmuWorkSessionDto>>(workspace.workSessions);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [expandedSectionId, setExpandedSectionId] = useState("");
   const [sectionWorkResults, setSectionWorkResults] = useState<Record<string, EmuListResponseDto<EmuWorkSessionDto>>>({});
   const [sectionWorkLoadingId, setSectionWorkLoadingId] = useState("");
   const [employeeReportId, setEmployeeReportId] = useState("");
   const [employeeReport, setEmployeeReport] = useState<EmuEmployeeWorkHistoryReportDto | null>(null);
   const [employeeReportLoading, setEmployeeReportLoading] = useState(false);
+  const [employeeReportError, setEmployeeReportError] = useState('');
+  const reads = useHistoryReadScope();
   const [auditRows, setAuditRows] = useState<EmuAuditEventDto[]>([]);
   const [employeeMonth, setEmployeeMonth] = useState(preferences.employeeMonth || today.slice(0, 7));
   const [monthEmployeeId, setMonthEmployeeId] = useState("");
   const [monthSummaries, setMonthSummaries] = useState<EmuEmployeeShiftSummaryDto[]>([]);
   const [monthLoading, setMonthLoading] = useState(false);
+  const [monthError, setMonthError] = useState(''), [monthRetry, setMonthRetry] = useState(0);
+  const monthOwner = useRef('');
   const [selectedMonthDate, setSelectedMonthDate] = useState("");
 
   const canSeeDeleted = hasPermission(currentUser, "emu.completed.delete") || hasPermission(currentUser, "emu.audit.view");
@@ -234,7 +241,9 @@ export function EmuWorkHistoryWorkspace({
     if (!monthEmployeeId) return;
 
     let mounted = true;
-    setMonthLoading(true);
+    const nextOwner = `${monthEmployeeId}:${employeeMonth}`;
+    if (monthOwner.current !== nextOwner) { monthOwner.current = nextOwner; setMonthSummaries([]); }
+    setMonthLoading(true); setMonthError('');
     workspace.actions
       .getEmployeeMonthSummary(monthEmployeeId, employeeMonth)
       .then((summary) => {
@@ -243,10 +252,9 @@ export function EmuWorkHistoryWorkspace({
         setMonthSummaries(summaries);
         setSelectedMonthDate((current) => (current && summaries.some((summary) => summary.shift.shiftDate === current) ? current : summaries[0]?.shift.shiftDate ?? ""));
       })
-      .catch(() => {
+      .catch((reason) => {
         if (!mounted) return;
-        setMonthSummaries([]);
-        setSelectedMonthDate("");
+        setMonthError(reason instanceof Error ? reason.message : 'Не удалось загрузить месячную сводку.');
       })
       .finally(() => {
         if (mounted) setMonthLoading(false);
@@ -255,7 +263,7 @@ export function EmuWorkHistoryWorkspace({
     return () => {
       mounted = false;
     };
-  }, [employeeMonth, monthEmployeeId, workspace.actions]);
+  }, [employeeMonth, monthEmployeeId, monthRetry, workspace.actions]);
 
   useEffect(() => {
     if (!selected || !canViewAudit) {
@@ -300,14 +308,15 @@ export function EmuWorkHistoryWorkspace({
     };
   }
 
-  async function buildReport(nextPage = 1, nextPageSize = pageSize, notify = true) {
+  async function buildReport(nextPage = 1, nextPageSize = pageSize, notify = true, query = buildHistoryQuery()) {
+    const isCurrent = reads.take('history'); reads.invalidate('section');
     try {
-      setHistoryLoading(true);
-      const query = buildHistoryQuery();
+      setHistoryLoading(true); setHistoryError(''); setSectionWorkLoadingId('');
       const [pageResult, snapshot] = await Promise.all([
         workspace.actions.queryWorkSessions({ ...query, page: nextPage, pageSize: nextPageSize }),
         workspace.actions.queryWorkHistoryReport(query),
       ]);
+      if (!isCurrent()) return;
       setAppliedQuery(query);
       setPage(pageResult.page);
       setPageSize(pageResult.pageSize);
@@ -315,40 +324,47 @@ export function EmuWorkHistoryWorkspace({
       setReportRows(pageResult.rows);
       setReportSnapshot(snapshot);
       setSectionWorkResults({});
-      setSelectedId(pageResult.rows[0]?.id ?? "");
+      setSelectedId(current => pageResult.rows.some(work => work.id === current) ? current : pageResult.rows[0]?.id ?? "");
       setHistoryLoading(false);
       if (notify) onNotify("Отчет сформирован");
     } catch (error) {
+      if (!isCurrent()) return;
       setHistoryLoading(false);
-      onNotify(error instanceof Error ? error.message : "Не удалось сформировать отчет");
+      setHistoryError(error instanceof Error ? error.message : "Не удалось сформировать отчет");
     }
   }
 
   async function loadPage(nextPage = page, nextPageSize = pageSize) {
+    const isCurrent = reads.take('history');
     try {
-      setHistoryLoading(true);
+      setHistoryLoading(true); setHistoryError('');
       const query = appliedQuery ?? buildHistoryQuery();
       const pageResult = await workspace.actions.queryWorkSessions({ ...query, page: nextPage, pageSize: nextPageSize });
+      if (!isCurrent()) return;
       setPage(pageResult.page);
       setPageSize(pageResult.pageSize);
       setPagedResult(pageResult);
       setReportRows(pageResult.rows);
-      setSelectedId(pageResult.rows[0]?.id ?? "");
+      setSelectedId(current => pageResult.rows.some(work => work.id === current) ? current : pageResult.rows[0]?.id ?? "");
       setHistoryLoading(false);
     } catch (error) {
+      if (!isCurrent()) return;
       setHistoryLoading(false);
-      onNotify(error instanceof Error ? error.message : "Не удалось загрузить страницу истории");
+      setHistoryError(error instanceof Error ? error.message : "Не удалось загрузить страницу истории");
     }
   }
 
   async function loadSectionWorks(sectionIdToLoad: string, nextPage = 1, nextPageSize = 25) {
+    const isCurrent = reads.take('section');
     try {
       setSectionWorkLoadingId(sectionIdToLoad);
       const query = appliedQuery ?? buildHistoryQuery();
       const result = await workspace.actions.queryWorkSessions({ ...query, sectionId: sectionIdToLoad, page: nextPage, pageSize: nextPageSize });
+      if (!isCurrent()) return;
       setSectionWorkResults((current) => ({ ...current, [sectionIdToLoad]: result }));
       setSectionWorkLoadingId("");
     } catch (error) {
+      if (!isCurrent()) return;
       setSectionWorkLoadingId("");
       onNotify(error instanceof Error ? error.message : "Не удалось загрузить работы участка");
     }
@@ -379,19 +395,23 @@ export function EmuWorkHistoryWorkspace({
   }
 
   async function openEmployeeReport(id: string) {
+    const isCurrent = reads.take('employee');
     setEmployeeReportId(id);
     setMonthEmployeeId(id);
     setSelectedMonthDate("");
     setEmployeeReport(null);
     setEmployeeReportLoading(true);
+    setEmployeeReportError('');
     try {
       const query = appliedQuery ?? buildHistoryQuery();
       const result = await workspace.actions.queryEmployeeWorkHistoryReport(id, { ...query, page: 1, pageSize: 25 });
+      if (!isCurrent()) return;
+      if (result.employee.employeeId !== id) throw new Error('Ответ содержит другого сотрудника. Повторите загрузку отчёта.');
       setEmployeeReport(result);
     } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось загрузить отчет сотрудника");
+      if (isCurrent()) setEmployeeReportError(error instanceof Error ? error.message : "Не удалось загрузить отчет сотрудника");
     } finally {
-      setEmployeeReportLoading(false);
+      if (isCurrent()) setEmployeeReportLoading(false);
     }
   }
 
@@ -426,7 +446,7 @@ export function EmuWorkHistoryWorkspace({
         actions={(
           <div className="emu-history-view-actions">
           <span>Обновлено {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
-          <Button onClick={() => void workspace.reload()} variant="secondary">Обновить</Button>
+          <Button aria-disabled={historyLoading} aria-busy={historyLoading || undefined} onClick={() => { if (!historyLoading) void buildReport(page, pageSize, false, appliedQuery ?? buildHistoryQuery()); }} variant="secondary">Обновить</Button>
           <Button aria-pressed={displayMode === "detailed"} onClick={() => setDisplayMode("detailed")} variant={displayMode === "detailed" ? "primary" : "secondary"}>
             <LayoutList size={16} /> Подробный вид
           </Button>
@@ -499,12 +519,17 @@ export function EmuWorkHistoryWorkspace({
 
       {employeeReportEmployee ? (
         <EmployeeReportModal
+          key={employeeReportId}
           employee={employeeReportEmployee}
           loading={monthLoading}
+          monthError={monthError}
+          onRetryMonth={() => setMonthRetry(value => value + 1)}
           month={employeeMonth}
           onClose={() => {
+            reads.invalidate('employee');
             setEmployeeReportId("");
             setEmployeeReport(null);
+            setEmployeeReportLoading(false); setEmployeeReportError('');
             setMonthEmployeeId("");
             setSelectedMonthDate("");
           }}
@@ -515,12 +540,15 @@ export function EmuWorkHistoryWorkspace({
           onSelectDate={setSelectedMonthDate}
           report={employeeReport}
           reportLoading={employeeReportLoading}
+          error={employeeReportError}
+          onRetry={() => void openEmployeeReport(employeeReportId)}
           rows={employeeReportRows}
           selectedDate={selectedMonthDate}
           summaries={monthSummaries}
         />
       ) : null}
 
+      {historyError ? <div className="emu-empty-state" role="alert">{historyError} Показанные данные сохранены. Повторите загрузку кнопкой «Обновить».</div> : null}
       <div className={`emu-history-main-grid mode-${displayMode}`}>
         <main className="emu-history-content-card">
           {activeView === "summary" ? (
@@ -866,24 +894,32 @@ function TopStrip({ rows, title }: { rows: Array<{ id: string; label: string; va
 function EmployeeReportModal({
   employee,
   loading,
+  monthError,
+  onRetryMonth,
   month,
   onClose,
   onMonthChange,
   onSelectDate,
   report,
   reportLoading,
+  error,
+  onRetry,
   rows,
   selectedDate,
   summaries,
 }: {
   employee: HistoryEmployeeOption;
   loading: boolean;
+  monthError: string;
+  onRetryMonth: () => void;
   month: string;
   onClose: () => void;
   onMonthChange: (value: string) => void;
   onSelectDate: (date: string) => void;
   report: EmuEmployeeWorkHistoryReportDto | null;
   reportLoading: boolean;
+  error: string;
+  onRetry: () => void;
   rows: EmuWorkSessionDto[];
   selectedDate: string;
   summaries: EmuEmployeeShiftSummaryDto[];
@@ -908,6 +944,9 @@ function EmployeeReportModal({
       onClose={onClose}
       actions={<Button variant="secondary" onClick={onClose}>Закрыть</Button>}
     >
+        {reportLoading ? <p className="emu-empty-state" role="status">Загружаем отчёт сотрудника…</p> : null}
+        {error ? <div className="emu-empty-state" role="alert">{error} <Button onClick={onRetry}>Повторить загрузку</Button></div> : null}
+        {monthError ? <div className="emu-empty-state" role="alert">Месячная сводка недоступна: {monthError} <Button onClick={onRetryMonth}>Повторить загрузку месяца</Button></div> : null}
         <nav>
           <button className={tab === "summary" ? "active" : ""} onClick={() => setTab("summary")} type="button">Сводка</button>
           <button className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")} type="button">По участкам</button>
@@ -920,9 +959,9 @@ function EmployeeReportModal({
             <article><span>Рабочее время</span><strong>{formatMinutes(totals.workMinutes)}</strong></article>
             <article><span>Паузы / простой</span><strong>{formatMinutes(totals.waitingMinutes + totals.otherWorkMinutes)}</strong></article>
             <article><span>Итого</span><strong>{formatMinutes(totals.totalMinutes)}</strong></article>
-            <article><span>Простой за месяц</span><strong>{formatMinutes(monthTotals.freeMinutes)}</strong></article>
-            <article><span>Паузы за месяц</span><strong>{formatMinutes(monthTotals.pauseMinutes)}</strong></article>
-            <article><span>Спорная сверхурочка</span><strong>{formatMinutes(monthTotals.questionableOvertimeMinutes)}</strong></article>
+            <article><span>Простой за месяц</span><strong>{loading ? '…' : monthError ? '—' : formatMinutes(monthTotals.freeMinutes)}</strong></article>
+            <article><span>Паузы за месяц</span><strong>{loading ? '…' : monthError ? '—' : formatMinutes(monthTotals.pauseMinutes)}</strong></article>
+            <article><span>Спорная сверхурочка</span><strong>{loading ? '…' : monthError ? '—' : formatMinutes(monthTotals.questionableOvertimeMinutes)}</strong></article>
           </div>
         ) : null}
         {tab === "sections" ? (
@@ -945,7 +984,7 @@ function EmployeeReportModal({
             {report?.works.total ? <p className="emu-history-modal-note">Показано {rows.length} из {report.works.total}. Дальнейшие страницы доступны через общий список истории.</p> : null}
           </>
         ) : null}
-        {tab === "month" ? (
+        {tab === "month" && !monthError ? (
           <EmployeeMonthAnalytics
             employee={employee}
             loading={loading}

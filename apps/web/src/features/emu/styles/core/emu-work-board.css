@@ -183,8 +183,7 @@
 
 .emu-work-card-top,
 .emu-card-actions,
-.emu-history-stats,
-.emu-plan-create {
+.emu-history-stats{
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1054,8 +1053,7 @@
   line-height: 1.35;
 }
 
-.emu-plan-list article,
-.emu-kanban article {
+.emu-plan-list article{
   border: 1px solid #e4edf8;
   border-radius: 8px;
   background: #fff;

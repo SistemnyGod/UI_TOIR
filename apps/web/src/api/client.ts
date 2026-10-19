@@ -1,3 +1,5 @@
+import { BoundedGetCache } from "./boundedGetCache";
+
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_AUTH_TOKEN_STORAGE_KEY = "patrol360.sessionToken";
 
@@ -75,7 +77,7 @@ export class ApiError extends Error {
 }
 
 const GET_CACHE_TTL_MS = 60_000;
-const getResponseCache = new Map<string, CachedGetResponse>();
+const getResponseCache = new BoundedGetCache<CachedGetResponse>();
 const fetcherIds = new WeakMap<object, number>();
 let nextFetcherId = 1;
 
@@ -144,7 +146,7 @@ export class ApiClient {
     }
 
     const active = getResponseCache.get(key);
-    const promise = active && active.expiresAt > now
+    const promise = active && (active.inFlight || active.expiresAt > now)
       ? active.promise as Promise<T>
       : this.createCachedGet<T>(key, path, options);
 
@@ -358,7 +360,7 @@ export class ApiClient {
     };
     getResponseCache.set(key, entry);
     void promise.then(
-      () => { entry.inFlight = false; },
+      () => { entry.inFlight = false; entry.expiresAt = Date.now() + GET_CACHE_TTL_MS; },
       () => {
         if (getResponseCache.get(key) === entry) {
           getResponseCache.delete(key);

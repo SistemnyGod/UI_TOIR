@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { dateInput, isScheduleException, scheduleDays, scheduleState } from "../features/patrol/components/schedule/schedulePresentation";
 import {
   createApiScheduleRepository,
   type ScheduleReferenceEmployee,
@@ -25,14 +26,15 @@ interface UseSchedulePlanningOptions {
   routeDirectory: RouteDirectoryItem[];
   selectedCellId: string;
   shiftFilter: "all" | "day" | "night";
+  restrictToDirectory?: boolean;
 }
 
 function isPlannedCell(cell: ScheduleCell) {
-  return cell.state === "planned" || cell.state === "alternate";
+  return scheduleState(cell).tone === "planned";
 }
 
 function isExceptionCell(cell: ScheduleCell) {
-  return cell.state === "transfer" || cell.state === "vacation" || cell.state === "sick";
+  return isScheduleException(cell);
 }
 
 export function useSchedulePlanning({
@@ -45,6 +47,7 @@ export function useSchedulePlanning({
   routeDirectory,
   selectedCellId,
   shiftFilter,
+  restrictToDirectory = false,
 }: UseSchedulePlanningOptions) {
   const apiSchedule = useMemo(() => createApiScheduleRepository(), []);
   const [apiEmployees, setApiEmployees] = useState<ScheduleReferenceEmployee[]>([]);
@@ -91,13 +94,13 @@ export function useSchedulePlanning({
   }, [refreshScheduleReferences]);
 
   return useMemo(() => {
-    const employees = employeeDirectory.length > 0
+    const employees = employeeDirectory.length > 0 || restrictToDirectory
       ? employeeDirectory.map(mapDirectoryEmployee)
       : apiEmployees;
     const routes = routeDirectory.length > 0
       ? routeDirectory.map(mapDirectoryRoute)
       : apiRoutes;
-    const periodDays = buildPeriodDays(parseDateInput(anchorDate), mode);
+    const periodDays = scheduleDays(anchorDate, mode);
     const scheduleCells = buildScheduleCells({
       activePatrols,
       employees,
@@ -117,6 +120,7 @@ export function useSchedulePlanning({
 
     return {
       coveragePercent,
+      days: periodDays,
       dayCount,
       errorMessage,
       exceptionCount,
@@ -141,6 +145,7 @@ export function useSchedulePlanning({
     routeDirectory,
     selectedCellId,
     shiftFilter,
+    restrictToDirectory,
     status,
   ]);
 }
@@ -182,7 +187,7 @@ function buildScheduleCells({
   const cells = new Map<string, ScheduleCell>();
   const visibleEmployees = employees.filter((employee) => {
     const shift = toScheduleShift(employee.shift);
-    if (isUnavailable(employee.status)) return false;
+    if (employee.status.includes("Отпуск")) return false;
     if (shiftFilter === "day") return shift === "Дневная";
     if (shiftFilter === "night") return shift === "Ночная";
     return true;
@@ -211,7 +216,7 @@ function buildScheduleCells({
 
     if (!employee || !route || !day) continue;
 
-    const shift = toScheduleShift(employee.shift);
+    const shift = toScheduleShift(request.shift || employee.shift);
     if (shiftFilter === "day" && shift !== "Дневная") continue;
     if (shiftFilter === "night" && shift !== "Ночная") continue;
 
@@ -221,6 +226,10 @@ function buildScheduleCells({
       employee,
       id: `request:${request.id}`,
       requestId: request.id,
+      requestStatus: request.status,
+      assignmentId: request.assignmentId && activePatrols.some(patrol => patrol.id === request.assignmentId) && !["Закрыта", "Отменена"].includes(request.status) ? request.assignmentId : undefined,
+      assignmentStatus: activePatrols.find(patrol => patrol.id === request.assignmentId)?.status,
+      description: request.description,
       route,
       shift,
       state: request.status === "Закрыта" ? "alternate" : "planned",
@@ -235,9 +244,10 @@ function buildScheduleCells({
   for (const patrol of activePatrols) {
     const employee = findEmployeeById(employees, patrol.employeeId) ?? findEmployee(employees, patrol.employee);
     const route = findRoute(routes, patrol.route);
-    const day = findPeriodDay(periodDays, toDateInput(new Date())) ?? periodDays[0];
+    const day = findPeriodDay(periodDays, dateInput(new Date()));
 
     if (!employee || !route || !day) continue;
+    if (Array.from(cells.values()).some(cell => cell.assignmentId === patrol.id)) continue;
 
     const shift = toScheduleShift(patrol.shift || employee.shift);
     if (shiftFilter === "day" && shift !== "Дневная") continue;
@@ -245,6 +255,7 @@ function buildScheduleCells({
 
     const cell = createCell({
       assignmentId: patrol.id,
+      assignmentStatus: patrol.status,
       date: day.key,
       day: day.label,
       employee,
@@ -263,6 +274,8 @@ function buildScheduleCells({
 
 function createCell({
   assignmentId,
+  assignmentStatus,
+  description,
   date,
   day,
   employee,
@@ -270,12 +283,15 @@ function createCell({
   notifyEmployee,
   notificationText,
   requestId,
+  requestStatus,
   route,
   scheduledTime,
   shift,
   state,
 }: {
   assignmentId?: string;
+  assignmentStatus?: ActivePatrol["status"];
+  description?: string;
   date: string;
   day: string;
   employee: ScheduleReferenceEmployee;
@@ -283,6 +299,7 @@ function createCell({
   notifyEmployee?: boolean;
   notificationText?: string;
   requestId?: string;
+  requestStatus?: ServiceRequest["status"];
   route?: ScheduleReferenceRoute;
   scheduledTime?: string;
   shift: ScheduleCell["shift"];
@@ -290,6 +307,8 @@ function createCell({
 }): ScheduleCell {
   return {
     assignmentId,
+    assignmentStatus,
+    description,
     date,
     day,
     employee: employee.fullName,
@@ -298,6 +317,7 @@ function createCell({
     notifyEmployee,
     notificationText,
     requestId,
+    requestStatus,
     route: route?.name ?? "",
     routeId: route?.id,
     scheduledTime,
@@ -307,74 +327,11 @@ function createCell({
   };
 }
 
-function parseDateInput(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function buildPeriodDays(anchor: Date, mode: ScheduleMode) {
-  if (mode === "month") {
-    const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-    const length = end.getDate();
-    return Array.from({ length }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(index + 1);
-
-      return {
-        key: toDateInput(date),
-        label: formatMonthDay(date),
-      };
-    });
-  }
-
-  const start = new Date(anchor);
-  const dayOfWeek = start.getDay() === 0 ? 7 : start.getDay();
-  start.setDate(start.getDate() - dayOfWeek + 1);
-  start.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-
-    return {
-      key: toDateInput(date),
-      label: formatWeekDay(date),
-    };
-  });
-}
-
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatWeekDay(date: Date) {
-  const dayName = new Intl.DateTimeFormat("ru-RU", { weekday: "short" })
-    .format(date)
-    .replace(".", "");
-  const day = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(date);
-
-  return `${capitalize(dayName)} ${day}`;
-}
-
-function formatMonthDay(date: Date) {
-  const day = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(date);
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(date).replace(".", "");
-  return `${day} ${capitalize(weekday)}`;
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
 function findPeriodDay(periodDays: Array<{ key: string; label: string }>, dateValue: string) {
   const date = new Date(`${dateValue}T00:00:00`);
   if (Number.isNaN(date.getTime())) return undefined;
 
-  const key = toDateInput(date);
+  const key = dateInput(date);
   return periodDays.find((day) => day.key === key);
 }
 
@@ -400,10 +357,6 @@ function findRoute(routes: ScheduleReferenceRoute[], name: string) {
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
-}
-
-function isUnavailable(status: string) {
-  return status.includes("Офлайн") || status.includes("Отпуск");
 }
 
 function toScheduleShift(value: string): ScheduleCell["shift"] {

@@ -1,4 +1,4 @@
-import { Bell, BriefcaseBusiness, Clock3 } from 'lucide-react';
+import { Bell, BriefcaseBusiness, Clock3, History } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../../api/client';
 import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto, EmuShiftType } from '../../../../api/emuShiftReportContracts';
@@ -135,7 +135,9 @@ function getEditorInstanceId() {
   }
 }
 
-export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, canManageFavorites }: { workspace: Workspace; currentUserId: string; onNotify: (message: string) => void; canManageFavorites: boolean }) {
+export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, canManageFavorites, canViewHistory }: { workspace: Workspace; currentUserId: string; onNotify: (message: string) => void; canManageFavorites: boolean; canViewHistory: boolean }) {
+  const [initialDraft] = useState(() => readDraft('mechanic', currentUserId));
+  const restoredDraftKeyRef = useRef(`${currentUserId}:mechanic`);
   const submitLockRef = useRef(false);
   const draftTimerRef = useRef<number | null>(null);
   const latestDraftRef = useRef<DraftSnapshot | null>(null);
@@ -143,11 +145,11 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   const serverVersionsRef = useRef<Record<string, number>>({});
   const serverSaveChainRef = useRef<Promise<void>>(Promise.resolve());
   const [category, setCategory] = useState<EmuShiftReportCategory>('mechanic');
-  const [hydratedCategory, setHydratedCategory] = useState<EmuShiftReportCategory | null>(null);
-  const [employeeId, setEmployeeId] = useState('');
-  const [reportDate, setReportDate] = useState(localDate());
-  const [shiftType, setShiftType] = useState<EmuShiftType>('day');
-  const [rows, setRows] = useState<WorkRow[]>(createEmptyRows);
+  const [hydratedCategory, setHydratedCategory] = useState<EmuShiftReportCategory | null>('mechanic');
+  const [employeeId, setEmployeeId] = useState(initialDraft?.employeeId ?? '');
+  const [reportDate, setReportDate] = useState(initialDraft?.reportDate ?? localDate());
+  const [shiftType, setShiftType] = useState<EmuShiftType>(initialDraft?.shiftType ?? 'day');
+  const [rows, setRows] = useState<WorkRow[]>(() => initialDraft?.rows ?? createEmptyRows());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [nightWarning, setNightWarning] = useState('');
@@ -156,7 +158,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const [pendingRowRemoval, setPendingRowRemoval] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
-  const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle');
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>(initialDraft ? 'restored' : 'idle');
   const [draftSavedAt, setDraftSavedAt] = useState('');
   const [draftConflict, setDraftConflict] = useState('');
   const [coordinationMessage, setCoordinationMessage] = useState('');
@@ -191,10 +193,10 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
       if (reason instanceof ApiError && reason.status === 409) {
         const message = reason.problem?.detail || 'Этот отчёт уже редактируют на другом компьютере или во вкладке.';
         if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) setDraftConflict(message);
-        return false;
+        return message;
       }
-      if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) setCoordinationMessage('Локальная копия сохранена. Серверная защита временно недоступна.');
-      return true;
+      if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) setCoordinationMessage('Локальная копия сохранена. Серверная защита временно недоступна. Повторите отправку после восстановления связи.');
+      return 'Не удалось сохранить серверный черновик. Проверьте соединение и повторите отправку.';
     }
   }
 
@@ -213,6 +215,9 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   }
 
   useEffect(() => {
+    const draftKey = `${currentUserId}:${category}`;
+    if (restoredDraftKeyRef.current === draftKey) return;
+    restoredDraftKeyRef.current = draftKey;
     setHydratedCategory(null);
     const draft = readDraft(category, currentUserId);
     setEmployeeId(draft?.employeeId ?? '');
@@ -326,6 +331,13 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   function updateRow(id: string, patch: Partial<WorkRow>) {
     setRows((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
     setSuccessMessage('');
+  }
+
+  function addRow() {
+    if (submitting || rows.length >= 50) return;
+    const row = createWorkRow();
+    setRows((current) => [...current, row]);
+    window.requestAnimationFrame(() => document.getElementById(`description-${row.id}`)?.focus());
   }
 
   function switchCategory(value: EmuShiftReportCategory) {
@@ -455,8 +467,8 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
     setSubmitting(true);
     await serverSaveChainRef.current;
     const claimed = await persistServerDraft({ category, employeeId, reportDate, shiftType, rows: rows.map((row) => ({ ...row })) });
-    if (!claimed) {
-      setErrors((current) => ({ ...current, form: 'Отчёт уже заполняют на другом компьютере. Выберите другого сотрудника или дождитесь освобождения черновика.' }));
+    if (claimed !== true) {
+      setErrors((current) => ({ ...current, form: claimed }));
       submitLockRef.current = false;
       setSubmitting(false);
       return;
@@ -467,6 +479,8 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
       reportDate,
       shiftType,
       workerCategory: category,
+      editorInstanceId: editorInstanceIdRef.current,
+      expectedDraftVersion: serverVersionsRef.current[slotKey({ employeeId, reportDate, shiftType })] ?? null,
       lines: usedRows.map((item) => ({ workDescription: item.description.trim(), durationMinutes: getDurationMinutes(item), sectionId: item.sectionId || null, note: item.note.trim() || null })),
     };
     try {
@@ -475,7 +489,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
       setSuccessMessage('Сменный отчёт отправлен и добавлен в историю.');
       onNotify('Сменный отчёт отправлен');
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 409) setErrors({ form: 'Отчёт этого сотрудника за выбранную дату и смену уже существует.' });
+      if (reason instanceof ApiError && reason.status === 409) setErrors({ form: reason.problem?.detail || 'Отчёт или черновик изменился. Проверьте актуальное состояние.' });
       else setErrors({ form: reason instanceof Error ? reason.message : 'Не удалось отправить отчёт.' });
     } finally {
       submitLockRef.current = false;
@@ -484,7 +498,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   }
 
   return (
-    <main className='emu-shift-report-page emu-entry-page'>
+    <main className='emu-shift-report-page emu-report-workspace emu-entry-page'>
       <PageHeader
         className='emu-shift-header'
         description='Зафиксируйте выполненные за смену работы. Черновик сохраняется автоматически.'
@@ -492,6 +506,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
         title='Сменный отчёт'
         actions={(
           <div className='emu-shift-header-actions'>
+          {canViewHistory ? <a className='emu-report-link' href='#emu-shift-report-history'><History aria-hidden='true' size={18} />История отчётов</a> : null}
           <Button
             className='emu-notification-settings-button'
             aria-haspopup='dialog'
@@ -502,10 +517,6 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
             <Bell aria-hidden='true' size={18} />
             Уведомления
           </Button>
-          <div className='emu-shift-kpis' aria-label='Сводка отчёта'>
-            <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
-            <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
-          </div>
           </div>
         )}
       />
@@ -526,6 +537,11 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
         reportDate={reportDate}
         shiftType={shiftType}
         rows={rows}
+        shifts={options?.shifts ?? []}
+        summary={<div className='emu-shift-kpis' aria-label='Сводка отчёта'>
+          <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
+          <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
+        </div>}
         errors={errors}
         employees={employees}
         sections={options?.sections ?? []}
@@ -555,7 +571,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
         onChooseShift={chooseShift}
         onUpdateRow={updateRow}
         onRemoveRow={removeRow}
-        onAddRow={() => setRows((current) => [...current, createWorkRow()])}
+        onAddRow={addRow}
         onRequestClear={() => setShowClearDialog(true)}
       />
 

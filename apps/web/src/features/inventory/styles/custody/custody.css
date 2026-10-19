@@ -72,8 +72,7 @@
 
 .inventory-custody-command-actions,
 .inventory-custody-row-actions,
-.inventory-custody-line-actions,
-.inventory-custody-drawer-actions {
+.inventory-custody-line-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -83,7 +82,6 @@
 .inventory-custody-inspector-actions .button,
 .inventory-custody-row-actions .button,
 .inventory-custody-line-actions .button,
-.inventory-custody-drawer-actions .button,
 .inventory-custody-composer .button {
   min-height: 34px;
   padding-inline: 12px;
@@ -534,67 +532,6 @@
   background: #ffe4e6;
 }
 
-.inventory-custody-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  justify-content: flex-end;
-  background: rgba(15, 23, 42, 0.34);
-  isolation: isolate;
-}
-
-.inventory-custody-drawer {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  width: min(920px, 92vw);
-  max-height: 100vh;
-  overflow: hidden;
-  border-left: 1px solid var(--inventory-border);
-  background: #f8fbff;
-  box-shadow: -22px 0 48px rgba(15, 23, 42, 0.18);
-}
-
-.inventory-custody-drawer-header,
-.inventory-custody-drawer-actions {
-  position: sticky;
-  z-index: 2;
-  background: rgba(248, 251, 255, 0.96);
-  backdrop-filter: blur(12px);
-}
-
-.inventory-custody-drawer-header {
-  top: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 18px;
-  border-bottom: 1px solid var(--inventory-border);
-}
-
-.inventory-custody-drawer-header p,
-.inventory-custody-drawer-header h2 {
-  margin: 0;
-}
-
-.inventory-custody-drawer-header p {
-  color: var(--inventory-muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.inventory-custody-drawer-header h2 {
-  margin-top: 4px;
-  color: var(--inventory-text);
-  font-size: 22px;
-  font-weight: 950;
-}
-
 .inventory-custody-icon-button {
   display: grid;
   flex: 0 0 auto;
@@ -605,20 +542,6 @@
   border-radius: 8px;
   color: var(--inventory-muted);
   background: #fff;
-}
-
-.inventory-custody-drawer-actions {
-  top: 73px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--inventory-border);
-}
-
-.inventory-custody-drawer-body {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px 18px 18px;
 }
 
 .inventory-custody-card-section {
@@ -675,8 +598,4 @@
 .inventory-custody-history-table th:nth-child(1),
 .inventory-custody-history-table td:nth-child(1) {
   width: 136px;
-}
-
-.inventory-custody-action-backdrop {
-  z-index: 3000 !important;
 }

@@ -43,6 +43,7 @@ import type {
 } from "../api/contracts";
 
 export type EmuWorkSessionParams = {
+  boardOnly?: boolean;
   dateFrom?: string;
   dateTo?: string;
   employeeSearch?: string;

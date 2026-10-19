@@ -1,0 +1,6 @@
+.account-change-confirm { width: min(520px, calc(100vw - 24px)); }
+.account-change-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.account-change-summary > div { min-width: 0; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface-muted); }
+.account-change-summary dt { margin-bottom: 5px; color: var(--ui-muted); font-size: 13px; }
+.account-change-summary dd { margin: 0; color: var(--ui-text); font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .account-change-summary { grid-template-columns: 1fr; gap: 8px; } }

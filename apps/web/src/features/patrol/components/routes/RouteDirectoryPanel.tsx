@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { RouteDirectoryItem } from "../../../../types";
-import { Button, EmptyState, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel } from "../../../../shared/ui";
 
 export function RouteDirectoryPanel({
   canManage = true,
@@ -27,13 +27,9 @@ export function RouteDirectoryPanel({
 
   return (
     <Panel
-      title="Маршруты"
-      note="Локальный справочник маршрутов и архив"
-      actions={
-        <Button className="compact-button" disabled={!canManage} onClick={onCreateRoute} variant="primary">
-          + Создать
-        </Button>
-      }
+      className="route-directory-panel"
+      title={`Маршруты · ${routes.filter(route => route.status !== "Архив").length}`}
+      note="Выберите маршрут для работы с точками."
     >
       <label className="full-label">
         Поиск маршрутов
@@ -47,6 +43,8 @@ export function RouteDirectoryPanel({
         <div className="route-directory-list">
           {filteredRoutes.map((route) => (
             <button
+              aria-pressed={selectedRouteId === route.id}
+              aria-label={`Открыть маршрут: ${route.name}`}
               className={`directory-card ${selectedRouteId === route.id ? "active" : ""}`}
               key={route.id}
               onClick={() => onSelectRoute(route.id)}
@@ -54,17 +52,17 @@ export function RouteDirectoryPanel({
             >
               <strong>{route.name}</strong>
               <span>{route.territory}</span>
-              <em>{route.points.length} точек</em>
+              <div className="route-card-meta"><em>{route.points.length} точек · {route.duration || "—"}</em><Chip>{route.status}</Chip></div>
             </button>
           ))}
         </div>
       ) : (
         <EmptyState
-          title="Маршрутов нет"
-          description="Создайте первый маршрут, затем добавьте точки и NFC-метки."
+          title={routes.length ? "Маршруты не найдены" : "Маршрутов нет"}
+          description={routes.length ? "Измените поиск или включите отображение архива." : "Создайте первый маршрут, затем добавьте точки и NFC-метки."}
           action={
-            <Button disabled={!canManage} onClick={onCreateRoute} variant="ghost">
-              Создать маршрут
+            <Button disabled={!routes.length && !canManage} onClick={() => routes.length ? (setSearch(""), setShowArchive(true)) : onCreateRoute()} variant="ghost">
+              {routes.length ? "Сбросить фильтры" : "Создать маршрут"}
             </Button>
           }
         />

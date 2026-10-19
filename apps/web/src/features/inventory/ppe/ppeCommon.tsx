@@ -4,10 +4,9 @@ import type {
   InventoryPpeCardDetailDto,
   InventoryPpeCardDto,
   InventoryPpeCardLineDto,
-  InventoryPositionNormDto,
 } from "../../../api/contracts";
 import { INVENTORY_PPE_STATUS_LABELS, defaultIssuePeriodText } from "./ppeStatusCatalog";
-import type { ApiFile, PickerLineInput, PpeCardCounts, PpeEmployeeCardDetails, PpeWizardState, PrintData, PrintLine } from "./ppeTypes";
+import type { PpeCardCounts, PpeEmployeeCardDetails, PrintData, PrintLine } from "./ppeTypes";
 import {
   escapeHtml,
   formatDate,
@@ -19,17 +18,12 @@ import {
   saveApiFile,
 } from "./ppeFormatters";
 import {
-  getDefaultDueDate,
   getDefaultIssuePeriodText,
   isConsumableLine,
   isPpeSignatureLineStatus,
   itemModelDescription,
   printDataFromDetail,
-  printDataFromWizard,
   sortPpeSignatureLines,
-  toItemFromNorm,
-  toItemFromPpeLine,
-  toLineFromNorm,
 } from "./ppePrintMapping";
 
 export {
@@ -41,17 +35,12 @@ export {
   moneyMinorToInput,
   parsePositiveQuantity,
   saveApiFile,
-  getDefaultDueDate,
   getDefaultIssuePeriodText,
   isConsumableLine,
   isPpeSignatureLineStatus,
   itemModelDescription,
   printDataFromDetail,
-  printDataFromWizard,
   sortPpeSignatureLines,
-  toItemFromNorm,
-  toItemFromPpeLine,
-  toLineFromNorm,
 };
 
 const PPE_EMPLOYEE_PRINT_DETAIL_FIELDS = [

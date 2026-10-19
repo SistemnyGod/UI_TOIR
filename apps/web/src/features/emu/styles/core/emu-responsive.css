@@ -54,7 +54,6 @@
   .emu-panel-actions,
   .emu-input-action,
   .emu-inline-form,
-  .emu-plan-options,
   .emu-modal-actions {
     align-items: stretch;
     flex-direction: column;
@@ -85,8 +84,6 @@
   .emu-form-grid,
   .emu-filter-panel,
   .emu-history-stats,
-  .emu-plan-create,
-  .emu-kanban,
   .emu-reference-grid,
   .emu-favorite-grid {
     grid-template-columns: 1fr;

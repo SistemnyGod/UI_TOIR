@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  MobileAccountCreateDrawer,
-  MobileAccountDeletePanel,
-  MobileAccountEditPanel,
-  MobileAccountLinkPanel,
-  MobileAccountPasswordPanel,
-  MobileAccountViewPanel,
-} from "./components/MobileAccountCreateDrawer";
+import "./scoped-legacy.css";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
+import { MobileAccountCreateDrawer } from "./components/MobileAccountCreateDrawer";
+import { MobileAccountEditPanel } from "./components/MobileAccountEditPanel";
+import { MobileAccountLinkPanel } from "./components/MobileAccountLinkPanel";
+import { MobileAccountDeletePanel, MobileAccountPasswordPanel } from "./components/MobileAccountActionPanels";
 import { MobileAccountListPanel, type MobileAccountWorkspacePanel } from "./components/MobileAccountListPanel";
-import { MobileAccountSecurityPanels } from "./components/MobileAccountSecurityPanels";
+import { MobileAccountActivity } from "./components/MobileAccountActivity";
+import { MobileAccountDetail } from "./components/MobileAccountDetail";
+import { AccountDialogHost } from "./components/AccountDialogHost";
+import { useDialogCloseGuard } from "../../shared/ui";
 import { createApiMobileAccountsRepository } from "../../repositories/mobileAccountsRepository";
 import "./mobileAccountsWorkspace.css";
 import type {
@@ -68,112 +69,129 @@ export function MobileAccountsScreen({
   mode: AccountMode;
   onModeChange: (mode: AccountMode) => void;
   onSelectAccount: (id: string) => void;
-  onAttachEmployee: (employeeId: string, employeeName: string) => MaybePromise<void>;
-  onBindEmployees: (employeeIds: string[]) => MaybePromise<void>;
+  onAttachEmployee: (employeeId: string, employeeName: string, accountId?: string) => MaybePromise<void>;
+  onBindEmployees: (employeeIds: string[], accountId?: string) => MaybePromise<void>;
   onCreateAccount: (payload: CreateMobileAccountPayload) => MaybePromise<void>;
-  onDeleteAccount: () => MaybePromise<void>;
+  onDeleteAccount: (accountId?: string) => MaybePromise<void>;
   onDetachEmployee: (employeeId?: string, accountId?: string) => MaybePromise<void>;
   onNotify: (message: string) => void;
   onRefreshAccountSecurity: () => MaybePromise<void>;
-  onResetPassword: () => MaybePromise<void>;
+  onResetPassword: (accountId?: string) => MaybePromise<void>;
   onRetryAccounts: () => MaybePromise<void>;
   onToggleBlockAccount: (accountId?: string) => MaybePromise<void>;
-  onUpdateAccount: (payload: UpdateMobileAccountPayload) => MaybePromise<void>;
+  onUpdateAccount: (payload: UpdateMobileAccountPayload, accountId?: string) => MaybePromise<void>;
 }) {
   const selected = accounts.find((account) => account.id === selectedAccountId);
   const [activePanel, setActivePanel] = useState<MobileAccountWorkspacePanel | null>(null);
+  const [panelAccount, setPanelAccount] = useState<MobileAccount>();
   const [fallbackEmployees, setFallbackEmployees] = useState<EmployeeDirectoryItem[]>([]);
   const [fallbackEmployeeAccountId, setFallbackEmployeeAccountId] = useState("");
   const [panelBusy, setPanelBusy] = useState(false);
   const panelBusyRef = useRef(false);
+  const panelDirtyRef = useRef(false);
+  const mounted = useRef(true);
+  const destination = useRef<() => void>(() => undefined);
+  const notifyRef = useRef(onNotify);
+  notifyRef.current = onNotify;
+  const dialogOpenerRef = useRef<HTMLElement | null>(null);
+  const onDirtyChange = useCallback((dirty: boolean) => { panelDirtyRef.current = dirty; }, []);
+  const { requestClose, discardDialog } = useDialogCloseGuard({
+    dirty: () => panelDirtyRef.current,
+    pending: panelBusy,
+    onClose: () => destination.current(),
+  });
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     if (accountCreateIntent === 0) return;
     openPanel("create");
   }, [accountCreateIntent]);
 
-  useEffect(() => {
-    if (!activePanel) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") closePanel();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activePanel]);
-
-  function openPanel(panel: MobileAccountWorkspacePanel) {
+  function openPanel(panel: MobileAccountWorkspacePanel, accountId = panelAccount?.id ?? selectedAccountId) {
     if (panelBusyRef.current) return;
     if (!canManage && panel !== "view") {
       onNotify("Недостаточно прав для управления мобильными аккаунтами.");
       return;
     }
 
-    setActivePanel(panel);
+    const account = accounts.find((item) => item.id === accountId) ?? (panelAccount?.id === accountId ? panelAccount : undefined);
+    if (panel !== "create" && !account) return;
+    const open = () => {
+      panelDirtyRef.current = false;
+      setPanelAccount(account ? { ...account, boundEmployeeIds: [...account.boundEmployeeIds], boundEmployees: [...account.boundEmployees] } : undefined);
+      setActivePanel(panel);
+    };
+    if (!activePanel) {
+      dialogOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      open();
+    } else {
+      destination.current = open;
+      requestClose();
+    }
   }
 
   function closePanel() {
     if (panelBusyRef.current) return;
+    destination.current = () => { panelDirtyRef.current = false; setActivePanel(null); setPanelAccount(undefined); };
+    requestClose();
+  }
+
+  function finishPanel() {
+    if (!mounted.current || panelBusyRef.current) return;
+    panelDirtyRef.current = false;
     setActivePanel(null);
+    setPanelAccount(undefined);
   }
 
   async function runPanelOperation(operation: () => MaybePromise<void>) {
-    if (panelBusyRef.current) return;
+    if (panelBusyRef.current) throw new Error("Операция с аккаунтом уже выполняется.");
     panelBusyRef.current = true;
     setPanelBusy(true);
     try {
       await operation();
+      if (mounted.current) panelDirtyRef.current = false;
     } finally {
       panelBusyRef.current = false;
-      setPanelBusy(false);
+      if (mounted.current) setPanelBusy(false);
     }
   }
 
   useEffect(() => {
-    if (!activePanel || activePanel === "create" || accountListStatus !== "ready" || selected || panelBusy) return;
-    setActivePanel(null);
-  }, [accountListStatus, activePanel, panelBusy, selected]);
-  useEffect(() => {
-    if (activePanel !== "link" || dataSourceMode !== "api" || employeeDirectory.length > 0 || !selected?.id) {
+    if (activePanel !== "link" || dataSourceMode !== "api" || employeeDirectory.length > 0 || !panelAccount?.id) {
       return;
     }
 
     let cancelled = false;
     const repository = createApiMobileAccountsRepository();
-    setFallbackEmployeeAccountId(selected.id);
+    setFallbackEmployeeAccountId(panelAccount.id);
     setFallbackEmployees([]);
     repository
-      .getAvailableEmployees(selected.id)
+      .getAvailableEmployees(panelAccount.id)
       .then((employees) => {
         if (!cancelled) setFallbackEmployees(employees);
       })
       .catch((error) => {
         if (!cancelled) {
           setFallbackEmployees([]);
-          onNotify(error instanceof Error ? error.message : "Не удалось загрузить сотрудников для привязки");
+          notifyRef.current(error instanceof Error ? error.message : "Не удалось загрузить сотрудников для привязки");
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activePanel, dataSourceMode, employeeDirectory.length, onNotify, selected?.id]);
+  }, [activePanel, dataSourceMode, employeeDirectory.length, panelAccount?.id]);
 
   function renderPanel(panel: MobileAccountWorkspacePanel) {
     if (panel === "create") {
       return (
         <MobileAccountCreateDrawer
+          onSaved={finishPanel}
           onClose={closePanel}
+          onDirtyChange={onDirtyChange}
           onCreateAccount={(payload) => runPanelOperation(() => onCreateAccount(payload))}
           onNotify={onNotify}
-          selected={selected}
+          selected={panelAccount}
         />
       );
     }
@@ -181,19 +199,21 @@ export function MobileAccountsScreen({
     if (panel === "link") {
       return (
         <MobileAccountLinkPanel
+          onSaved={finishPanel}
           employeeDirectory={
             employeeDirectory.length > 0
               ? employeeDirectory
-              : fallbackEmployeeAccountId === selected?.id
+              : fallbackEmployeeAccountId === panelAccount?.id
                 ? fallbackEmployees
                 : []
           }
-          onAttachEmployee={(employeeId, employeeName) => runPanelOperation(() => onAttachEmployee(employeeId, employeeName))}
-          onBindEmployees={(employeeIds) => runPanelOperation(() => onBindEmployees(employeeIds))}
+          onAttachEmployee={(employeeId, employeeName) => runPanelOperation(() => onAttachEmployee(employeeId, employeeName, panelAccount?.id))}
+          onBindEmployees={(employeeIds) => runPanelOperation(() => onBindEmployees(employeeIds, panelAccount?.id))}
           onClose={closePanel}
-          onDetachEmployee={(employeeId) => runPanelOperation(() => onDetachEmployee(employeeId))}
+          onDirtyChange={onDirtyChange}
+          onDetachEmployee={(employeeId) => runPanelOperation(() => onDetachEmployee(employeeId, panelAccount?.id))}
           onNotify={onNotify}
-          selected={selected}
+          selected={panelAccount}
         />
       );
     }
@@ -201,23 +221,13 @@ export function MobileAccountsScreen({
     if (panel === "edit") {
       return (
         <MobileAccountEditPanel
+          onSaved={finishPanel}
           onClose={closePanel}
+          onDirtyChange={onDirtyChange}
           onNotify={onNotify}
           onOpenLink={() => openPanel("link")}
-          onUpdateAccount={(payload) => runPanelOperation(() => onUpdateAccount(payload))}
-          selected={selected}
-        />
-      );
-    }
-
-    if (panel === "view") {
-      return (
-        <MobileAccountViewPanel
-          onClose={closePanel}
-          onOpenEdit={() => openPanel("edit")}
-          onOpenLink={() => openPanel("link")}
-          onOpenPassword={() => openPanel("password")}
-          selected={selected}
+          onUpdateAccount={(payload) => runPanelOperation(() => onUpdateAccount(payload, panelAccount?.id))}
+          selected={panelAccount}
         />
       );
     }
@@ -225,83 +235,60 @@ export function MobileAccountsScreen({
     if (panel === "delete") {
       return (
         <MobileAccountDeletePanel
+          onSaved={finishPanel}
           onClose={closePanel}
-          onDeleteAccount={() => runPanelOperation(onDeleteAccount)}
-          selected={selected}
+          onDeleteAccount={() => runPanelOperation(() => onDeleteAccount(panelAccount?.id))}
+          selected={panelAccount}
         />
       );
     }
 
     return (
       <MobileAccountPasswordPanel
+        onSaved={finishPanel}
         onClose={closePanel}
         onNotify={onNotify}
-        onResetPassword={() => runPanelOperation(onResetPassword)}
-        selected={selected}
+        onResetPassword={() => runPanelOperation(() => onResetPassword(panelAccount?.id))}
+        selected={panelAccount}
       />
     );
   }
 
   return (
-    <div className="screen-stack mobile-am-screen mobile-accounts-workspace">
-      <header className="mobile-am-page-head">
-        <div>
-          <h1>Мобильные аккаунты</h1>
-          <p>Создавайте, управляйте и контролируйте мобильные аккаунты сотрудников</p>
-        </div>
+    <div className="screen-stack accounts-ui mobile-accounts-workspace">
+      <header className="aui-page-head">
+        <div><h1>Мобильные аккаунты</h1><p>Доступ сотрудников к мобильному приложению</p></div>
+        {canManage ? <button className="aui-button primary" disabled={panelBusy} onClick={() => openPanel("create")} type="button"><Plus aria-hidden="true" size={20} />Создать аккаунт</button> : null}
       </header>
-
       <MobileAccountListPanel
-        activePanel={activePanel}
-        accounts={accounts}
-        canManage={canManage}
-        errorMessage={accountListErrorMessage}
-        isBusy={panelBusy}
-        mode={mode}
-        selectedAccountId={selectedAccountId}
-        status={accountListStatus}
-        onDeleteAccount={onDeleteAccount}
+        activePanel={activePanel} accounts={accounts} canManage={canManage}
+        errorMessage={accountListErrorMessage} isBusy={panelBusy} mode={mode}
+        selectedAccountId={selectedAccountId} status={accountListStatus}
+        sessions={mobileAccountSessions} events={mobileAccountSecurityEvents}
+        securityStatus={mobileAccountSecurityStatus} securityErrorMessage={mobileAccountSecurityErrorMessage}
+        onRefreshSecurity={onRefreshAccountSecurity} onDeleteAccount={onDeleteAccount}
         onDetachEmployee={(employeeId, accountId) => runPanelOperation(() => onDetachEmployee(employeeId, accountId))}
-        onModeChange={onModeChange}
-        onNotify={onNotify}
-        onOpenPanel={openPanel}
-        onRetry={onRetryAccounts}
-        onSelectAccount={onSelectAccount}
+        onModeChange={onModeChange} onNotify={onNotify} onOpenPanel={openPanel}
+        onRetry={onRetryAccounts} onSelectAccount={onSelectAccount}
         onToggleBlockAccount={(accountId) => runPanelOperation(() => onToggleBlockAccount(accountId))}
       />
-
-      {activePanel ? (
-        <div
-          aria-label="Окно управления мобильным аккаунтом"
-          className={`account-panel-dock ${activePanel === "create" ? "account-panel-dock-create" : ""}`}
-          onMouseDown={panelBusy ? undefined : closePanel}
-          role="presentation"
-        >
-          <div
-            aria-label={accountPanelTitles[activePanel]}
-            aria-modal="true"
-            aria-busy={panelBusy}
-            className={`account-panel-slot active ${activePanel}`}
-            onMouseDown={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            {renderPanel(activePanel)}
-          </div>
-        </div>
-      ) : null}
-
-      <MobileAccountSecurityPanels
-        errorMessage={mobileAccountSecurityErrorMessage}
-        onNotify={onNotify}
-        onRefresh={onRefreshAccountSecurity}
-        securityEvents={mobileAccountSecurityEvents}
-        sessions={mobileAccountSessions}
-        status={mobileAccountSecurityStatus}
-      />
+      {mode === "accounts" || mode === "bindings" ? <MobileAccountActivity
+        selected={selected} sessions={mobileAccountSessions} events={mobileAccountSecurityEvents}
+        status={mobileAccountSecurityStatus} errorMessage={mobileAccountSecurityErrorMessage}
+        onRefresh={onRefreshAccountSecurity} onShowSessions={() => onModeChange("sessions")}
+        onShowSecurity={() => onModeChange("security")}
+      /> : null}
+      {activePanel === "view" ? <MobileAccountDetail
+        key={panelAccount?.id} selected={accounts.find((item) => item.id === panelAccount?.id) ?? panelAccount} sessions={mobileAccountSessions} events={mobileAccountSecurityEvents}
+        status={mobileAccountSecurityStatus} errorMessage={mobileAccountSecurityErrorMessage}
+        onRefresh={onRefreshAccountSecurity} employeeDirectory={employeeDirectory} canManage={canManage}
+        restoreFocusRef={dialogOpenerRef} onClose={closePanel} onOpenEdit={() => openPanel("edit")} onOpenLink={() => openPanel("link")}
+        onOpenPassword={() => openPanel("password")}
+      /> : activePanel ? <AccountDialogHost key={`${activePanel}:${panelAccount?.id ?? "new"}`} title={accountPanelTitles[activePanel]} panel={activePanel} busy={panelBusy} onClose={closePanel} restoreFocusRef={dialogOpenerRef}>{renderPanel(activePanel)}</AccountDialogHost> : null}
+      {discardDialog}
     </div>
   );
 }
-
 const accountPanelTitles: Record<MobileAccountWorkspacePanel, string> = {
   create: "Создание мобильного аккаунта",
   edit: "Редактирование мобильного аккаунта",

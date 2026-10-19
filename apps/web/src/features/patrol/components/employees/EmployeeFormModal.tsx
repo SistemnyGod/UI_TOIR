@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import "./employeeForm.css";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { EmployeeDirectoryItem, EmployeeFormPayload } from "../../../../types";
-import { Button, ModalShell } from "../../../../shared/ui";
+import { Button, ModalShell, useDialogCloseGuard } from "../../../../shared/ui";
 
 type EmployeeFormMode = "create" | "edit";
 
@@ -32,12 +33,19 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const submittingRef = useRef(false);
+  const mounted = useRef(true);
+  const initialDraft = useRef(JSON.stringify(draft));
+  const formId = useId();
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty: () => JSON.stringify(draft) !== initialDraft.current, pending: isSubmitting, onClose });
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const positions = referenceOptions?.positions ?? [];
   const departments = referenceOptions?.departments ?? [];
   const groups = referenceOptions?.groups ?? ["Атом", "Атом Экология"];
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
     setErrorMessage("");
 
     const fullName = draft.fullName.trim();
@@ -47,39 +55,51 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       await onSubmit({ ...draft, fullName, personnelNo });
-      onClose();
+      if (mounted.current) onClose();
     } catch (error) {
+      if (!mounted.current) return;
       setErrorMessage(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430.");
     } finally {
-      setIsSubmitting(false);
+      submittingRef.current = false;
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
   async function deleteEmployee() {
-    if (!employee || !onDelete) return;
+    if (!employee || !onDelete || submittingRef.current) return;
+    submittingRef.current = true;
     setErrorMessage("");
     setIsSubmitting(true);
     try {
       await onDelete(employee.id);
-      onClose();
+      if (mounted.current) onClose();
     } catch (error) {
+      if (!mounted.current) return;
       setErrorMessage(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430.");
     } finally {
-      setIsSubmitting(false);
+      submittingRef.current = false;
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
   return (
-    <ModalShell
+    <><ModalShell
       className="request-create-modal employee-form-modal"
-      onClose={onClose}
+      onClose={() => { if (!submittingRef.current) requestClose(); }}
+      pending={isSubmitting}
       subtitle="Данные используются для заявок на обход и привязки к мобильным аккаунтам."
       title={mode === "create" ? "Создать сотрудника" : "Редактировать сотрудника"}
+      actions={<>
+        {mode === "edit" && onDelete ? <Button disabled={isSubmitting} onClick={deleteEmployee} variant="danger">Деактивировать</Button> : null}
+        <Button disabled={isSubmitting} onClick={requestClose} variant="ghost">Отмена</Button>
+        <Button disabled={isSubmitting} form={formId} type="submit" variant="primary">{isSubmitting ? "Сохранение…" : "Сохранить"}</Button>
+      </>}
     >
-      <form onSubmit={submitForm}>
+      <form id={formId} onSubmit={submitForm} aria-busy={isSubmitting}>
 
         {errorMessage ? <div className="employee-form-error" role="alert">{errorMessage}</div> : null}
 
@@ -87,6 +107,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             ФИО
             <input
+              disabled={isSubmitting}
               required
               value={draft.fullName}
               onChange={(event) => setDraft({ ...draft, fullName: event.currentTarget.value })}
@@ -95,6 +116,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Табельный номер
             <input
+              disabled={isSubmitting}
               required
               value={draft.personnelNo}
               onChange={(event) => setDraft({ ...draft, personnelNo: event.currentTarget.value })}
@@ -103,6 +125,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Должность
             <input
+              disabled={isSubmitting}
               list="employee-position-options"
               value={draft.position}
               onChange={(event) => setDraft({ ...draft, position: event.currentTarget.value })}
@@ -111,6 +134,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Участок
             <input
+              disabled={isSubmitting}
               list="employee-department-options"
               value={draft.department}
               onChange={(event) => setDraft({ ...draft, department: event.currentTarget.value })}
@@ -119,6 +143,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Основная группа
             <input
+              disabled={isSubmitting}
               list="employee-group-options"
               value={draft.employeeGroup}
               onChange={(event) => setDraft({ ...draft, employeeGroup: event.currentTarget.value })}
@@ -128,6 +153,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Дата приема на работу
             <input
+              disabled={isSubmitting}
               type="date"
               value={draft.hiredAt}
               onChange={(event) => setDraft({ ...draft, hiredAt: event.currentTarget.value })}
@@ -136,6 +162,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Дата рождения
             <input
+              disabled={isSubmitting}
               type="date"
               value={draft.birthDate}
               onChange={(event) => setDraft({ ...draft, birthDate: event.currentTarget.value })}
@@ -144,6 +171,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             Статус
             <select
+              disabled={isSubmitting}
               value={draft.status}
               onChange={(event) =>
                 setDraft({ ...draft, status: event.currentTarget.value as EmployeeDirectoryItem["status"] })
@@ -157,7 +185,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           </label>
           <label>
             Смена
-            <select value={draft.shift} onChange={(event) => setDraft({ ...draft, shift: event.currentTarget.value })}>
+            <select disabled={isSubmitting} value={draft.shift} onChange={(event) => setDraft({ ...draft, shift: event.currentTarget.value })}>
               <option value="День">День</option>
               <option value="Ночь">Ночь</option>
             </select>
@@ -176,6 +204,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
 
         <label className="toggle-filter">
           <input
+              disabled={isSubmitting}
             checked={draft.hasMobileAccount}
             onChange={(event) => setDraft({ ...draft, hasMobileAccount: event.currentTarget.checked })}
             type="checkbox"
@@ -183,20 +212,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           Есть привязанный мобильный аккаунт
         </label>
 
-        <div className="modal-actions">
-          {mode === "edit" ? (
-            <Button disabled={isSubmitting} onClick={deleteEmployee} variant="danger">
-              Деактивировать
-            </Button>
-          ) : null}
-          <Button disabled={isSubmitting} onClick={onClose} variant="ghost">
-            Отмена
-          </Button>
-          <Button disabled={isSubmitting} type="submit" variant="primary">
-            {isSubmitting ? "Сохранение..." : "Сохранить"}
-          </Button>
-        </div>
       </form>
-    </ModalShell>
+    </ModalShell>{discardDialog}</>
   );
 }

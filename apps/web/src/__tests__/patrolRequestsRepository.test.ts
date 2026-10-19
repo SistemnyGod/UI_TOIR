@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiPatrolRequestsRepository } from "../repositories/patrolRequestsRepository";
 
 describe("patrol requests repository", () => {
+  it.each([ ["accepted", "Назначена"], ["Отправлена", "Назначена"], ["paused", "В работе"], ["Закрыта", "Закрыта"] ])("keeps %s in its displayed status group", async (status, expected) => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse([{ id: "fixture", status, scheduledDate: "2026-10-08" }]));
+    const repository = createApiPatrolRequestsRepository({ baseUrl: "https://api.example.test", fetcher });
+    const page = await repository.getPatrolRequestPage({ statusGroup: "assigned" });
+    expect(page.rows[0].status).toBe(expected);
+    expect(String(fetcher.mock.calls[0][0])).toContain("statusGroup=assigned");
+  });
+  it("opens a single request by ID without loading history and recognizes in_progress", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      id: "request-1", number: "REQ-001", employeeName: "Иванов", routeName: "Маршрут",
+      status: "in_progress", scheduledDate: "2026-10-08", scheduledTime: null,
+      createdAt: "2026-10-08T08:00:00Z", notifyEmployee: false, notificationText: "", description: "",
+    }));
+    const repository = createApiPatrolRequestsRepository({ baseUrl: "https://api.example.test", fetcher });
+    expect(await repository.getPatrolRequest("request-1")).toMatchObject({ id: "request-1", status: "В работе", dueAt: "08.10.2026", timeline: ["REQ-001: В работе"] });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][0]).toBe("https://api.example.test/api/v1/patrol-requests/request-1");
+  });
   it("loads patrol requests from API list endpoint", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       jsonResponse([

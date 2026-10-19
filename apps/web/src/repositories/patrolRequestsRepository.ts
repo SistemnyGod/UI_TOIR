@@ -14,6 +14,7 @@ export const patrolRequestsFallback = serviceRequests;
 const patrolRequestPageSize = 200;
 
 export interface PatrolRequestFilterOptions {
+  statusGroup?: string;
   employeeId?: string;
   routeId?: string;
   status?: string;
@@ -70,6 +71,14 @@ export function createApiPatrolRequestsRepository({
   const client = new ApiClient({ baseUrl, fetcher });
 
   return {
+    async getPatrolRequest(id: string, options: ApiRequestOptions = {}) {
+      const request = await client.get<PatrolRequestDto>(`/api/v1/patrol-requests/${encodeURIComponent(id)}`, options);
+      return mapPatrolRequest(request);
+    },
+    async getPatrolRequestPage(filters: PatrolRequestFilterOptions = {}, paging = { page: 1, pageSize: 50 }, options: ApiRequestOptions = {}) {
+      const rows = await client.get<PatrolRequestDto[]>(`/api/v1/patrol-requests${buildPatrolRequestQuery(filters, paging.page, paging.pageSize)}`, options);
+      return { rows: rows.map(mapPatrolRequest), hasMore: rows.length === paging.pageSize };
+    },
     async getPatrolRequests(filters: PatrolRequestFilterOptions = {}, options: ApiRequestOptions = {}) {
       const requests = await getAllPatrolRequestPages(client, filters, options);
       return requests.map(mapPatrolRequest);
@@ -77,6 +86,7 @@ export function createApiPatrolRequestsRepository({
 
     async createPatrolRequest(payload: CreateServiceRequestPayload) {
       const request = await client.post<PatrolRequestDto, CreatePatrolRequestDto>("/api/v1/patrol-requests", {
+        clientRequestId: payload.clientRequestId,
         employeeId: payload.employeeId,
         employeeName: payload.employee,
         routeId: payload.routeId,
@@ -106,12 +116,13 @@ async function getAllPatrolRequestPages(client: ApiClient, filters: PatrolReques
 }
 
 function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
+  const status = mapPatrolRequestStatus(request.status);
   return {
     id: request.id,
     assignmentId: request.assignmentId ?? undefined,
     requestKind: "patrol-assignment",
     title: request.number,
-    status: mapPatrolRequestStatus(request.status),
+    status,
     priority: "Средний" as ServiceRequest["priority"],
     sourceResultId: request.sourceResultId ?? "",
     resultId: request.resultId ?? undefined,
@@ -126,10 +137,10 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     notifyEmployee: request.notifyEmployee,
     notificationText: request.notificationText,
     createdAt: request.createdAt,
-    dueAt: request.scheduledTime ?? "",
+    dueAt: formatRequestDate(request.scheduledDate),
     responsible: request.employeeName,
     description: request.description,
-    timeline: [`${request.number}: ${request.status}`],
+    timeline: [`${request.number}: ${status}`],
     cancellationReasonCode: request.cancellationReasonCode ?? undefined,
     cancellationReasonText: request.cancellationReasonText ?? undefined,
     cancelledAt: request.cancelledAt ?? undefined,
@@ -138,11 +149,18 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
   };
 }
 
-function buildPatrolRequestQuery(filters: PatrolRequestFilterOptions, page: number) {
-  const query = new URLSearchParams({ page: String(page), pageSize: String(patrolRequestPageSize) });
+function formatRequestDate(value: string) {
+  if (typeof value !== "string" || !value) return "Не указано";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+}
+
+function buildPatrolRequestQuery(filters: PatrolRequestFilterOptions, page: number, pageSize = patrolRequestPageSize) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filters.employeeId) query.set("employeeId", filters.employeeId);
   if (filters.routeId) query.set("routeId", filters.routeId);
   if (filters.status) query.set("status", filters.status);
+  if (filters.statusGroup) query.set("statusGroup", filters.statusGroup);
   if (filters.dateFrom) query.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) query.set("dateTo", filters.dateTo);
   if (filters.query) query.set("query", filters.query);
@@ -158,11 +176,11 @@ function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {
     return "Закрыта";
   }
 
-  if (normalized === "в работе" || normalized === "inprogress" || normalized === "in progress") {
+  if (["в пути", "в работе", "in_progress", "inprogress", "in progress", "приостановлена", "приостановлено", "paused", "задержка", "delayed", "просрочена", "просрочено", "overdue", "требует решения диспетчера", "dispatcher_review"].includes(normalized)) {
     return "В работе";
   }
 
-  if (normalized === "назначена" || normalized === "отправлена" || normalized === "assigned" || normalized === "sent") {
+  if (["назначена", "назначено", "отправлена", "отправлено", "assigned", "sent", "dispatched", "принята", "принято", "accepted", "ожидает", "ожидает принятия", "waiting"].includes(normalized)) {
     return "Назначена";
   }
 

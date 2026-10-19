@@ -1,0 +1,204 @@
+.schedule-workspace {
+  --plan-line: #dfe7f2;
+  --plan-muted: #667a97;
+  --plan-ink: #14294b;
+  --plan-blue: #0969ff;
+  gap: 16px;
+  color: var(--plan-ink);
+  min-width: 0;
+}
+.schedule-workspace .sr-only, body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.schedule-workspace .plan-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.schedule-workspace .plan-page-heading h1 { font-size: 28px; font-weight: 750; line-height: 1.2; letter-spacing: -.5px; margin: 0; }
+.schedule-workspace .plan-page-heading p { margin: 6px 0 0; color: var(--plan-muted); font-size: 14px; font-weight: 400; }
+.schedule-workspace .plan-page-heading > span { color: var(--plan-muted); font-size: 12px; }
+.schedule-workspace .plan-toolbar { padding: 16px; border: 1px solid var(--plan-line); border-radius: 12px; background: #fff; }
+.schedule-workspace .plan-toolbar-main { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.schedule-workspace .plan-modes { display: flex; padding: 3px; gap: 3px; background: #f2f5fa; border: 1px solid #e4eaf3; border-radius: 8px; }
+.schedule-workspace .plan-modes button { display: flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; padding: 9px 15px; background: transparent; color: #5c708e; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.schedule-workspace .plan-modes button[aria-pressed=true] { background: #fff; color: var(--plan-blue); box-shadow: 0 1px 4px #14294b14; }
+.schedule-workspace .plan-modes button > span { min-width: 18px; text-align: center; padding: 1px 4px; border-radius: 4px; background: #e6edf8; font-size: 11px; }
+.schedule-workspace .plan-period-nav { display: flex; align-items: center; gap: 6px; }
+.schedule-workspace .plan-period-nav > strong { min-width: 190px; text-align: center; font-size: 14px; font-weight: 650; text-transform: capitalize; }
+.schedule-workspace .plan-period-nav .ui-icon-button { width: 34px; height: 34px; min-height: 34px; border: 1px solid var(--plan-line); border-radius: 7px; background: #fff; color: #586d8e; }
+.schedule-workspace .plan-create { margin-left: auto; min-height: 40px; box-shadow: none; }
+.schedule-workspace .plan-create .ui-button-label { display: flex; align-items: center; gap: 7px; }
+.schedule-workspace .plan-filters { display: grid; grid-template-columns: minmax(230px, 1.7fr) minmax(105px, .75fr) minmax(140px, .9fr) minmax(145px, .9fr) 142px; gap: 12px; margin-top: 16px; align-items: end; }
+.schedule-workspace .plan-filter { display: grid; gap: 5px; min-width: 0; }
+.schedule-workspace .plan-filter > span { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--plan-muted); }
+.schedule-workspace .plan-filter :is(input, select) { width: 100%; min-width: 0; height: 38px; padding: 7px 10px; border: 1px solid #dbe4f0; border-radius: 7px; background: #fff; color: #304966; font: inherit; font-size: 12px; font-weight: 500; }
+.schedule-workspace .plan-search { display: flex; gap: 10px; align-items: center; min-width: 0; height: 38px; padding: 0 11px; border: 1px solid #dbe4f0; border-radius: 7px; background: #f9fbfd; color: #7c8ea6; }
+.schedule-workspace .plan-search input { min-width: 0; flex: 1; width: 100%; border: 0; outline: 0; background: transparent; color: var(--plan-ink); font: inherit; font-size: 13px; font-weight: 400; padding: 0; }
+.schedule-workspace .plan-search input::placeholder { color: #8798af; font-weight: 400; }
+.schedule-workspace .plan-search > button { display: grid; place-items: center; padding: 2px; border: 0; background: transparent; color: #667a97; cursor: pointer; }
+.schedule-workspace .plan-search:focus-within { outline: 2px solid #b8d3ff; border-color: var(--plan-blue); }
+.schedule-workspace .plan-summary { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--plan-line); border-radius: 10px; background: #fff; padding: 14px 4px; }
+.schedule-workspace .plan-summary > :is(div, button) { display: flex; align-items: center; gap: 10px; padding: 0 20px; border: 0; border-right: 1px solid #e7edf5; background: transparent; text-align: left; font: inherit; color: #586e8b; font-size: 13px; }
+.schedule-workspace .plan-summary > :last-child { border-right: 0; cursor: pointer; }
+.schedule-workspace .plan-summary strong { color: var(--plan-ink); font-size: 24px; font-weight: 700; }
+.schedule-workspace .plan-summary-dot, .schedule-workspace .plan-legend i { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: #518ef3; }
+.schedule-workspace :is(.plan-summary-dot, .plan-legend i).active { background: #eaa024; }
+.schedule-workspace :is(.plan-summary-dot, .plan-legend i).completed { background: #1f9d75; }
+.schedule-workspace :is(.plan-summary-dot, .plan-legend i).cancelled { background: #bd7080; }
+.schedule-workspace .plan-calendar-panel { min-width: 0; border: 1px solid var(--plan-line); border-radius: 12px; background: #fff; overflow: hidden; }
+.schedule-workspace .plan-calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 20px; }
+.schedule-workspace .plan-calendar-heading h2 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 700; }
+.schedule-workspace .plan-calendar-heading p { color: var(--plan-muted); margin: 4px 0 0; font-size: 12px; font-weight: 400; }
+.schedule-workspace .plan-view-switch { display: flex; gap: 3px; padding: 3px; background: #f2f5fa; border-radius: 7px; }
+.schedule-workspace .plan-view-switch button { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: #71829a; font: inherit; font-size: 12px; cursor: pointer; }
+.schedule-workspace .plan-view-switch button[aria-pressed=true] { background: #fff; color: var(--plan-blue); box-shadow: 0 1px 3px #14294b12; }
+.schedule-workspace .plan-grid-scroll { width: 100%; overflow: auto; max-height: 650px; overscroll-behavior: contain; scrollbar-width: thin; }
+.schedule-workspace .plan-week-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1120px; table-layout: fixed; font-size: 13px; }
+.schedule-workspace .plan-week-table :is(th, td) { border-right: 1px solid #e9eef5; border-bottom: 1px solid #e9eef5; padding: 8px; vertical-align: top; background: #fff; }
+.schedule-workspace .plan-week-table tr > :last-child { border-right: 0; }
+.schedule-workspace .plan-week-table thead th { position: sticky; top: 0; z-index: 2; height: 64px; border-top: 1px solid #e9eef5; padding: 10px 14px; background: #f8fafd; text-align: left; color: #5e728f; font-weight: 500; }
+.schedule-workspace .plan-week-table thead th :is(span, strong, small) { display: block; }
+.schedule-workspace .plan-week-table thead th span { font-size: 11px; font-weight: 500; }
+.schedule-workspace .plan-week-table thead th strong { font-size: 14px; font-weight: 700; margin-top: 2px; }
+.schedule-workspace .plan-week-table thead th small { font-size: 10px; margin-top: 2px; color: var(--plan-blue); }
+.schedule-workspace .plan-week-table .plan-person-column { width: 215px; position: sticky; left: 0; z-index: 1; padding: 15px 14px; box-shadow: 3px 0 6px #14294b04; }
+.schedule-workspace .plan-week-table thead .plan-person-column { z-index: 3; vertical-align: middle; font-size: 12px; }
+.schedule-workspace .plan-week-table td { height: 106px; }
+.schedule-workspace .plan-week-table td.is-weekend { background: #fbfcfe; }
+.schedule-workspace .plan-week-table :is(th, td).is-today { background: #f2f7ff; }
+.schedule-workspace .plan-week-table thead th.is-today { color: #125ed4; border-top: 2px solid var(--plan-blue); padding-top: 9px; }
+.schedule-workspace .plan-person { display: flex; align-items: flex-start; gap: 9px; }
+.schedule-workspace .plan-avatar { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 50%; background: #eaf1fc; color: #4575bd; font-size: 10px; font-weight: 650; }
+.schedule-workspace .plan-person strong { display: block; font-size: 12px; line-height: 1.5; font-weight: 650; color: #203753; overflow-wrap: anywhere; }
+.schedule-workspace .plan-person small { display: flex; align-items: center; gap: 4px; margin-top: 6px; color: #8290a5; font-size: 11px; font-weight: 400; }
+.schedule-workspace .plan-event { display: block; width: 100%; min-height: 83px; padding: 8px 9px; margin-bottom: 5px; border: 1px solid #dce8ff; border-left: 3px solid #5b97f7; border-radius: 7px; background: #f3f7ff; color: #31568e; text-align: left; cursor: pointer; box-shadow: none; }
+.schedule-workspace .plan-event:last-child { margin-bottom: 0; }
+.schedule-workspace .plan-event strong { display: block; font-size: 12px; line-height: 1.35; font-weight: 650; overflow-wrap: anywhere; margin: 4px 0; }
+.schedule-workspace .plan-event small { display: block; color: #6680a8; font-size: 10px; line-height: 1.4; font-weight: 400; }
+.schedule-workspace .plan-event-time { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; }
+.schedule-workspace .plan-event.active { border-color: #fae5bf; border-left-color: #eaa024; background: #fff9ed; color: #96641b; }
+.schedule-workspace .plan-event.completed { border-color: #d7ebe4; border-left-color: #2fa27d; background: #f0faf6; color: #207d5f; }
+.schedule-workspace .plan-event.completed small { color: #5b8e7c; }
+.schedule-workspace .plan-event.cancelled, .schedule-workspace .plan-event.exception { border-color: #eedfe3; border-left-color: #bd7080; background: #fcf6f8; color: #9a5869; }
+.schedule-workspace .plan-event.cancelled small { color: #ac7b88; }
+.schedule-workspace .plan-event:hover { filter: brightness(.98); border-color: #86b1f6; }
+.schedule-workspace .plan-event.selected { outline: 2px solid var(--plan-blue); outline-offset: 1px; }
+.schedule-workspace .plan-empty-cell { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 83px; margin: 0; padding: 10px 4px; border: 1px dashed transparent; border-radius: 7px; background: transparent; color: #a0aec1; cursor: pointer; box-shadow: none; text-align: center; }
+.schedule-workspace .plan-empty-cell span { display: inline; font-size: 11px; font-weight: 400; color: inherit; }
+.schedule-workspace .plan-empty-cell:hover:not(:disabled) { border-color: #bad2f7; background: #f2f7ff; color: var(--plan-blue); }
+.schedule-workspace .plan-empty-cell:disabled { cursor: default; opacity: .5; }
+.schedule-workspace .plan-calendar-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 20px; background: #fff; }
+.schedule-workspace .plan-legend { display: flex; flex-wrap: wrap; gap: 18px; }
+.schedule-workspace .plan-legend > span { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6a7d97; }
+.schedule-workspace .plan-calendar-foot > small { color: #94a0b2; font-size: 11px; font-weight: 400; }
+.schedule-workspace .plan-month-weekdays, .schedule-workspace .plan-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 780px; }
+.schedule-workspace .plan-month-weekdays { background: #f8fafd; border-top: 1px solid #e9eef5; padding: 10px 0; }
+.schedule-workspace .plan-month-weekdays span { text-align: center; color: #6a7d97; font-size: 12px; font-weight: 600; }
+.schedule-workspace .plan-month-day, .schedule-workspace .plan-month-padding { min-width: 0; min-height: 156px; padding: 9px; border-top: 1px solid #e9eef5; border-right: 1px solid #e9eef5; }
+.schedule-workspace .plan-month-padding { background: #fafbfd; }
+.schedule-workspace .plan-month-day.is-weekend { background: #fbfcfe; }
+.schedule-workspace .plan-month-day.is-today { background: #f2f7ff; }
+.schedule-workspace .plan-month-day-head { display: flex; align-items: center; gap: 6px; height: 26px; margin-bottom: 8px; color: #566d8c; }
+.schedule-workspace .plan-month-day-head > strong { display: grid; place-items: center; font-size: 12px; font-weight: 650; width: 24px; height: 24px; border-radius: 50%; }
+.schedule-workspace .is-today .plan-month-day-head > strong { background: var(--plan-blue); color: #fff; }
+.schedule-workspace .plan-month-day-head > span { color: #8d9aaf; font-size: 10px; }
+.schedule-workspace .plan-month-day-head button { display: grid; place-items: center; margin-left: auto; height: 25px; width: 25px; border: 0; background: transparent; border-radius: 4px; color: #8e9eb5; cursor: pointer; }
+.schedule-workspace .plan-month-day-head button:hover { background: #e7effc; color: var(--plan-blue); }
+.schedule-workspace .plan-event.is-compact { min-height: 0; padding: 6px; }
+.schedule-workspace .plan-event.is-compact strong { font-size: 11px; }
+.schedule-workspace .plan-event.is-compact small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-workspace .plan-more { width: 100%; border: 0; background: transparent; color: #527dbb; text-align: left; font-size: 11px; padding: 4px 0; cursor: pointer; }
+.schedule-workspace .plan-agenda { padding: 0 20px; }
+.schedule-workspace .plan-agenda-row { display: grid; grid-template-columns: 115px minmax(0, 1fr) auto; gap: 20px; align-items: center; width: 100%; padding: 16px 0; border: 0; border-top: 1px solid #e9eef5; background: #fff; text-align: left; cursor: pointer; }
+.schedule-workspace .plan-agenda-row:hover { background: #f8faff; }
+.schedule-workspace .plan-agenda-row :is(time, div) > :is(strong, span) { display: block; font-size: 13px; color: #304867; line-height: 1.5; }
+.schedule-workspace .plan-agenda-row :is(time, div) > span { color: #8190a6; font-size: 12px; font-weight: 400; }
+.schedule-workspace .plan-status { color: #4776bf; background: #eef4ff; border-radius: 6px; padding: 5px 9px; font-size: 11px; white-space: nowrap; }
+.schedule-workspace .plan-status.completed { color: #258466; background: #edf8f3; }
+.schedule-workspace .plan-status.active { color: #a07524; background: #fff5e0; }
+.schedule-workspace .plan-status.cancelled, .schedule-workspace .plan-status.exception { color: #9b6470; background: #fbf0f3; }
+.schedule-workspace .plan-load-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; background: #fff5e9; font-size: 12px; }
+.schedule-workspace :is(button, select, input, .plan-grid-scroll):focus-visible { outline: 2px solid var(--plan-blue); outline-offset: 2px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor { display: flex; flex-direction: column; width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-header { padding: 22px 26px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-header h2 { font-size: 21px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-body { padding: 20px 26px; min-height: 0; overflow: auto; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor :is(.modal-shell-header, .modal-shell-actions) { flex: 0 0 auto; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor :is(.meta-list, .schedule-command-bar, .schedule-quick-complete, .schedule-result-history) { margin-left: 0; margin-right: 0; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-modal-status { margin-bottom: 16px; padding: 0; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-editor-section-heading { margin: 22px 0 15px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-editor-section-heading h3 { margin: 0; font-size: 14px; color: #203753; font-weight: 700; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-editor-section-heading p { margin: 5px 0 0; font-size: 12px; color: #8391a5; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-form { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; border: 0; padding: 0; margin: 0; gap: 16px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field { display: grid; gap: 7px; margin: 0; min-width: 0; font-size: 12px; color: #5c708e; font-weight: 600; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-control { display: flex; align-items: center; position: relative; min-height: 42px; border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; padding: 0 10px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-control :is(input, select) { min-width: 0; width: 100%; height: 42px; border: 0; outline: 0; background: transparent; color: #304867; font: inherit; font-size: 13px; padding: 8px; appearance: none; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-icon { display: grid; place-items: center; color: #869bb6; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-caret { position: absolute; right: 10px; pointer-events: none; color: #8398b4; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-control select { padding-right: 22px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-control:focus-within { border-color: #7daefa; box-shadow: 0 0 0 3px #eaf2ff; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; grid-column: 1 / -1; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-notify-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; min-height: 42px; align-self: end; border: 1px solid #dbe4f0; border-radius: 8px; background: #f9fbfe; font-size: 12px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-notify-label { display: flex; align-items: center; gap: 8px; color: #5b7393; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-notify-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-switch { position: relative; width: 34px; height: 20px; border-radius: 10px; background: #cbd5e1; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-switch span { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .is-checked .schedule-plan-switch { background: #0969ff; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .is-checked .schedule-plan-switch span { transform: translateX(14px); }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-notify-input:focus-visible + .schedule-plan-switch { outline: 2px solid #0969ff; outline-offset: 3px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-message { display: grid; gap: 7px; grid-column: 1 / -1; font-size: 12px; color: #5c708e; font-weight: 600; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-message small { font-weight: 400; color: #8b9bb0; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-message textarea { min-height: 86px; padding: 12px; resize: vertical; border: 1px solid #dbe4f0; border-radius: 8px; font: inherit; color: #304867; background: #fff; font-size: 13px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-message em { font-style: normal; text-align: right; font-size: 11px; color: #99a5b7; font-weight: 400; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-actions { padding: 16px 26px; border-top: 1px solid #e3eaf4; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-form-error { margin-top: 14px; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #ad354b; background: #fff1f3; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor fieldset:disabled { opacity: .75; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; margin: 0; padding: 18px; border: 1px solid #e1e8f2; border-radius: 10px; background: #f8faff; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-summary .field-row { display: grid; gap: 5px; min-width: 0; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-summary dt { color: #7a8ba4; font-size: 12px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-summary dd { margin: 0; color: #243e60; font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-comment { margin-top: 18px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-comment span { color: #7a8ba4; font-size: 12px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-record-comment p { margin: 7px 0 0; font-size: 13px; line-height: 1.6; color: #3c536f; overflow-wrap: anywhere; white-space: pre-wrap; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-command-note { color: #7a8ba4; font-size: 12px; line-height: 1.5; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .plan-discard-notice { padding: 12px 15px; margin: 16px 0; border: 1px solid #eed39c; border-radius: 8px; background: #fff9e9; color: #88671e; font-size: 13px; line-height: 1.5; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-actions .ui-button-label { display: inline-flex; align-items: center; gap: 8px; }
+body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-result-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1200px) {
+  .schedule-workspace .plan-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .schedule-workspace .plan-search { grid-column: 1 / -1; }
+  .schedule-workspace .plan-period-nav > strong { min-width: 165px; }
+}
+@media (max-width: 760px) {
+  .schedule-workspace .plan-page-heading h1 { font-size: 25px; }
+  .schedule-workspace .plan-page-heading > span { display: none; }
+  .schedule-workspace .plan-toolbar { padding: 12px; }
+  .schedule-workspace .plan-toolbar-main { gap: 12px; }
+  .schedule-workspace .plan-modes { width: 100%; }
+  .schedule-workspace .plan-modes button { flex: 1; justify-content: center; padding: 9px 8px; }
+  .schedule-workspace .plan-period-nav { width: 100%; justify-content: space-between; }
+  .schedule-workspace .plan-period-nav > strong { min-width: 0; font-size: 12px; }
+  .schedule-workspace .plan-period-nav .ui-button { padding: 6px 8px; font-size: 11px; }
+  .schedule-workspace .plan-create { width: 100%; min-height: 42px; }
+  .schedule-workspace .plan-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .schedule-workspace .plan-summary { grid-template-columns: repeat(2, 1fr); padding: 0; }
+  .schedule-workspace .plan-summary > :is(div, button) { padding: 12px; gap: 8px; font-size: 11px; }
+  .schedule-workspace .plan-summary > :nth-child(2) { border-right: 0; }
+  .schedule-workspace .plan-summary > :nth-child(n+3) { border-top: 1px solid #e7edf5; }
+  .schedule-workspace .plan-summary strong { font-size: 21px; }
+  .schedule-workspace .plan-calendar-heading { padding: 16px 12px; gap: 8px; }
+  .schedule-workspace .plan-calendar-heading h2 { font-size: 15px; }
+  .schedule-workspace .plan-view-switch button { padding: 7px; font-size: 11px; }
+  .schedule-workspace .plan-week-table .plan-person-column { width: 160px; padding: 12px 10px; }
+  .schedule-workspace .plan-week-table { min-width: 1030px; }
+  .schedule-workspace .plan-avatar { display: none; }
+  .schedule-workspace .plan-calendar-foot { padding: 14px 12px; }
+  .schedule-workspace .plan-legend { gap: 12px; }
+  .schedule-workspace .plan-agenda { padding: 0 12px; }
+  .schedule-workspace .plan-agenda-row { grid-template-columns: 84px minmax(0, 1fr); gap: 12px; }
+  .schedule-workspace .plan-agenda-row .plan-status { grid-column: 2; justify-self: start; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor :is(.modal-shell-header, .modal-shell-body, .modal-shell-actions) { padding: 16px; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-form { grid-template-columns: 1fr; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-field-row { grid-template-columns: 1fr; gap: 12px; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .schedule-plan-notify-row { grid-column: 1 / -1; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-header h2 { font-size: 19px; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor :is(.plan-record-summary, .schedule-result-layout) { grid-template-columns: 1fr; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-actions { flex-wrap: wrap; gap: 8px; }
+  body .modal-backdrop .modal-shell.schedule-plan-modal.plan-editor .modal-shell-actions .ui-button { white-space: normal; }
+}

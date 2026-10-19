@@ -150,9 +150,7 @@
   .inventory-custody-composer,
   .inventory-custody-workspace,
   .inventory-custody-meta-grid,
-  .inventory-custody-drawer-meta,
-  .inventory-form-grid,
-  .inventory-detail-grid {
+  .inventory-custody-drawer-meta {
     grid-template-columns: 1fr;
   }
 
@@ -175,8 +173,7 @@
   .inventory-custody-command-actions,
   .inventory-custody-inspector-actions,
   .inventory-custody-row-actions,
-  .inventory-custody-line-actions,
-  .inventory-custody-drawer-actions {
+  .inventory-custody-line-actions {
     justify-content: stretch;
   }
 
@@ -199,7 +196,6 @@
   .inventory-custody-inspector-actions .button,
   .inventory-custody-row-actions .button,
   .inventory-custody-line-actions .button,
-  .inventory-custody-drawer-actions .button,
   .inventory-custody-composer .button {
     flex: 1 1 auto;
     min-width: 0;
@@ -357,11 +353,6 @@
     max-height: 280px;
   }
 
-  .inventory-custody-drawer {
-    width: 100vw;
-    border-left: 0;
-  }
-
   .inventory-items-rail {
     max-height: none;
     min-height: 0;
@@ -451,7 +442,6 @@
     border-radius: 7px;
   }
 
-  .inventory-size-grid,
   .inventory-inspector-list {
     grid-template-columns: 1fr;
   }
@@ -620,34 +610,18 @@
     padding: 22px 16px;
   }
 
-  .inventory-custody-drawer-backdrop {
-    padding: 0;
-  }
-
   .inventory-ppe-drawer {
     width: 100vw;
     border-left: 0;
   }
 
-  .inventory-custody-drawer {
-    width: 100vw;
-    border-left: 0;
-  }
-
   .inventory-ppe-drawer-header,
-  .inventory-ppe-drawer-actions,
-  .inventory-custody-drawer-header,
-  .inventory-custody-drawer-actions {
+  .inventory-ppe-drawer-actions {
     padding-inline: 14px;
   }
 
-  .inventory-ppe-drawer-body,
-  .inventory-custody-drawer-body {
+  .inventory-ppe-drawer-body {
     padding: 14px;
-  }
-
-  .inventory-dialog-backdrop {
-    padding: 10px;
   }
 
   .inventory-settings-modal-backdrop {

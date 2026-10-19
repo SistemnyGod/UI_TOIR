@@ -200,7 +200,7 @@ export function EmployeeDirectoryPopover({
 
             <label className='emu-directory-search'>
               <Search aria-hidden='true' size={17} />
-              <span className='sr-only'>Поиск сотрудника</span>
+              <span className='visually-hidden'>Поиск сотрудника</span>
               <input
                 ref={searchRef}
                 type='search'

@@ -1,4 +1,5 @@
 import type { PpeIssueDocumentDto } from "../../../api/contracts";
+import "../styles/ppe-document-paper.css";
 export function DocumentPaper({ document, type }: { document: PpeIssueDocumentDto; type: "norms" | "signature" }) {
   const { content } = document;
   const employee = content.employee;

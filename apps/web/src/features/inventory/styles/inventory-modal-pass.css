@@ -1,23 +1,18 @@
 /* Final modal pass for Inventory surfaces. */
-.inventory-employees-dialog-backdrop,
 .inventory-operations-dialog-backdrop,
 .inventory-settings-modal-backdrop,
 .inventory-ppe-picker-backdrop,
 .inventory-ppe-drawer-backdrop,
-.inventory-custody-drawer-backdrop,
 .inventory-history-drawer-backdrop,
-.inventory-system-log-drawer-backdrop,
-.inventory-dialog-backdrop {
+.inventory-system-log-drawer-backdrop {
   z-index: 5000;
   overscroll-behavior: contain;
 }
 
-.inventory-employees-dialog,
 .inventory-operations-dialog,
 .inventory-settings-modal,
 .inventory-ppe-picker,
 .inventory-ppe-drawer,
-.inventory-custody-drawer,
 .inventory-history-drawer,
 .inventory-system-log-drawer {
   max-width: calc(100vw - 32px);
@@ -25,7 +20,6 @@
   min-width: 0;
 }
 
-.inventory-employees-dialog,
 .inventory-operations-dialog,
 .inventory-settings-modal,
 .inventory-ppe-picker {
@@ -34,14 +28,12 @@
   overflow: hidden;
 }
 
-.inventory-employees-dialog header,
 .inventory-operations-dialog header,
 .inventory-settings-modal header,
 .inventory-ppe-picker-head {
   flex: 0 0 auto;
 }
 
-.inventory-employees-dialog > :not(header):not(.inventory-employees-dialog-actions),
 .inventory-operations-dialog dl,
 .inventory-settings-modal-form,
 .inventory-ppe-picker-layout,
@@ -50,7 +42,6 @@
   overflow: auto;
 }
 
-.inventory-employees-dialog-actions,
 .inventory-operations-dialog footer,
 .inventory-settings-modal-form footer,
 .inventory-ppe-picker-actions,
@@ -61,7 +52,6 @@
 }
 
 .inventory-employees-table-wrap,
-.inventory-employees-dialog table,
 .inventory-ppe-picker-selected-table,
 .inventory-ppe-lines-wrap {
   max-width: 100%;
@@ -69,19 +59,15 @@
 }
 
 @media (max-width: 720px) {
-  .inventory-employees-dialog-backdrop,
   .inventory-operations-dialog-backdrop,
   .inventory-settings-modal-backdrop,
   .inventory-ppe-picker-backdrop,
   .inventory-ppe-drawer-backdrop,
-  .inventory-custody-drawer-backdrop,
   .inventory-history-drawer-backdrop,
-  .inventory-system-log-drawer-backdrop,
-  .inventory-dialog-backdrop {
+  .inventory-system-log-drawer-backdrop {
     padding: 10px;
   }
 
-  .inventory-employees-dialog,
   .inventory-operations-dialog,
   .inventory-settings-modal,
   .inventory-ppe-picker {
@@ -91,14 +77,12 @@
   }
 
   .inventory-ppe-drawer,
-  .inventory-custody-drawer,
   .inventory-history-drawer,
   .inventory-system-log-drawer {
     width: min(420px, calc(100vw - 18px));
     max-width: calc(100vw - 18px);
   }
 
-  .inventory-employees-dialog h2,
   .inventory-operations-dialog h2,
   .inventory-settings-modal h2,
   .inventory-ppe-picker-head h2 {
@@ -106,7 +90,6 @@
     line-height: 1.2;
   }
 
-  .inventory-employees-dialog-actions,
   .inventory-operations-dialog footer,
   .inventory-ppe-picker-actions,
   .inventory-ppe-preview-tabs {
@@ -336,14 +319,6 @@
 
 .inventory-employees-inspector-hints svg {
   color: #1d4ed8;
-}
-
-.inventory-employees-form-grid .is-wide {
-  grid-column: 1 / -1;
-}
-
-.inventory-employees-dialog.inventory-employees-editor {
-  width: min(760px, 100%);
 }
 
 @media (max-width: 1180px) {

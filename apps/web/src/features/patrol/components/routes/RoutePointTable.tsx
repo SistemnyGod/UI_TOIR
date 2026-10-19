@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { RouteDirectoryItem, RoutePoint } from "../../../../types";
 import { CompactTable, type CompactTableColumn } from "../../../../shared/ui";
 
@@ -18,14 +19,28 @@ export function RoutePointTable({
   onMovePoint: (routeId: string, pointId: string, direction: -1 | 1) => MaybePromise<void>;
   onSelectPoint: (id: string) => void;
 }) {
+  const [moving, setMoving] = useState(false);
+  const busy = useRef(false);
+  const [error, setError] = useState("");
+  const orderedIds = [...route.points].sort((a, b) => a.order - b.order).map(point => point.id);
+  async function move(point: RoutePoint, direction: -1 | 1) {
+    if (busy.current || !canManage) return;
+    busy.current = true;
+    setMoving(true);
+    setError("");
+    try { await onMovePoint(route.id, point.id, direction); }
+    catch (error) { setError(error instanceof Error ? error.message : "Не удалось изменить порядок точек. Повторите попытку."); }
+    finally { busy.current = false; setMoving(false); }
+  }
   const columns: CompactTableColumn<RoutePoint>[] = [
-    { key: "order", header: "№", render: (point) => point.order, align: "right", width: "64px" },
+    { key: "order", header: "№", render: (point) => <span className="route-order-number">{point.order}</span>, width: "44px" },
     {
       key: "name",
       header: "Точка",
       render: (point) => (
         <button
           aria-pressed={selectedPointId === point.id}
+          aria-label={`Открыть точку: ${point.name}`}
           className="route-point-select"
           onClick={(event) => {
             event.stopPropagation();
@@ -33,15 +48,13 @@ export function RoutePointTable({
           }}
           type="button"
         >
-          {point.name}
+          <strong>{point.name}</strong>
+          <small>{point.zone || "Зона не указана"}</small>
+          <span className="route-point-description-cell">{point.description || point.instruction || "Описание не добавлено"}</span>
         </button>
       ),
-      width: "220px",
     },
-    { key: "zone", header: "Зона", render: (point) => point.zone || "-", width: "150px" },
-    { key: "type", header: "Тип", render: (point) => point.type, width: "110px" },
-    { key: "tag", header: "NFC / тег", render: (point) => point.tag || "-", width: "150px" },
-    { key: "description", header: "Описание", render: (point) => <span className="route-point-description-cell">{point.description || point.instruction || "—"}</span>, width: "280px" },
+    { key: "tag", header: "Тип и метка", render: (point) => <div className="route-tag-cell"><strong>{point.type}</strong><span className={!point.tag.trim() && point.type !== "Ручной контроль" ? "route-tag-missing" : ""}>{point.tag || (point.type === "Ручной контроль" ? "Без сканирования" : "Метка не задана")}</span></div>, width: "170px" },
     {
       key: "actions",
       header: "Порядок",
@@ -50,10 +63,10 @@ export function RoutePointTable({
           <button
             aria-label={`Переместить точку «${point.name}» выше`}
             className="icon-button mini-icon"
-            disabled={!canManage}
+            disabled={!canManage || moving || orderedIds[0] === point.id}
             onClick={(event) => {
               event.stopPropagation();
-              void onMovePoint(route.id, point.id, -1);
+              void move(point, -1);
             }}
             type="button"
           >
@@ -62,10 +75,10 @@ export function RoutePointTable({
           <button
             aria-label={`Переместить точку «${point.name}» ниже`}
             className="icon-button mini-icon"
-            disabled={!canManage}
+            disabled={!canManage || moving || orderedIds.at(-1) === point.id}
             onClick={(event) => {
               event.stopPropagation();
-              void onMovePoint(route.id, point.id, 1);
+              void move(point, 1);
             }}
             type="button"
           >
@@ -74,19 +87,22 @@ export function RoutePointTable({
         </div>
       ),
       align: "center",
-      width: "120px",
+      width: "100px",
     },
   ];
 
   return (
+    <>
+    {error ? <p className="route-form-error" role="alert">{error}</p> : null}
     <CompactTable
       className="route-points-compact-table"
       columns={columns}
-      emptyText="В маршруте нет контрольных точек"
+      emptyText="Точки не найдены. Измените поиск или фильтр."
       getRowClassName={(point) => selectedPointId === point.id ? "selected" : ""}
       getRowKey={(point) => point.id}
       onRowClick={(point) => onSelectPoint(point.id)}
       rows={points}
     />
+    </>
   );
 }

@@ -171,17 +171,20 @@ test("inventory custody screen supports journal, detail, history and print expor
 
   await page.getByRole("button", { name: "Открыть" }).first().click();
   await expect(page.getByText("История акта")).toBeVisible();
-  await expect(page.locator(".inventory-custody-drawer").getByText("TAB-101", { exact: true })).toBeVisible();
-  await expect(page.locator(".inventory-custody-drawer").getByText("Электромонтажный участок")).toBeVisible();
-  await expect(page.locator(".inventory-custody-drawer").getByText("Для обхода участка")).toBeVisible();
+  await expect(page.locator(".custody-document-dialog").getByText("TAB-101", { exact: true })).toBeVisible();
+  await expect(page.locator(".custody-document-dialog").getByText("Электромонтажный участок")).toBeVisible();
+  await expect(page.locator(".custody-document-dialog").getByText("Для обхода участка")).toBeVisible();
 
-  await page.locator(".inventory-custody-drawer-actions").getByRole("button", { name: "Закрыть" }).click();
-  await page.locator(".inventory-custody-drawer").getByRole("button", { name: "Вернуть" }).click();
+  await page.locator(".custody-document-actions").getByRole("button", { name: "Закрыть" }).click();
+  await page.locator(".custody-document-dialog").getByRole("button", { name: "Вернуть" }).click();
   await page.getByRole("dialog", { name: "Вернуть предмет" }).getByRole("button", { name: "Провести возврат" }).click();
-  await page.locator(".inventory-custody-drawer").getByRole("button", { name: "Списать" }).click();
+  await page.locator(".custody-document-dialog").getByRole("button", { name: "Списать" }).click();
   await page.getByRole("dialog", { name: "Списать предмет" }).getByRole("textbox").fill("Smoke write-off");
   await page.getByRole("dialog", { name: "Списать предмет" }).getByRole("button", { name: "Провести списание" }).click();
-  await page.getByRole("button", { name: "Архив" }).last().click();
+  await page.locator(".custody-document-dialog .inventory-custody-line-actions").getByRole("button", { name: "Архив", exact: true }).click();
+  const archiveDialog = page.getByRole("dialog", { name: "Архивировать запись?", exact: true });
+  await archiveDialog.getByRole("button", { name: "Архивировать", exact: true }).click();
+  await expect(archiveDialog).toHaveCount(0);
   await page.getByRole("button", { name: "PDF" }).last().click();
   await page.getByRole("button", { name: "DOCX" }).last().click();
 

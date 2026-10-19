@@ -41,7 +41,7 @@ export function WorkAttentionSummary({ activeWork }: { activeWork: EmuWorkSessio
   const carriedOver = activeWork.filter((work) => work.isCarriedOver);
   const conflicts = collectWorkingConflicts(activeWork);
   const items = [
-    carriedOver.length > 0 ? `${carriedOver.length} забытых работ перенесены на текущие сутки` : "",
+    carriedOver.length > 0 ? `Перенесено незавершённых работ: ${carriedOver.length}` : "",
     conflicts.length > 0 ? `${conflicts.length} сотрудников одновременно работают в нескольких карточках` : "",
   ].filter(Boolean);
 

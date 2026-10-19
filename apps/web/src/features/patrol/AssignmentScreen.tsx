@@ -1,55 +1,39 @@
+import "./assignments/scoped-legacy.css";
+import "./assignments/assignmentWorkspace.css";
+import "./assignments/assignmentRedesign.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { buildNotificationText } from "./components/requests/requestModalUtils";
-import { AssignmentStatusBadge as StatusPill } from "./assignments/AssignmentStatusBadge";
+import { createClientUuid } from "../../shared/clientUuid";
+import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
 import {
-  AlertTriangle,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  ListChecks,
-  MapPin,
-  MoreVertical,
-  Plus,
-  Route,
-  Search,
-  Send,
-  SlidersHorizontal,
-  UserPlus,
-  Wifi,
-} from "./assignments/AssignmentIcons";
-import type { AssignmentIconComponent } from "./assignments/AssignmentIcons";
+  mapEmployeeToAssignable,
+  mapRouteToAssignable,
+} from "../../repositories/assignmentsRepository";
+import { Button, ModalShell, PageHeader } from "../../shared/ui";
+import type {
+  ActivePatrol,
+  CancelAssignmentPayload,
+  CompleteAssignmentPayload,
+  CreateServiceRequestPayload,
+  DataSourceMode,
+  DataSourceStatus,
+  EmployeeDirectoryItem,
+  RouteDirectoryItem,
+  ScreenId,
+  ServiceRequest
+} from "../../types";
+import { subscribeAssignmentAutoRefresh } from "./assignments/assignmentAutoRefresh";
 import {
-  assignmentStatusText,
-  isAssignableRequest,
-  isAssignmentCurrent,
-  isRequestCurrent,
-  priorityText,
-  resolveSelectedAssignmentEmployee,
-  shouldCreateAssignmentAfterRequest,
-} from "./assignments/assignmentUtils";
-import {
-  addMonths,
-  buildCalendarDays,
-  createAssignmentHistoryEvents,
-  formatShiftRange,
-  formatAssignmentActionTime,
-  formatDate,
-  formatMonthLabel,
-  formatPeriodLabel,
-  getCalendarDayClass,
-  normalizeDateRange,
-  parseDateKey,
-  parseRequestScheduledAt,
   shiftStartTime,
-  shiftText,
-  shiftTime,
-  startOfMonth,
-  toDateInput,
-  toDateTimeInput,
+  toDateInput
 } from "./assignments/assignmentDateUtils";
+import { AssignmentDraftConflictError, readAssignmentDrafts, writeAssignmentDrafts } from "./assignments/assignmentDrafts";
+import { parseDateKey } from "../../shared/ui/dateRange";
+import { AssignmentDraftRecoveryEditor } from "./assignments/AssignmentDraftRecoveryEditor";
+import { AssignmentDraftPreview } from "./assignments/AssignmentDraftPreview";
+import { LegacyDraftRecoveryModal } from "./assignments/LegacyDraftRecoveryModal";
+import { AssignmentRequestModal } from "./assignments/AssignmentRequestModal";
+import { AssignmentRoutePoints } from "./assignments/AssignmentRouteChoice";
+import { AssignmentSelectionBar } from "./assignments/AssignmentSelectionBar";
 import {
   defaultAssignmentShiftSettings,
   loadAssignmentFavoriteEmployeeIds,
@@ -60,35 +44,23 @@ import {
   subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
 import type { ShiftTimeSettings } from "./assignments/assignmentTypes";
-import { AssignmentSelectionBar } from "./assignments/AssignmentSelectionBar";
-import { subscribeAssignmentAutoRefresh } from "./assignments/assignmentAutoRefresh";
-import "./assignments/assignmentWorkspace.css";
-import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
-import { Button, CompactTable, FilterBar, IconButton, ModalShell, Panel, type CompactTableColumn } from "../../shared/ui";
 import {
-  mapEmployeeToAssignable,
-  mapRouteToAssignable,
-} from "../../repositories/assignmentsRepository";
-import type {
-  ActivePatrol,
-  CancelAssignmentPayload,
-  CompleteAssignmentPayload,
-  CreateServiceRequestPayload,
-  DataSourceMode,
-  DataSourceStatus,
-  Employee,
-  EmployeeDirectoryItem,
-  PatrolCompletionPhotoPayload,
-  RoutePoint,
-  RouteOption,
-  RouteDirectoryItem,
-  ScreenId,
-  ServiceRequest,
-} from "../../types";
+  isAssignableRequest,
+  isAssignmentCurrent,
+  resolveSelectedAssignmentEmployee,
+  shouldCreateAssignmentAfterRequest
+} from "./assignments/assignmentUtils";
+import { buildNotificationText } from "./components/requests/requestModalUtils";
+
+import { areStringArraysEqual, ASSIGNMENT_DRAFTS_STORAGE_KEY, CancelAssignmentModal, CompleteAssignmentModal, ConflictsCard, createLocalDraftId, DraftsCard, flattenServerFieldErrors, getCompletionRoutePoints, LocalDraft, mergeAssignmentSources } from "./assignmentOverlays";
+import { ActiveAssignmentsCard, AssignmentEmployeePickerModal, EmployeeHistoryPanel, EmployeesPanel, isAssignableDirectoryEmployee, isAssignmentOnDate, RoutesPanel, ShiftSettingsModal } from "./assignments/AssignmentPanels";
 
 interface AssignmentScreenProps {
+  storageScope?: string;
+  canRecoverLegacyDrafts?: boolean;
   activePatrols: ActivePatrol[];
   assignmentCreateIntent: number;
+  onAssignmentCreateIntentHandled?: () => void;
   canManage?: boolean;
   dataSourceMode: DataSourceMode;
   employeeDirectory: EmployeeDirectoryItem[];
@@ -108,39 +80,21 @@ interface AssignmentScreenProps {
   onSelectRoute: (id: string) => void;
 }
 
-import { LocalDraft, ASSIGNMENT_DRAFTS_STORAGE_KEY, PointCompletionDraft, CompleteAssignmentModal, CancelAssignmentModal, DraftsCard, mergeAssignmentSources, loadAssignmentDrafts, createLocalDraftId, ConflictsCard, PanelHeader, EmptyPanel, SummaryBlock, DateTimeField, Avatar, Tag, getCompletionRoutePoints, flattenServerFieldErrors, getInitials, areStringArraysEqual } from "./assignmentOverlays";
-const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface RequestPanelProps {
-  canManage: boolean;
-  comment: string;
-  employee?: Employee;
-  fieldErrors: Record<string, string[]>;
-  favoriteEmployees: Employee[];
-  hasConflict: boolean;
-  isCreating: boolean;
-  notificationText: string;
-  onAssign: () => void | Promise<void>;
-  onCommentChange: (value: string) => void;
-  onPlannedDateChange: (value: string) => void;
-  onPlannedStartChange: (value: string) => void;
-  onPriorityChange: (value: "high" | "medium" | "low") => void;
-  onSaveDraft: () => void;
-  onSelectEmployee: (id: string) => void;
-  onSelectRequest: (id: string) => void;
-  plannedDate: string;
-  plannedStart: string;
-  priority: "high" | "medium" | "low";
-  requestListStatus: DataSourceStatus;
-  requests: ServiceRequest[];
-  route?: RouteOption;
-  selectedRequestId: string;
-  shiftSettings: ShiftTimeSettings;
+export { mergeAssignmentSources } from "./assignmentOverlays";
+export { shouldCreateAssignmentAfterRequest } from "./assignments/assignmentUtils";
+
+
+export function AssignmentScreen(props: AssignmentScreenProps) {
+  return <AssignmentWorkspace key={JSON.stringify([props.storageScope ?? "default", props.dataSourceMode, props.canManage ?? true, props.canRecoverLegacyDrafts ?? false])} {...props} />;
 }
 
-export function AssignmentScreen({
+function AssignmentWorkspace({
+  storageScope = "default",
+  canRecoverLegacyDrafts = false,
   activePatrols,
   assignmentCreateIntent,
+  onAssignmentCreateIntentHandled,
   canManage = true,
   dataSourceMode,
   employeeDirectory,
@@ -161,6 +115,7 @@ export function AssignmentScreen({
 }: AssignmentScreenProps) {
   const assignments = useAssignmentsWorkspace({
     dataSourceMode,
+    sessionKey: storageScope,
     refreshPatrolData,
     showToast: onNotify,
   });
@@ -171,7 +126,15 @@ export function AssignmentScreen({
   const [priority, setPriority] = useState<"high" | "medium" | "low">("high");
   const [comment, setComment] = useState("");
   const [search, setSearch] = useState("");
-  const [drafts, setDrafts] = useState<LocalDraft[]>(loadAssignmentDrafts);
+  const [bottomTab, setBottomTab] = useState("active");
+  const [routePreviewOpen, setRoutePreviewOpen] = useState(false);
+  const draftStorageKey = `${ASSIGNMENT_DRAFTS_STORAGE_KEY}:${dataSourceMode}:${storageScope}`;
+  const [draftState, setDraftState] = useState(() => readAssignmentDrafts(draftStorageKey));
+  const drafts = draftState.drafts;
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [repairDraft, setRepairDraft] = useState<LocalDraft | null>(null);
+  const [previewDraft, setPreviewDraft] = useState<LocalDraft | null>(null);
+  const draftWriteError = useRef("");
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
   const [completionTarget, setCompletionTarget] = useState<ActivePatrol | null>(null);
   const [completionErrors, setCompletionErrors] = useState<Record<string, string>>({});
@@ -184,6 +147,10 @@ export function AssignmentScreen({
   const [shiftSettingsOpen, setShiftSettingsOpen] = useState(false);
   const [serverSettingsApplied, setServerSettingsApplied] = useState(false);
   const assignmentCreateInProgressRef = useRef(false);
+  const mounted = useRef(true);
+  const requestOperation = useRef<{ fingerprint: string; id: string; payload: CreateServiceRequestPayload; request?: ServiceRequest } | null>(null);
+  const [requestError, setRequestError] = useState("");
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const employees = useMemo(
     () => {
@@ -223,8 +190,8 @@ export function AssignmentScreen({
   const visibleRoutes = routes;
   const assignableRequests = useMemo(() => requests.filter(isAssignableRequest), [requests]);
   const referencePanelStatus = assignments.referenceStatus === "idle" ? "loading" : assignments.referenceStatus;
-  const selectedEmployee = resolveSelectedAssignmentEmployee(employees, visibleEmployees, selectedEmployeeId);
-  const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? visibleRoutes[0];
+  const selectedEmployee = requestModalOpen && selectedEmployeeId ? employees.find(employee => employee.id === selectedEmployeeId) : resolveSelectedAssignmentEmployee(employees, visibleEmployees, selectedEmployeeId);
+  const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? (requestModalOpen && selectedRouteId ? undefined : visibleRoutes[0]);
   const selectedRequest = assignableRequests.find((request) => request.id === selectedRequestId);
   const notificationText = useMemo(
     () =>
@@ -308,10 +275,10 @@ export function AssignmentScreen({
   }, [onSelectEmployee, selectedEmployeeId, visibleEmployees]);
 
   useEffect(() => {
-    if (selectedEmployeeId && !employees.some((employee) => employee.id === selectedEmployeeId)) {
+    if (!requestModalOpen && selectedEmployeeId && !employees.some((employee) => employee.id === selectedEmployeeId)) {
       onSelectEmployee(visibleEmployees[0]?.id ?? employees[0]?.id ?? "");
     }
-  }, [employees, onSelectEmployee, selectedEmployeeId, visibleEmployees]);
+  }, [employees, onSelectEmployee, requestModalOpen, selectedEmployeeId, visibleEmployees]);
 
   useEffect(() => {
     if (!selectedRouteId && visibleRoutes[0]) {
@@ -320,21 +287,22 @@ export function AssignmentScreen({
   }, [onSelectRoute, selectedRouteId, visibleRoutes]);
 
   useEffect(() => {
-    if (selectedRequestId && !assignableRequests.some((request) => request.id === selectedRequestId)) {
+    if (!requestModalOpen && selectedRequestId && !assignableRequests.some((request) => request.id === selectedRequestId)) {
       setSelectedRequestId("");
     }
-  }, [assignableRequests, selectedRequestId]);
+  }, [assignableRequests, requestModalOpen, selectedRequestId]);
 
   useEffect(() => {
     if (assignmentCreateIntent > 0) {
-      setRequestModalOpen(true);
+      setRequestError(""); setRequestModalOpen(true);
+      onAssignmentCreateIntentHandled?.();
     }
-  }, [assignmentCreateIntent]);
+  }, [assignmentCreateIntent, onAssignmentCreateIntentHandled]);
 
   useEffect(() => {
-    if (!selectedEmployee) return;
+    if (!selectedEmployee || requestModalOpen) return;
     setPlannedStart(shiftStartTime(selectedEmployee.shift, shiftSettings));
-  }, [selectedEmployee?.id, selectedEmployee?.shift, shiftSettings]);
+  }, [selectedEmployee?.id, selectedEmployee?.shift, requestModalOpen, shiftSettings]);
 
   useEffect(() => {
     return subscribeAssignmentFavoriteEmployeeIds(setFavoriteEmployeeIds);
@@ -375,8 +343,8 @@ export function AssignmentScreen({
 
     setFavoriteEmployeeIds(nextFavoriteIds);
     setShiftSettings(nextShiftSettings);
-    saveAssignmentFavoriteEmployeeIds(nextFavoriteIds);
-    saveAssignmentShiftSettings(nextShiftSettings);
+    try { saveAssignmentFavoriteEmployeeIds(nextFavoriteIds); saveAssignmentShiftSettings(nextShiftSettings); }
+    catch { /* The server is authoritative; a disabled browser cache must not break the workspace. */ }
     setServerSettingsApplied(true);
 
     if (!areStringArraysEqual(serverFavoriteIds, nextFavoriteIds)) {
@@ -387,24 +355,23 @@ export function AssignmentScreen({
     }
   }, [assignments, assignments.assignmentSettings, dataSourceMode, favoriteEmployeeIds, serverSettingsApplied]);
 
-  function handleShiftSettingsSave(nextSettings: ShiftTimeSettings) {
+  async function handleShiftSettingsSave(nextSettings: ShiftTimeSettings) {
+    const saved = await assignments.updateAssignmentSettings({ shiftSettings: nextSettings });
+    if (!mounted.current || !saved) return false;
+    try { saveAssignmentShiftSettings(nextSettings); }
+    catch { if (dataSourceMode !== "api") return false; }
     setShiftSettings(nextSettings);
-    saveAssignmentShiftSettings(nextSettings);
-    void assignments.updateAssignmentSettings({
-      favoriteEmployeeIds,
-      shiftSettings: nextSettings,
-    });
-    setShiftSettingsOpen(false);
     onNotify("Настройки смен сохранены для группы назначений.");
+    return true;
   }
 
-  function handleFavoriteEmployeeIdsChange(nextIds: string[]) {
+  async function handleFavoriteEmployeeIdsChange(nextIds: string[]) {
+    const saved = await assignments.updateAssignmentSettings({ favoriteEmployeeIds: nextIds });
+    if (!mounted.current || !saved) return false;
+    try { saveAssignmentFavoriteEmployeeIds(nextIds); }
+    catch { if (dataSourceMode !== "api") return false; }
     setFavoriteEmployeeIds(nextIds);
-    saveAssignmentFavoriteEmployeeIds(nextIds);
-    void assignments.updateAssignmentSettings({
-      favoriteEmployeeIds: nextIds,
-      shiftSettings,
-    });
+    return true;
   }
 
   async function handleAssign() {
@@ -413,12 +380,13 @@ export function AssignmentScreen({
     }
 
     if (!selectedEmployee || !selectedRoute || !plannedDate || !plannedStart) {
+      setRequestError("Выберите сотрудника, маршрут и время старта.");
       onNotify("Выберите сотрудника, маршрут и время старта.");
       return;
     }
 
     if (selectedRequestId && !selectedRequest) {
-      setSelectedRequestId("");
+      setRequestError("Выбранное основание недоступно. Выберите другую заявку либо создайте новую.");
       onNotify("Выбранная заявка уже закрыта, отменена или назначена. Выберите другую заявку либо создайте новую.");
       return;
     }
@@ -435,9 +403,10 @@ export function AssignmentScreen({
     }
 
     assignmentCreateInProgressRef.current = true;
+    setRequestError("");
     setIsCreatingRequest(true);
     try {
-      const request = selectedRequest ?? await onCreatePatrolRequest({
+      const payload: CreateServiceRequestPayload = {
         employeeId: selectedEmployee.id,
         employee: selectedEmployee.name,
         routeId: selectedRoute.id,
@@ -449,14 +418,20 @@ export function AssignmentScreen({
         notifyEmployee: true,
         notificationText,
         description: comment.trim(),
-      });
+      };
+      const fingerprint = JSON.stringify([selectedEmployee.id, selectedRoute.id, selectedRequestId, plannedDate, plannedStart, priority, comment]);
+      if (requestOperation.current?.fingerprint !== fingerprint) requestOperation.current = { fingerprint, id: createClientUuid(), payload };
+      const operation = requestOperation.current;
+      const request = selectedRequest ?? operation.request ?? await onCreatePatrolRequest({ ...operation.payload, clientRequestId: operation.id });
+      if (!mounted.current) return;
+      operation.request = request;
 
        if (shouldCreateAssignmentAfterRequest({
          dataSourceMode,
          hasSelectedRequest: Boolean(selectedRequest),
          hasLinkedAssignment: Boolean(request.assignmentId),
        })) {
-        await assignments.createAssignment({
+        const created = await assignments.createAssignment({
           patrolRequestId: request.id,
           employeeId: selectedEmployee.id,
           employeeName: selectedEmployee.name,
@@ -469,20 +444,26 @@ export function AssignmentScreen({
           notificationText,
           comment: comment.trim(),
         });
+        if (!mounted.current || !created.succeeded) return;
       } else {
-        await assignments.refreshAssignments();
-        await refreshPatrolData();
+        await Promise.allSettled([assignments.refreshAssignments(), refreshPatrolData()]);
       }
+      if (!mounted.current) return;
       setComment("");
       setSelectedRequestId("");
       setRequestModalOpen(false);
-      await onRefreshRequests();
+      requestOperation.current = null;
+      try { await onRefreshRequests(); }
+      catch { if (mounted.current) onNotify("Заявка отправлена. Список пока не обновился — обновите его позже."); }
+      if (!mounted.current) return;
       onNotify("Заявка создана, уведомление подготовлено");
     } catch (error) {
+      if (!mounted.current) return;
+      setRequestError(error instanceof Error ? error.message : "Не удалось создать заявку на обход");
       onNotify(error instanceof Error ? error.message : "Не удалось создать заявку на обход");
     } finally {
       assignmentCreateInProgressRef.current = false;
-      setIsCreatingRequest(false);
+      if (mounted.current) setIsCreatingRequest(false);
     }
   }
 
@@ -497,21 +478,13 @@ export function AssignmentScreen({
     const pointIssueWithoutType = (payload.pointResults ?? []).some((point) => point.status === "Замечание" && !point.issueType?.trim());
     if (pointIssueWithoutType) errors.issueType = "Укажите тип замечания для точек с замечанием.";
 
-    const completionRoute = routeDirectory.find((route) => route.id === completionTarget.routeId || route.name === completionTarget.route);
-    const pointResultsById = new Map((payload.pointResults ?? []).map((point) => [point.routePointId, point]));
-    const missingPhotos = getCompletionRoutePoints(completionRoute)
-      .filter((point) => point.requiresPhoto && ((pointResultsById.get(point.id)?.photoAttachments?.length ?? 0) <= 0))
-      .map((point) => point.name);
-    if (missingPhotos.length > 0) {
-      errors.photos = `Прикрепите файлы фото для точек: ${missingPhotos.join(", ")}`;
-    }
-
     if (Object.keys(errors).length > 0) {
       setCompletionErrors(errors);
       return;
     }
 
     const commandResult = await assignments.runCommand(completionTarget.id, "complete", payload);
+    if (!mounted.current) return;
     if (!commandResult.succeeded) {
       setCompletionErrors(flattenServerFieldErrors(commandResult.errors));
       return;
@@ -533,6 +506,7 @@ export function AssignmentScreen({
     if (!cancelTarget) return;
 
     const commandResult = await assignments.runCommand(cancelTarget.id, "cancel", undefined, payload);
+    if (!mounted.current) return;
     if (!commandResult.succeeded) {
       setCancelErrors(flattenServerFieldErrors(commandResult.errors));
       return;
@@ -540,16 +514,16 @@ export function AssignmentScreen({
 
     setCancelTarget(null);
     setCancelErrors({});
-    await onRefreshRequests();
+    try { await onRefreshRequests(); } catch { if (mounted.current) onNotify("Отмена сохранена. Обновите список заявок позже."); }
   }
 
   function saveDraft() {
     if (!selectedEmployee || !selectedRoute) {
       onNotify("Выберите сотрудника и маршрут перед сохранением черновика.");
-      return;
+      return false;
     }
 
-    setDrafts((current) => [
+    const nextDrafts = [
       {
         id: createLocalDraftId(),
         title: selectedRequest?.title || "Новая заявка на обход",
@@ -564,12 +538,18 @@ export function AssignmentScreen({
         requestId: selectedRequest?.id,
         changedAt: new Intl.DateTimeFormat("ru-RU", { day: "2-digit", hour: "2-digit", minute: "2-digit", month: "2-digit" }).format(new Date()),
       },
-      ...current.slice(0, 3),
-    ]);
+      ...drafts,
+    ];
+    if (!persistDrafts(nextDrafts)) return false;
     onNotify("Черновик назначения сохранен локально.");
+    return true;
   }
 
   function openDraft(draft: LocalDraft) {
+    if (!canManage) { setPreviewDraft(structuredClone(draft)); return; }
+    if (!employees.some(item => item.id === draft.employeeId) || !routes.some(item => item.id === draft.routeId) || !parseDateKey(draft.plannedDate) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.plannedStart)) {
+      setRepairDraft(structuredClone(draft)); return;
+    }
     onSelectEmployee(draft.employeeId);
     onSelectRoute(draft.routeId);
     setPlannedDate(draft.plannedDate);
@@ -577,31 +557,31 @@ export function AssignmentScreen({
     setPriority(draft.priority);
     setComment(draft.comment);
     setSelectedRequestId(draft.requestId ?? "");
-    setRequestModalOpen(true);
+    setRequestError(""); setRequestModalOpen(true);
   }
 
   function deleteDraft(draftId: string) {
-    setDrafts((current) => current.filter((draft) => draft.id !== draftId));
-    onNotify("Черновик удален.");
+    if (persistDrafts(drafts.filter(draft => draft.id !== draftId))) onNotify("Черновик удален.");
   }
 
-  useEffect(() => {
-    localStorage.setItem(ASSIGNMENT_DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
-  }, [drafts]);
+  function persistDrafts(next: LocalDraft[]) {
+    if (!canManage) return false;
+    try { setDraftState(writeAssignmentDrafts(draftStorageKey, draftState.raw, next)); draftWriteError.current = ""; return true; }
+    catch (error) {
+      if (error instanceof AssignmentDraftConflictError) refreshDrafts();
+      draftWriteError.current = error instanceof Error ? error.message : "Не удалось сохранить черновик."; onNotify(draftWriteError.current); return false;
+    }
+  }
+
+  function refreshDrafts() {
+    const next = readAssignmentDrafts(draftStorageKey);
+    setDraftState(previous => next.error && next.raw === null ? { ...previous, error: next.error } : next);
+  }
 
   return (
-    <div className="assign-am-screen">
-      <FilterBar ariaLabel="Фильтры назначения обхода" className="assign-am-filters assign-am-search-only">
-        <label className="assign-am-search">
-          <input
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            aria-label="Поиск сотрудника для назначения обхода"
-            placeholder="Поиск сотрудника по ФИО, должности или подразделению..."
-            value={search}
-          />
-          <Search size={19} />
-        </label>
-      </FilterBar>
+    <div className="assign-am-screen assignment-workspace-v2">
+      <PageHeader title="Назначения" description="Распределение сотрудников по маршрутам"
+        actions={<Button variant="ghost" disabled={!selectedRoute} onClick={() => setRoutePreviewOpen(true)}>Проверить маршрут</Button>} />
 
       <AssignmentSelectionBar
         canCreate={canManage && requestListStatus !== "error"}
@@ -624,6 +604,8 @@ export function AssignmentScreen({
 
       <section className="assign-am-workspace">
         <EmployeesPanel
+          search={search}
+          onSearchChange={setSearch}
           employees={visibleEmployees}
           errorMessage={assignments.referenceErrorMessage}
           onOpenPicker={() => setEmployeePickerOpen(true)}
@@ -637,6 +619,7 @@ export function AssignmentScreen({
           totalEmployees={employees.length}
         />
         <RoutesPanel
+          routeDirectory={routeDirectory}
           errorMessage={assignments.referenceErrorMessage}
           onNavigate={onNavigate}
           onRetry={assignments.refreshReferenceData}
@@ -658,7 +641,20 @@ export function AssignmentScreen({
         />
       </section>
 
-      <section className="assign-am-bottom">
+      <section className="assign-am-bottom assignment-bottom-tabs">
+        <div className="assignment-tab-list" role="tablist" aria-label="Состояние назначений">
+          {[{ id: "active", title: "Текущие назначения", count: activeAssignments.length }, { id: "drafts", title: "Черновики", count: draftState.error ? "?" : drafts.length }, { id: "conflicts", title: "Конфликты", count: conflicts.length }].map((tab, index, tabs) => (
+            <button key={tab.id} id={`assignment-tab-${tab.id}`} type="button" role="tab" aria-selected={bottomTab === tab.id}
+              aria-controls={`assignment-panel-${tab.id}`} tabIndex={bottomTab === tab.id ? 0 : -1}
+              onClick={() => setBottomTab(tab.id)} onKeyDown={(event) => {
+                const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+                if (next < 0) return;
+                event.preventDefault(); setBottomTab(tabs[next].id);
+                document.getElementById(`assignment-tab-${tabs[next].id}`)?.focus();
+              }}>{tab.title}<span>{tab.count}</span></button>
+          ))}
+        </div>
+        <div role="tabpanel" id="assignment-panel-active" aria-labelledby="assignment-tab-active" hidden={bottomTab !== "active"} tabIndex={0}>
         <ActiveAssignmentsCard
           assignments={screenAssignments}
           canManage={canManage}
@@ -680,8 +676,10 @@ export function AssignmentScreen({
           savingAssignmentId={assignments.savingAssignmentId}
           status={dataSourceMode === "api" ? assignments.listStatus : "ready"}
         />
+        </div>
         {completionTarget ? (
           <CompleteAssignmentModal
+            key={completionTarget.id}
             assignment={completionTarget}
             errors={completionErrors}
             onClose={() => {
@@ -695,6 +693,7 @@ export function AssignmentScreen({
         ) : null}
         {cancelTarget ? (
           <CancelAssignmentModal
+            key={cancelTarget.id}
             assignment={cancelTarget}
             errors={cancelErrors}
             onClose={() => {
@@ -705,16 +704,29 @@ export function AssignmentScreen({
             saving={assignments.savingAssignmentId === cancelTarget.id}
           />
         ) : null}
-        <DraftsCard drafts={drafts} onDelete={deleteDraft} onOpen={openDraft} />
-        <ConflictsCard conflicts={conflicts} />
+        <div role="tabpanel" id="assignment-panel-drafts" aria-labelledby="assignment-tab-drafts" hidden={bottomTab !== "drafts"} tabIndex={0}><DraftsCard result={draftState} canManage={canManage} onDelete={deleteDraft} onOpen={openDraft} onReload={refreshDrafts} onRecover={canRecoverLegacyDrafts && canManage ? () => setRecoveryOpen(true) : undefined} /></div>
+        <div role="tabpanel" id="assignment-panel-conflicts" aria-labelledby="assignment-tab-conflicts" hidden={bottomTab !== "conflicts"} tabIndex={0}><ConflictsCard conflicts={conflicts} /></div>
       </section>
+      {previewDraft ? <AssignmentDraftPreview draft={previewDraft} onClose={() => setPreviewDraft(null)} /> : null}
+      {repairDraft && canManage ? <AssignmentDraftRecoveryEditor source={repairDraft} requireExplicitSelection={false} employees={employees} routes={routes} onClose={() => setRepairDraft(null)} onRecover={draft => {
+        if (!drafts.some(item => item.id === draft.id) && !persistDrafts([draft, ...drafts])) throw new Error(draftWriteError.current);
+        setRepairDraft(null); onNotify("Копия добавлена в ваши черновики.");
+      }} /> : null}
+      {recoveryOpen && canRecoverLegacyDrafts && canManage ? <LegacyDraftRecoveryModal employees={employees} routes={routes} onClose={() => setRecoveryOpen(false)} onRecover={draft => {
+        if (!drafts.some(item => item.id === draft.id) && !persistDrafts([draft, ...drafts])) throw new Error(draftWriteError.current);
+        setRecoveryOpen(false); setBottomTab("drafts"); onNotify("Копия добавлена в ваши черновики.");
+      }} /> : null}
+      {routePreviewOpen && selectedRoute ? <ModalShell className="assignment-route-preview" title={selectedRoute.name} subtitle="Точки маршрута в порядке прохождения" onClose={() => setRoutePreviewOpen(false)}>
+        <AssignmentRoutePoints points={routeDirectory.find((route) => route.id === selectedRoute.id)?.points} />
+      </ModalShell> : null}
       {requestModalOpen ? (
-        <RequestModal
+        <AssignmentRequestModal
+          routeDirectory={routeDirectory}
           canManage={canManage}
           comment={comment}
           employee={selectedEmployee}
           favoriteEmployees={favoriteEmployees}
-          fieldErrors={assignments.fieldErrors}
+          fieldErrors={{ ...assignments.fieldErrors, ...(requestError ? { form: [requestError] } : {}) }}
           hasConflict={hasConflict}
           isCreating={isCreatingRequest || assignments.isCreating}
           notificationText={notificationText}
@@ -724,7 +736,7 @@ export function AssignmentScreen({
           onPlannedDateChange={setPlannedDate}
           onPlannedStartChange={setPlannedStart}
           onPriorityChange={setPriority}
-          onSaveDraft={saveDraft}
+          onSaveDraft={() => { if (!saveDraft()) return false; setRequestModalOpen(false); setBottomTab("drafts"); return true; }}
           onSelectEmployee={onSelectEmployee}
           onSelectRequest={setSelectedRequestId}
           onSelectRoute={onSelectRoute}
@@ -751,7 +763,6 @@ export function AssignmentScreen({
       {shiftSettingsOpen ? (
         <ShiftSettingsModal
           onClose={() => setShiftSettingsOpen(false)}
-          onReset={() => handleShiftSettingsSave(defaultAssignmentShiftSettings)}
           onSave={handleShiftSettingsSave}
           value={shiftSettings}
         />
@@ -759,1024 +770,3 @@ export function AssignmentScreen({
     </div>
   );
 }
-
-function PeriodFilter({
-  dateFrom,
-  dateTo,
-  draftFrom,
-  draftTo,
-  isOpen,
-  onApply,
-  onClear,
-  onDraftFromChange,
-  onDraftToChange,
-  onOpen,
-}: {
-  dateFrom: string;
-  dateTo: string;
-  draftFrom: string;
-  draftTo: string;
-  isOpen: boolean;
-  onApply: () => void;
-  onClear: () => void;
-  onDraftFromChange: (value: string) => void;
-  onDraftToChange: (value: string) => void;
-  onOpen: () => void;
-}) {
-  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(parseDateKey(draftFrom || draftTo) ?? new Date()));
-  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setCalendarMonth(startOfMonth(parseDateKey(draftFrom || draftTo) ?? new Date()));
-    }
-  }, [draftFrom, draftTo, isOpen]);
-
-  function selectDate(value: string) {
-    if (!draftFrom || draftTo) {
-      onDraftFromChange(value);
-      onDraftToChange("");
-      return;
-    }
-
-    const range = normalizeDateRange(draftFrom, value);
-    onDraftFromChange(range.from);
-    onDraftToChange(range.to);
-  }
-
-  return (
-    <div className="assign-am-period-filter">
-      <span>
-        <small>Период</small>
-        <Button className="assign-am-period-button" onClick={onOpen} variant="ghost">
-          <strong>{formatPeriodLabel(dateFrom, dateTo)}</strong>
-          <em>Выбрать</em>
-        </Button>
-      </span>
-      <CalendarDays size={17} />
-      {isOpen ? (
-        <div className="assign-am-period-popover">
-          <div className="date-range-calendar-head">
-            <IconButton
-              label="Предыдущий месяц"
-              className="icon-button"
-              onClick={() => setCalendarMonth((current) => addMonths(current, -1))}
-            >
-              ‹
-            </IconButton>
-            <strong>{formatMonthLabel(calendarMonth)}</strong>
-            <IconButton
-              label="Следующий месяц"
-              className="icon-button"
-              onClick={() => setCalendarMonth((current) => addMonths(current, 1))}
-            >
-              ›
-            </IconButton>
-          </div>
-          <div className="date-range-calendar-weekdays" aria-hidden="true">
-            {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="date-range-calendar-grid">
-            {calendarDays.map((day) => (
-              <button
-                aria-label={formatDate(day.value)}
-                className={getCalendarDayClass(day.value, day.inCurrentMonth, draftFrom, draftTo)}
-                key={day.value}
-                onClick={() => selectDate(day.value)}
-                type="button"
-              >
-                {day.date.getDate()}
-              </button>
-            ))}
-          </div>
-          <div className="date-range-summary">
-            <span>{formatPeriodLabel(draftFrom, draftTo)}</span>
-          </div>
-          <div className="date-range-actions">
-            <Button onClick={onClear} variant="ghost">Очистить</Button>
-            <Button onClick={onApply} variant="primary">Применить</Button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function isAssignmentOnDate(assignment: ActivePatrol, date: string) {
-  if (!date) return false;
-
-  const source = assignment.plannedAtIso ?? assignment.plannedAt;
-  if (!source) return false;
-
-  const parsed = new Date(source);
-  return !Number.isNaN(parsed.getTime()) && toDateInput(parsed) === date;
-}
-
-function isAssignableDirectoryEmployee(employee: EmployeeDirectoryItem) {
-  return !/^(?:\u041e\u0444\u043b\u0430\u0439\u043d|\u041e\u0442\u043f\u0443\u0441\u043a|\u0410\u0440\u0445\u0438\u0432|\u041d\u0435\u0430\u043a\u0442\u0438\u0432\u0435\u043d|\u0423\u0434\u0430\u043b\u0435\u043d)/i.test(employee.status.trim());
-}
-
-function FilterBox({ icon: Icon, label, value }: { icon?: AssignmentIconComponent; label: string; value: string }) {
-  return (
-    <button className="assign-am-filter" type="button">
-      <span>
-        <small>{label}</small>
-        <strong>{value}</strong>
-      </span>
-      {Icon ? <Icon size={17} /> : <span aria-hidden="true">⌄</span>}
-    </button>
-  );
-}
-
-function EmployeesPanel({
-  employees,
-  errorMessage,
-  status,
-  selectedEmployeeId,
-  totalEmployees,
-  onOpenPicker,
-  onOpenShiftSettings,
-  onNavigate,
-  onRetry,
-  onSelectEmployee,
-  shiftSettings,
-}: {
-  employees: Employee[];
-  errorMessage?: string;
-  status: DataSourceStatus;
-  selectedEmployeeId?: string;
-  totalEmployees: number;
-  onOpenPicker: () => void;
-  onOpenShiftSettings: () => void;
-  onNavigate: (screen: ScreenId) => void;
-  onRetry: () => void | Promise<void>;
-  onSelectEmployee: (id: string) => void;
-  shiftSettings: ShiftTimeSettings;
-}) {
-  return (
-    <Panel className="assign-am-panel">
-      <PanelHeader actionLabel="Настроить избранных" count={employees.length} icon={UserPlus} onAction={onOpenPicker} title="Сотрудники" />
-      <div className="assign-am-shift-settings-bar">
-        <span>
-          День {formatShiftRange(shiftSettings.dayStart, shiftSettings.dayEnd)} · Ночь {formatShiftRange(shiftSettings.nightStart, shiftSettings.nightEnd)}
-        </span>
-        <button onClick={onOpenShiftSettings} type="button">
-          <SlidersHorizontal size={16} />
-          Смены
-        </button>
-      </div>
-      {employees.length ? (
-        <div className="assign-am-list">
-          {employees.map((employee) => {
-            const active = selectedEmployeeId === employee.id;
-            return (
-              <button className={`assign-am-employee ${active ? "active" : ""}`} key={employee.id} onClick={() => onSelectEmployee(employee.id)} type="button">
-                <Avatar name={employee.name} />
-                <div className="assign-am-employee-main">
-                  <strong>{employee.name}</strong>
-                  <span>{employee.role}</span>
-                  <small>Зона: {employee.zone}</small>
-                </div>
-                <div className="assign-am-shift">
-                  <strong>{shiftText(employee.shift)}</strong>
-                  <span>{shiftTime(employee.shift, shiftSettings)}</span>
-                  <Wifi size={15} />
-                </div>
-                <span className="assign-am-radio" />
-              </button>
-            );
-          })}
-        </div>
-      ) : status === "loading" ? (
-        <EmptyPanel
-          description="Получаем список сотрудников из backend API."
-          title="Сотрудники загружаются"
-        />
-      ) : status === "error" ? (
-        <EmptyPanel
-          actionLabel="Повторить загрузку"
-          description={errorMessage || "Проверьте backend API и повторите загрузку справочника сотрудников."}
-          onAction={onRetry}
-          title="Сотрудники API не загружены"
-        />
-      ) : (
-        <EmptyPanel
-          actionLabel={totalEmployees > 0 ? "Настроить избранных" : "Открыть сотрудников"}
-          description={totalEmployees > 0 ? "Измените фильтры или настройте избранных сотрудников для быстрого доступа." : "Список будет загружен из справочника сотрудников."}
-          onAction={totalEmployees > 0 ? onOpenPicker : () => onNavigate("employees")}
-          title={totalEmployees > 0 ? "Сотрудники не найдены" : "Сотрудников нет"}
-        />
-      )}
-    </Panel>
-  );
-}
-
-function AssignmentEmployeePickerModal({
-  employees,
-  favoriteEmployeeIds,
-  onChange,
-  onClose,
-}: {
-  employees: Employee[];
-  favoriteEmployeeIds: string[];
-  onChange: (ids: string[]) => void;
-  onClose: () => void;
-}) {
-  const [search, setSearch] = useState("");
-  const favoriteSet = useMemo(() => new Set(favoriteEmployeeIds), [favoriteEmployeeIds]);
-  const normalizedSearch = search.trim().toLowerCase();
-  const visibleEmployees = employees
-    .filter((employee) => !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch))
-    .slice(0, 80);
-  function toggleEmployee(employeeId: string) {
-    if (favoriteSet.has(employeeId)) {
-      onChange(favoriteEmployeeIds.filter((id) => id !== employeeId));
-      return;
-    }
-
-    onChange([...favoriteEmployeeIds, employeeId]);
-  }
-
-  return createPortal(
-    <ModalShell
-      className="assign-am-employee-picker"
-      onClose={onClose}
-      subtitle="Избранные сотрудники поднимаются выше в списке назначений. Общий справочник не меняется."
-      title="Избранные сотрудники для назначений"
-    >
-        <div className="assign-am-picker-toolbar">
-          <label>
-            <span>Поиск сотрудника</span>
-            <input aria-label="Поиск сотрудников в избранном" value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder="ФИО, должность, подразделение" />
-          </label>
-          <strong aria-live="polite">Показано {visibleEmployees.length} из {employees.length} · добавлено {favoriteEmployeeIds.length}</strong>
-        </div>
-        <div className="assign-am-picker-list">
-          {visibleEmployees.length ? visibleEmployees.map((employee) => {
-              const selected = favoriteSet.has(employee.id);
-              return (
-                <button
-                  aria-label={`${employee.name}. ${employee.role}. ${employee.zone}. ${selected ? "Добавлен" : "Добавить"}`}
-                  aria-pressed={selected}
-                  className={`assign-am-picker-employee ${selected ? "selected" : ""}`}
-                  key={employee.id}
-                  onClick={() => toggleEmployee(employee.id)}
-                  type="button"
-                >
-                  <Avatar name={employee.name} />
-                  <span>
-                    <strong title={employee.name}>{employee.name}</strong>
-                    <small title={employee.role}>{employee.role}</small>
-                    <em title={employee.zone}>{employee.zone}</em>
-                  </span>
-                  <b>{selected ? "Добавлен" : "Добавить"}</b>
-                </button>
-              );
-            }) : (
-              <div className="assign-am-picker-empty" role="status">
-                <strong>{employees.length === 0 ? "Сотрудников нет" : "Сотрудники не найдены"}</strong>
-                <span>{employees.length === 0 ? "Справочник сотрудников пока пуст." : "Измените поисковый запрос, чтобы увидеть сотрудников."}</span>
-                {normalizedSearch ? <Button onClick={() => setSearch("")} variant="ghost">Очистить поиск</Button> : null}
-              </div>
-            )}
-        </div>
-        <footer>
-          <Button onClick={() => onChange([])} variant="ghost">Очистить список</Button>
-          <Button onClick={onClose} variant="primary">Готово</Button>
-        </footer>
-    </ModalShell>,
-    document.body,
-  );
-}
-
-function ShiftSettingsModal({
-  onClose,
-  onReset,
-  onSave,
-  value,
-}: {
-  onClose: () => void;
-  onReset: () => void;
-  onSave: (settings: ShiftTimeSettings) => void;
-  value: ShiftTimeSettings;
-}) {
-  const [draft, setDraft] = useState<ShiftTimeSettings>(value);
-
-  function update(field: keyof ShiftTimeSettings, nextValue: string) {
-    setDraft((current) => ({ ...current, [field]: nextValue }));
-  }
-
-  return (
-    <ModalShell
-      className="assign-am-shift-modal"
-      onClose={onClose}
-      subtitle="Время применяется ко всем сотрудникам в списке назначений."
-      title="Настройка смен"
-    >
-        <div className="assign-am-shift-modal-grid">
-          <fieldset>
-            <legend>Дневная смена</legend>
-            <label>
-              <span>Начало</span>
-              <input
-                onChange={(event) => update("dayStart", event.currentTarget.value)}
-                onInput={(event) => update("dayStart", event.currentTarget.value)}
-                type="time"
-                value={draft.dayStart}
-              />
-            </label>
-            <label>
-              <span>Окончание</span>
-              <input
-                onChange={(event) => update("dayEnd", event.currentTarget.value)}
-                onInput={(event) => update("dayEnd", event.currentTarget.value)}
-                type="time"
-                value={draft.dayEnd}
-              />
-            </label>
-          </fieldset>
-          <fieldset>
-            <legend>Ночная смена</legend>
-            <label>
-              <span>Начало</span>
-              <input
-                onChange={(event) => update("nightStart", event.currentTarget.value)}
-                onInput={(event) => update("nightStart", event.currentTarget.value)}
-                type="time"
-                value={draft.nightStart}
-              />
-            </label>
-            <label>
-              <span>Окончание</span>
-              <input
-                onChange={(event) => update("nightEnd", event.currentTarget.value)}
-                onInput={(event) => update("nightEnd", event.currentTarget.value)}
-                type="time"
-                value={draft.nightEnd}
-              />
-            </label>
-          </fieldset>
-        </div>
-        <footer>
-          <Button onClick={onReset} variant="ghost">По умолчанию</Button>
-          <span>
-            День {formatShiftRange(draft.dayStart, draft.dayEnd)} · Ночь {formatShiftRange(draft.nightStart, draft.nightEnd)}
-          </span>
-          <Button onClick={() => onSave(draft)} variant="primary">Сохранить</Button>
-        </footer>
-    </ModalShell>
-  );
-}
-
-function RoutesPanel({
-  errorMessage,
-  status,
-  routes,
-  selectedRouteId,
-  onNavigate,
-  onRetry,
-  onSelectRoute,
-}: {
-  errorMessage?: string;
-  status: DataSourceStatus;
-  routes: RouteOption[];
-  selectedRouteId?: string;
-  onNavigate: (screen: ScreenId) => void;
-  onRetry: () => void | Promise<void>;
-  onSelectRoute: (id: string) => void;
-}) {
-  return (
-    <Panel className="assign-am-panel">
-      <PanelHeader count={routes.length} icon={Route} title="Доступные маршруты" />
-      {routes.length ? (
-        <div className="assign-am-list routes">
-          {routes.map((route) => {
-            const active = selectedRouteId === route.id;
-            return (
-              <button className={`assign-am-route ${active ? "active" : ""}`} key={route.id} onClick={() => onSelectRoute(route.id)} type="button">
-                <div>
-                  <strong>{route.name}</strong>
-                  <div className="assign-am-tags">
-                    <Tag>{route.zone}</Tag>
-                    <Tag>{priorityText(route.priority)}</Tag>
-                  </div>
-                  <div className="assign-am-route-meta">
-                    <span><MapPin size={14} />{route.points} точки</span>
-                    <span><Clock3 size={14} />{route.duration}</span>
-                    <span><ListChecks size={14} />{route.loadedEmployees}/{route.requiredEmployees}</span>
-                  </div>
-                </div>
-                <span className="assign-am-radio" />
-              </button>
-            );
-          })}
-        </div>
-      ) : status === "loading" ? (
-        <EmptyPanel
-          description="Получаем список маршрутов из backend API."
-          title="Маршруты загружаются"
-        />
-      ) : status === "error" ? (
-        <EmptyPanel
-          actionLabel="Повторить загрузку"
-          description={errorMessage || "Проверьте backend API и повторите загрузку справочника маршрутов."}
-          onAction={onRetry}
-          title="Маршруты API не загружены"
-        />
-      ) : (
-        <EmptyPanel
-          actionLabel="Открыть маршруты"
-          description="Маршруты появятся после заполнения справочника маршрутов и точек."
-          onAction={() => onNavigate("routes")}
-          title="Маршрутов для назначения нет"
-        />
-      )}
-    </Panel>
-  );
-}
-
-function EmployeeHistoryPanel({
-  assignments,
-  canManage,
-  employee,
-  onCancelAssignment,
-  onOpenEmployeePicker,
-  onOpenRequest,
-  onOpenRequestById,
-  requests,
-  savingAssignmentId,
-}: {
-  assignments: ActivePatrol[];
-  canManage: boolean;
-  employee?: Employee;
-  onCancelAssignment: (assignmentId: string) => void | Promise<void>;
-  onOpenEmployeePicker: () => void;
-  onOpenRequest: () => void;
-  onOpenRequestById: (requestId: string) => void;
-  requests: ServiceRequest[];
-  savingAssignmentId?: string;
-}) {
-  const employeeAssignments = employee
-    ? assignments.filter((assignment) => assignment.employeeId === employee.id || assignment.employee === employee.name)
-    : [];
-  const employeeRequests = employee
-    ? requests.filter((request) => request.employeeId === employee.id || request.employee === employee.name)
-    : [];
-  const historyCutoff = Date.now() - HISTORY_WINDOW_MS;
-  const recentAssignments = employeeAssignments.filter((assignment) =>
-    createAssignmentHistoryEvents(assignment).some((event) => event.sortAt >= historyCutoff),
-  );
-  const recentRequests = employeeRequests.filter((request) => parseRequestScheduledAt(request) >= historyCutoff);
-  const activeAssignments = employeeAssignments.filter(isAssignmentCurrent);
-  const allAssignmentRequestIds = new Set(employeeAssignments.map((assignment) => assignment.patrolRequestId).filter(Boolean));
-  const activeRequestItems = [
-    ...activeAssignments.map((assignment) => {
-      const request = assignment.patrolRequestId
-        ? employeeRequests.find((item) => item.id === assignment.patrolRequestId)
-        : undefined;
-
-      return {
-        assignmentId: assignment.id,
-        id: `assignment-${assignment.id}`,
-        meta: formatAssignmentActionTime(assignment),
-        requestId: request?.id,
-        route: assignment.route,
-        status: assignmentStatusText(assignment.status),
-        title: request?.title || "Действующая заявка",
-      };
-    }),
-    ...employeeRequests
-      .filter((request) => isRequestCurrent(request) && !allAssignmentRequestIds.has(request.id))
-      .map((request) => ({
-        assignmentId: undefined,
-        id: `request-${request.id}`,
-        meta: `${formatDate(request.scheduledDate)} ${request.scheduledTime}`,
-        requestId: request.id,
-        route: request.route,
-        status: request.status,
-        title: request.title || "Заявка на обход",
-      })),
-  ].slice(0, 8);
-  const historyEvents = [
-    ...recentAssignments.flatMap((assignment) => createAssignmentHistoryEvents(assignment)),
-    ...recentRequests
-      .filter((request) => !allAssignmentRequestIds.has(request.id))
-      .map((request) => ({
-        id: `request-${request.id}`,
-        meta: `План: ${formatDate(request.scheduledDate)} ${request.scheduledTime}`,
-        route: request.route,
-        sortAt: parseRequestScheduledAt(request),
-        status: request.status,
-        title: request.title || "Заявка на обход",
-      })),
-  ].filter((event) => event.sortAt >= historyCutoff).sort((left, right) => right.sortAt - left.sortAt).slice(0, 8);
-  const routeCount = new Set([
-    ...recentAssignments.map((assignment) => assignment.route),
-    ...recentRequests.map((request) => request.route),
-  ].filter(Boolean)).size;
-
-  return (
-    <Panel className="assign-am-panel assign-am-history-panel">
-      <PanelHeader actionLabel="Создать заявку" count={activeRequestItems.length} icon={Plus} onAction={onOpenRequest} title="История сотрудника" />
-      {employee ? (
-        <>
-          <div className="assign-am-history-profile">
-            <Avatar name={employee.name} />
-            <div>
-              <strong>{employee.name}</strong>
-              <span>{employee.role}</span>
-              <small>Зона: {employee.zone}</small>
-            </div>
-          </div>
-          <div className="assign-am-history-stats">
-            <span><strong>{activeRequestItems.length}</strong><small>действующих</small></span>
-            <span><strong>{recentRequests.length}</strong><small>заявок за 7 дней</small></span>
-            <span><strong>{routeCount}</strong><small>маршрутов за 7 дней</small></span>
-          </div>
-          {activeRequestItems.length ? (
-            <div className="assign-am-history-actions">
-              <div className="assign-am-history-section-title">
-                <strong>Действующие заявки</strong>
-                <span>{activeRequestItems.length}</span>
-              </div>
-              {activeRequestItems.map((item) => (
-                <article className="assign-am-history-action-card" key={item.id}>
-                  <div>
-                    <span>{item.title}</span>
-                    <strong>{item.route || "Маршрут не указан"}</strong>
-                    <small>{item.status} · {item.meta}</small>
-                  </div>
-                  <div className="assign-am-history-action-buttons">
-                    {item.requestId ? (
-                      <button className="assign-am-mini-button" onClick={() => onOpenRequestById(item.requestId!)} type="button">
-                        Просмотр
-                      </button>
-                    ) : null}
-                    {item.assignmentId ? (
-                      <button
-                        className="assign-am-mini-button danger"
-                        disabled={!canManage || savingAssignmentId === item.assignmentId}
-                        onClick={() => void onCancelAssignment(item.assignmentId!)}
-                        title={canManage ? "Отменить назначение на обход" : "Недостаточно прав для отмены"}
-                        type="button"
-                      >
-                        {savingAssignmentId === item.assignmentId ? "Отмена..." : "Отменить"}
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-          {historyEvents.length ? (
-            <div className="assign-am-history-list">
-              <div className="assign-am-history-section-title">
-                <strong>События за последние 7 дней</strong>
-                <span>{historyEvents.length}</span>
-              </div>
-              {historyEvents.map((event) => (
-                <div className="assign-am-history-event" key={event.id}>
-                  <div className="assign-am-history-event-main">
-                    <span>{event.title}</span>
-                    <strong>{event.route || "Маршрут не указан"}</strong>
-                  </div>
-                  <div className="assign-am-history-event-meta">
-                    <span>{event.status}</span>
-                    {event.meta.split(" · ").map((part) => (
-                      <small key={`${event.id}-${part}`}>{part}</small>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyPanel
-              actionLabel="Создать заявку"
-              description="По выбранному сотруднику пока нет заявок и активных обходов в текущем контуре."
-              onAction={onOpenRequest}
-              title="История пуста"
-            />
-          )}
-        </>
-      ) : (
-        <EmptyPanel
-          actionLabel="Настроить сотрудников"
-          description="Выберите сотрудника из левой панели, чтобы увидеть его заявки, маршруты и активные назначения."
-          onAction={onOpenEmployeePicker}
-          title="Сотрудник не выбран"
-        />
-      )}
-    </Panel>
-  );
-}
-
-function RequestModal({
-  onClose,
-  onSelectRoute,
-  routes,
-  selectedRouteId,
-  ...requestProps
-}: RequestPanelProps & {
-  onClose: () => void;
-  onSelectRoute: (id: string) => void;
-  routes: RouteOption[];
-  selectedRouteId?: string;
-}) {
-  return createPortal(
-    <ModalShell
-      className="assign-am-request-modal"
-      onClose={onClose}
-      subtitle="Выберите маршрут и заполните параметры назначения в одном окне."
-      title="Создание заявки на обход"
-    >
-        <div className="assign-am-request-modal-body">
-          <section className="assign-am-modal-route-picker">
-            <PanelHeader count={routes.length} icon={Route} title="Маршрут" />
-            {routes.length ? (
-              <div className="assign-am-list routes">
-                {routes.map((route) => {
-                  const active = selectedRouteId === route.id;
-                  return (
-                    <button className={`assign-am-route ${active ? "active" : ""}`} key={route.id} onClick={() => onSelectRoute(route.id)} type="button">
-                      <div>
-                        <strong>{route.name}</strong>
-                        <div className="assign-am-tags">
-                          <Tag>{route.zone}</Tag>
-                          <Tag>{priorityText(route.priority)}</Tag>
-                        </div>
-                        <div className="assign-am-route-meta">
-                          <span><MapPin size={14} />{route.points} точки</span>
-                          <span><Clock3 size={14} />{route.duration}</span>
-                          <span><ListChecks size={14} />{route.loadedEmployees}/{route.requiredEmployees}</span>
-                        </div>
-                      </div>
-                      <span className="assign-am-radio" />
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyPanel description="Маршруты появятся после загрузки справочника обхода." title="Маршрутов нет" />
-            )}
-          </section>
-          <RequestPanel {...requestProps} />
-        </div>
-    </ModalShell>,
-    document.body,
-  );
-}
-
-function RequestPanel({
-  canManage,
-  comment,
-  employee,
-  favoriteEmployees,
-  fieldErrors,
-  hasConflict,
-  isCreating,
-  notificationText,
-  onAssign,
-  onCommentChange,
-  onPlannedDateChange,
-  onPlannedStartChange,
-  onPriorityChange,
-  onSaveDraft,
-  onSelectEmployee,
-  onSelectRequest,
-  plannedDate,
-  plannedStart,
-  priority,
-  requestListStatus,
-  requests,
-  route,
-  selectedRequestId,
-  shiftSettings,
-}: RequestPanelProps) {
-  const disabled = !canManage || !employee || !route || requestListStatus === "error" || isCreating;
-
-  return (
-    <section className="assign-am-panel request">
-      <PanelHeader icon={FileText} title="Заявка на обход территории" />
-      <div className="assign-am-selected">
-        <SummaryBlock label="Сотрудник">
-          {employee ? (
-            <>
-              <Avatar name={employee.name} />
-              <div>
-                <strong>{employee.name}</strong>
-                <span>{employee.role}</span>
-              </div>
-              <em>{shiftText(employee.shift)}<br />{shiftTime(employee.shift, shiftSettings)}</em>
-            </>
-          ) : (
-            <span>Выберите сотрудника</span>
-          )}
-        </SummaryBlock>
-        <FavoriteEmployeeQuickPicker
-          employees={favoriteEmployees}
-          onSelect={onSelectEmployee}
-          selectedEmployeeId={employee?.id}
-          shiftSettings={shiftSettings}
-        />
-        <SummaryBlock label="Маршрут">
-          {route ? (
-            <div>
-              <strong>{route.name}</strong>
-            </div>
-          ) : (
-            <span>Выберите маршрут</span>
-          )}
-        </SummaryBlock>
-      </div>
-
-      <label className="assign-am-field wide">
-        <span>Основание (необязательно)</span>
-        <select onChange={(event) => onSelectRequest(event.currentTarget.value)} value={selectedRequestId}>
-          <option value="">Создать новую заявку</option>
-          {requests.map((request) => (
-            <option key={request.id} value={request.id}>
-              {request.title} / {request.route}
-            </option>
-          ))}
-        </select>
-        {fieldErrors.patrolRequestId ? <small>{fieldErrors.patrolRequestId[0]}</small> : null}
-      </label>
-
-      <div className="assign-am-time-stack">
-        <DateTimeField
-          dateValue={plannedDate}
-          label="Планируемое время начала"
-          onDateChange={onPlannedDateChange}
-          onTimeChange={onPlannedStartChange}
-          timeValue={plannedStart}
-        />
-      </div>
-      {fieldErrors.plannedAt ? <div className="field-error">{fieldErrors.plannedAt[0]}</div> : null}
-
-      <div className="assign-am-date-grid single">
-        <label className="assign-am-field">
-          <span>Приоритет</span>
-          <select onChange={(event) => onPriorityChange(event.currentTarget.value as "high" | "medium" | "low")} value={priority}>
-            <option value="high">Высокий</option>
-            <option value="medium">Средний</option>
-            <option value="low">Низкий</option>
-          </select>
-        </label>
-      </div>
-
-      {notificationText ? (
-        <div className="assign-am-notification-preview">
-          <strong>Сообщение сотруднику</strong>
-          <span>{notificationText}</span>
-        </div>
-      ) : null}
-
-      <label className="assign-am-field wide">
-        <span>Комментарий необязательно</span>
-        <textarea
-          maxLength={300}
-          onChange={(event) => onCommentChange(event.currentTarget.value)}
-          placeholder="Укажите особенности обхода, зоны внимания, доп. инструкции..."
-          value={comment}
-        />
-        <small>{comment.length} / 300</small>
-      </label>
-
-      {hasConflict ? (
-        <div className="assign-am-warning">
-          <AlertTriangle size={18} />
-          Потенциальный конфликт: сотрудник или маршрут уже загружен в выбранную смену.
-        </div>
-      ) : null}
-
-      <div className="assign-am-form-actions">
-        <Button onClick={onSaveDraft} variant="ghost">Сохранить как черновик</Button>
-        <Button disabled={disabled} onClick={() => void onAssign()} variant="primary">
-          <Send size={17} />
-          {isCreating ? "Отправка..." : "Отправить заявку"}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function FavoriteEmployeeQuickPicker({
-  employees,
-  onSelect,
-  selectedEmployeeId,
-  shiftSettings,
-}: {
-  employees: Employee[];
-  onSelect: (id: string) => void;
-  selectedEmployeeId?: string;
-  shiftSettings: ShiftTimeSettings;
-}) {
-  const selectedValue = employees.some((employee) => employee.id === selectedEmployeeId) ? selectedEmployeeId : "";
-
-  return (
-    <label className="assign-am-favorite-select">
-      <span>
-        Сотрудник из избранного
-        <small>{employees.length}</small>
-      </span>
-      <select
-        aria-label="Сотрудник из избранного списка для обходов"
-        disabled={employees.length === 0}
-        onChange={(event) => onSelect(event.currentTarget.value)}
-        value={selectedValue}
-      >
-        <option disabled value="">
-          {employees.length === 0 ? "Избранные сотрудники не настроены" : "Выберите сотрудника"}
-        </option>
-        {employees.map((employee) => (
-          <option key={employee.id} value={employee.id}>
-            {employee.name} · {shiftText(employee.shift)} · {shiftTime(employee.shift, shiftSettings)}
-          </option>
-        ))}
-      </select>
-      <small>Список формируется в разделе «Сотрудники».</small>
-    </label>
-  );
-}
-
-function ActiveAssignmentsCard({
-  assignments,
-  canManage,
-  errorMessage,
-  onRetry,
-  onRunCommand,
-  savingAssignmentId,
-  status,
-}: {
-  assignments: ActivePatrol[];
-  canManage: boolean;
-  errorMessage?: string;
-  onRetry: () => void | Promise<void>;
-  onRunCommand: (id: string, command: "start" | "cancel" | "complete") => void | Promise<unknown>;
-  savingAssignmentId?: string;
-  status: DataSourceStatus;
-}) {
-  const [openActionMenu, setOpenActionMenu] = useState<{ assignmentId: string; left: number; top: number } | null>(null);
-  const actionMenuRef = useRef<HTMLDivElement | null>(null);
-  const actionTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const currentAssignments = assignments.filter(isAssignmentCurrent);
-  const waitingCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Ожидает начала").length;
-  const inProgressCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Выполняется").length;
-
-  useEffect(() => {
-    if (!openActionMenu) return undefined;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(".patrol-active-table-actions, .patrol-active-table-action-menu")) return;
-      setOpenActionMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        actionTriggerRefs.current[openActionMenu.assignmentId]?.focus({ preventScroll: true });
-        setOpenActionMenu(null);
-      }
-    };
-    const handleViewportChange = () => setOpenActionMenu(null);
-
-    actionMenuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("scroll", handleViewportChange);
-    window.addEventListener("resize", handleViewportChange);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("scroll", handleViewportChange);
-      window.removeEventListener("resize", handleViewportChange);
-    };
-  }, [openActionMenu]);
-
-  const columns: CompactTableColumn<ActivePatrol>[] = [
-    {
-      key: "assignment",
-      header: "Назначение",
-      render: (assignment) => (
-        <span className="patrol-active-table-assignment">
-          <strong className="patrol-active-table-primary" title={assignment.employee}>{assignment.employee}</strong>
-          <span className="patrol-active-table-route" title={assignment.route}>{assignment.route}</span>
-        </span>
-      ),
-      width: "52%",
-    },
-    {
-      key: "state",
-      header: "Состояние",
-      render: (assignment) => (
-        <span className="patrol-active-table-state">
-          <span className="patrol-active-table-state-line">
-            <StatusPill value={assignment.status} />
-            <small>{formatAssignmentActionTime(assignment)}</small>
-          </span>
-          <span className="patrol-active-table-progress-line">
-            <span
-              aria-label={`Прогресс обхода ${assignment.progress}%`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={assignment.progress}
-              className="patrol-active-table-progress"
-              role="progressbar"
-            >
-              <i style={{ width: `${assignment.progress}%` }} />
-            </span>
-            <small>{assignment.progress}%</small>
-          </span>
-        </span>
-      ),
-      width: "38%",
-    },
-    {
-      key: "actions",
-      header: <span className="visually-hidden">Действия</span>,
-      render: (assignment) => {
-        const started = assignmentStatusText(assignment.status) === "Выполняется";
-        const saving = savingAssignmentId === assignment.id;
-        const menuOpen = openActionMenu?.assignmentId === assignment.id;
-        const runCommand = (command: "start" | "cancel" | "complete") => {
-          setOpenActionMenu(null);
-          void onRunCommand(assignment.id, command);
-        };
-        const toggleMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
-          if (menuOpen) {
-            setOpenActionMenu(null);
-            return;
-          }
-          const rect = event.currentTarget.getBoundingClientRect();
-          const menuWidth = 196;
-          const menuHeight = 116;
-          const gap = 6;
-          const opensUp = rect.bottom + gap + menuHeight > window.innerHeight && rect.top > menuHeight + gap;
-          setOpenActionMenu({
-            assignmentId: assignment.id,
-            left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
-            top: opensUp ? Math.max(8, rect.top - menuHeight - gap) : Math.min(rect.bottom + gap, window.innerHeight - menuHeight - 8),
-          });
-        };
-        return (
-          <div className="patrol-active-table-actions">
-            <IconButton
-              aria-expanded={menuOpen}
-              aria-haspopup="menu"
-              disabled={!canManage || saving}
-              label={`Действия по маршруту: ${assignment.route}`}
-              onClick={toggleMenu}
-              ref={(element) => { actionTriggerRefs.current[assignment.id] = element; }}
-            >
-              <MoreVertical size={18} />
-            </IconButton>
-            {menuOpen && typeof document !== "undefined" ? createPortal(
-              <div
-                className="patrol-active-table-action-menu"
-                ref={actionMenuRef}
-                role="menu"
-                style={{ left: openActionMenu.left, top: openActionMenu.top }}
-              >
-                <Button disabled={started || saving} onClick={() => runCommand("start")} role="menuitem" variant="ghost">Начать обход</Button>
-                <Button disabled={saving} onClick={() => runCommand("complete")} role="menuitem" variant="ghost">Завершить обход</Button>
-                <Button className="danger-outline" disabled={saving} onClick={() => runCommand("cancel")} role="menuitem" variant="ghost">Отменить назначение</Button>
-              </div>,
-              document.body,
-            ) : null}
-          </div>
-        );
-      },
-      width: "44px",
-    },
-  ];
-
-  return (
-    <section className="assign-am-card assign-am-current-routes-card">
-      <PanelHeader count={currentAssignments.length} icon={CheckCircle2} title="Назначенные маршруты сейчас" />
-      {status === "loading" ? (
-        <EmptyPanel description="Получаем актуальный список из backend API." title="Назначения загружаются" />
-      ) : status === "error" ? (
-        <EmptyPanel actionLabel="Повторить" description={errorMessage || "Backend API не вернул список назначений."} onAction={onRetry} title="Назначения API не загружены" />
-      ) : currentAssignments.length ? (
-        <>
-          <div className="assign-am-active-summary">
-            <span><strong>{waitingCount}</strong><small>ожидают начала</small></span>
-            <span><strong>{inProgressCount}</strong><small>выполняются</small></span>
-            <span><strong>{currentAssignments.length}</strong><small>всего активных</small></span>
-          </div>
-          <CompactTable
-            className="patrol-active-assignments-table"
-            columns={columns}
-            getRowKey={(assignment) => assignment.id}
-            rows={currentAssignments}
-          />
-        </>
-      ) : (
-        <EmptyPanel description="Назначенные маршруты появятся здесь после отправки заявки сотруднику. Отмененные и завершенные обходы в этот список не попадают." title="Текущих назначенных маршрутов нет" />
-      )}
-    </section>
-  );
-}
-
-export { mergeAssignmentSources } from "./assignmentOverlays";
-export { shouldCreateAssignmentAfterRequest } from "./assignments/assignmentUtils";

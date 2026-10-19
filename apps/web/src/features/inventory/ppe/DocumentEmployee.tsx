@@ -1,16 +1,17 @@
-import { EmployeeCombobox } from "./EmployeeCombobox";
+import { EmployeeCombobox, type EmployeeSearchProps } from "./EmployeeCombobox";
 import { CheckCircle2, UserRound } from "lucide-react";
 import type { InventoryEmployeeDto, InventoryPpeEmployeeDetailsDto, InventoryPpeNormSetDto, InventoryPpeNormRowDto } from "../../../api/contracts";
 
 const fields: Array<[keyof InventoryPpeEmployeeDetailsDto, string]> = [["gender", "Пол"], ["height", "Рост"], ["clothingSize", "Размер одежды"], ["shoeSize", "Размер обуви"], ["headSize", "Размер головы"], ["handProtectionSize", "Размер перчаток"], ["respiratorSize", "Размер СИЗОД"]];
 type Props = {
-  canSelectEmployee: boolean; editable: boolean; employees: InventoryEmployeeDto[]; employeeId: string;
+  canSelectEmployee: boolean; canSelectNorm?: boolean; canSelectDate?: boolean; editable: boolean; employees: InventoryEmployeeDto[]; employeeId: string;
   norms: InventoryPpeNormSetDto[]; normSetId: string; date: string; responsibleName: string; basis: string;
+  normSelectionId?: string; currentNormLabel?: string; normsState?: "loading" | "error" | "ready";
   employeeDetails: InventoryPpeEmployeeDetailsDto;
   onEmployee: (value: string) => void; onNorm: (value: string) => void; onDate: (value: string) => void;
   onResponsibleName: (value: string) => void; onBasis: (value: string) => void;
   onEmployeeDetails: (value: InventoryPpeEmployeeDetailsDto) => void;
-};
+} & EmployeeSearchProps;
 export function StepEmployee(p: Props) {
   const employee = p.employees.find(row => row.id === p.employeeId);
 
@@ -18,7 +19,7 @@ export function StepEmployee(p: Props) {
     <section className="ppe-ref-panel">
       <h2>Сотрудник из общей базы</h2>
       <div className="ppe-ref-fields">
-        <EmployeeCombobox employees={p.employees} value={p.employeeId} disabled={!p.canSelectEmployee} onChange={p.onEmployee} />
+        <EmployeeCombobox employees={p.employees} value={p.employeeId} disabled={!p.canSelectEmployee} onChange={p.onEmployee} onSearch={p.onSearch} onMore={p.onMore} searchLoading={p.searchLoading} hasMore={p.hasMore} />
         {employee ? <div className="ppe-employee-facts ppe-span-all"><span>Табельный №<strong>{employee.personnelNo || "—"}</strong></span><span>Подразделение<strong>{employee.department || "—"}</strong></span><span>Должность<strong>{employee.position || "—"}</strong></span></div> : null}
       </div>
       <h2>Характеристики для подбора</h2>
@@ -26,10 +27,10 @@ export function StepEmployee(p: Props) {
       <div className="ppe-ref-fields">{fields.map(([field, label]) => <label key={field}>{label}<input maxLength={field === "gender" || field === "height" ? 40 : 80} disabled={!p.editable} value={p.employeeDetails[field]} onChange={event => p.onEmployeeDetails({ ...p.employeeDetails, [field]: event.target.value })} /></label>)}</div>
       <h2>Основание выдачи</h2>
       <div className="ppe-ref-fields">
-        <label>Дата документа<input disabled={!p.editable} type="date" value={p.date} onChange={event => p.onDate(event.target.value)} /></label>
+        <label>Дата документа<input disabled={!p.editable || (p.canSelectDate ?? p.canSelectNorm) === false} type="date" value={p.date} onChange={event => p.onDate(event.target.value)} /></label>
         <label>Ответственный<input disabled={!p.editable} maxLength={240} value={p.responsibleName} onChange={event => p.onResponsibleName(event.target.value)} /></label>
-        <label className="ppe-span-all">Нормативный набор<select disabled={!p.editable} value={p.normSetId} onChange={event => p.onNorm(event.target.value)}><option value="">Выберите применимую норму</option>{p.norms.map(norm => <option key={norm.id} value={norm.id}>{norm.positionName} · {norm.versionName}</option>)}</select></label>
-        {employee && !p.norms.length ? <p className="ppe-span-all ppe-ref-muted">Нет опубликованной нормы для этого сотрудника на выбранную дату. Проверьте применимость нормы в настройках СИЗ.</p> : null}
+        <label className="ppe-span-all">Нормативный набор<select disabled={!p.editable || p.canSelectNorm === false} value={p.normSelectionId ?? p.normSetId} onChange={event => p.onNorm(event.target.value)}><option value="">Выберите применимую норму</option>{p.normSetId && !p.norms.some(norm => norm.id === p.normSetId) ? <option value={p.normSetId} disabled>Текущий выбор: {p.currentNormLabel || "норма документа"}</option> : null}{p.norms.map(norm => <option key={norm.id} value={norm.id}>{norm.positionName} · {norm.versionName}</option>)}</select></label>
+        {employee && !p.norms.length && (!p.normsState || p.normsState === "ready") ? <p className="ppe-span-all ppe-ref-muted">Нет опубликованной нормы для этого сотрудника на выбранную дату. Проверьте применимость нормы в настройках СИЗ.</p> : null}
         <label className="ppe-span-all">Основание<textarea disabled={!p.editable} maxLength={4000} value={p.basis} onChange={event => p.onBasis(event.target.value)} /></label>
       </div>
     </section>

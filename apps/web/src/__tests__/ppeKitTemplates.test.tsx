@@ -43,6 +43,7 @@ describe("PPE kit templates", () => {
   it("previews local contents and remembers a successful import without deleting local data", async () => {
     localStorage.setItem("patrol360.ppe.kits.v1.owner", JSON.stringify([{ id: "legacy", name: "Старый комплект", normSetId: "norm-set", lines: [line] }]));
     const repository = createMockInventoryRepository(); vi.spyOn(repository, "createPpeKitTemplate").mockResolvedValue(template); setup(repository);
+    await userEvent.click(screen.getByText(/Шаблоны этого браузера:/));
     await userEvent.click(await screen.findByText(/Старый комплект · 1 позиций/)); expect(screen.getByText(/Старое имя · 1 шт/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Импортировать этот шаблон" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Импортирован" })).toBeDisabled());

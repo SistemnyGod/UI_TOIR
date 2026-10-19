@@ -92,6 +92,7 @@ function ScreenSkeleton({ screen }: { screen: ScreenId }) {
 export function ScreenRouter({
   accountCreateIntent,
   assignmentCreateIntent,
+  onAssignmentCreateIntentHandled,
   siteUserCreateIntent,
   accountMode,
   accountListErrorMessage,
@@ -113,6 +114,7 @@ export function ScreenRouter({
   onCreateAccount,
   onCreateEmployee,
   onCreateRequest,
+  onQuickAssign,
   onCreateScheduledRequest,
   onCreateRoute,
   onCreateRouteWithPoints,
@@ -177,6 +179,7 @@ export function ScreenRouter({
 }: {
   accountCreateIntent: number;
   assignmentCreateIntent: number;
+  onAssignmentCreateIntentHandled?: () => void;
   siteUserCreateIntent: number;
   accountMode: AccountMode;
   accountListErrorMessage?: string;
@@ -193,16 +196,17 @@ export function ScreenRouter({
   mobileAccountSecurityStatus: DataSourceStatus;
   mobileAccountSessions: MobileAccountSession[];
   onAccountModeChange: (mode: AccountMode) => void;
-  onAttachEmployee: (employeeId: string, employeeName: string) => MaybePromise<void>;
-  onBindEmployees: (employeeIds: string[]) => MaybePromise<void>;
+  onAttachEmployee: (employeeId: string, employeeName: string, accountId?: string) => MaybePromise<void>;
+  onBindEmployees: (employeeIds: string[], accountId?: string) => MaybePromise<void>;
   onCreateAccount: (payload: CreateMobileAccountPayload) => MaybePromise<void>;
   onCreateEmployee: (payload: EmployeeFormPayload) => MaybePromise<string>;
   onCreateRequest: (sourceResultId?: string) => void;
+  onQuickAssign?: () => void;
   onCreateScheduledRequest: (payload: CreateServiceRequestPayload) => MaybePromise<ServiceRequest>;
   onCreateRoute: (payload: RouteFormPayload) => MaybePromise<string>;
   onCreateRouteWithPoints: (routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) => MaybePromise<string>;
   onCreateRoutePoint: (routeId: string, payload: RoutePointFormPayload) => MaybePromise<string>;
-  onDeleteAccount: () => MaybePromise<void>;
+  onDeleteAccount: (accountId?: string) => MaybePromise<void>;
   onDetachEmployee: (employeeId?: string, accountId?: string) => MaybePromise<void>;
   onDeleteEmployee: (employeeId: string) => MaybePromise<void>;
   onDeleteRoute: (routeId: string) => MaybePromise<void>;
@@ -212,10 +216,10 @@ export function ScreenRouter({
   onOpenRequest: (resultId?: string) => void;
   onOpenResult: (resultId: string) => void;
   onResultOpenIntentHandled: () => void;
-  onOpenRequestById: (requestId: string) => void;
+  onOpenRequestById: (requestId: string, request?: ServiceRequest) => void;
   onRefreshAccountSecurity: () => MaybePromise<void>;
   onRefreshPatrolData: () => Promise<void>;
-  onResetPassword: () => MaybePromise<void>;
+  onResetPassword: (accountId?: string) => MaybePromise<void>;
   onToggleBlockAccount: (accountId?: string) => MaybePromise<void>;
   onRetryAccounts: () => MaybePromise<void>;
   onRetryRequests: () => MaybePromise<void>;
@@ -240,7 +244,7 @@ export function ScreenRouter({
   onUpdateRoute: (routeId: string, payload: RouteFormPayload) => MaybePromise<void>;
   onUpdateRoutePoint: (routeId: string, pointId: string, payload: RoutePointFormPayload) => MaybePromise<void>;
   onUpdateEmployee: (employeeId: string, payload: EmployeeFormPayload) => MaybePromise<void>;
-  onUpdateAccount: (payload: UpdateMobileAccountPayload) => MaybePromise<void>;
+  onUpdateAccount: (payload: UpdateMobileAccountPayload, accountId?: string) => MaybePromise<void>;
   onMoveRoutePoint: (routeId: string, pointId: string, direction: -1 | 1) => MaybePromise<void>;
   requests: ServiceRequest[];
   requestListErrorMessage?: string;
@@ -279,6 +283,12 @@ export function ScreenRouter({
         <PageTransition key={screen} screenKey={screen}>
         {screen === "dashboard" ? (
           <DashboardScreen
+            canCreateRequest={hasPermission(currentUser, "assignments.write") && hasPermission(currentUser, "requests.write")}
+            canViewResults={hasPermission(currentUser, "results.read")}
+            canViewSchedule={hasPermission(currentUser, "assignments.read") && hasPermission(currentUser, "requests.read")}
+            ownerId={currentUser?.id}
+            patrolDataStatus={patrolDataStatus}
+            onQuickAssign={onQuickAssign}
             activePatrols={activePatrols}
             dashboardMetrics={dashboardMetrics}
             dataSourceMode={dataSourceMode}
@@ -298,6 +308,7 @@ export function ScreenRouter({
         ) : null}
         {screen === "results" ? (
           <ResultsScreen
+            sessionKey={[currentUser?.id ?? "anonymous", ...(currentUser?.permissions ?? []).slice().sort()].join(":")}
             canCreateRequest={hasPermission(currentUser, "requests.write")}
             canManageResults={hasPermission(currentUser, "assignments.write")}
             dataSourceMode={dataSourceMode}
@@ -322,6 +333,9 @@ export function ScreenRouter({
         ) : null}
         {screen === "assign" ? (
           <AssignmentScreen
+            storageScope={currentUser?.id ?? "anonymous"}
+            canRecoverLegacyDrafts={Boolean(currentUser?.roles.some(role => role.toLowerCase() === "admin")) && hasPermission(currentUser, "assignments.write")}
+            onAssignmentCreateIntentHandled={onAssignmentCreateIntentHandled}
             activePatrols={activePatrols}
             assignmentCreateIntent={assignmentCreateIntent}
             canManage={hasPermission(currentUser, "assignments.write")}
@@ -345,7 +359,10 @@ export function ScreenRouter({
         ) : null}
         {screen === "employees" ? (
           <EmployeesScreen
+            key={currentUser?.id ?? "anonymous"}
+            canAssign={hasPermission(currentUser, "assignments.write")}
             canManage={hasPermission(currentUser, "employees.write")}
+            canManageAccounts={hasPermission(currentUser, "mobile_accounts.write")}
             dataSourceMode={dataSourceMode}
             employees={employeeDirectory}
             employeeCreateIntent={employeeCreateIntent}
@@ -409,6 +426,7 @@ export function ScreenRouter({
         ) : null}
         {screen === "routes" ? (
           <RoutesScreen
+            key={currentUser?.id ?? "anonymous"}
             canManage={hasPermission(currentUser, "routes.write")}
             canAssign={hasPermission(currentUser, "assignments.write")}
             dataStatus={patrolDataStatus}
@@ -434,6 +452,8 @@ export function ScreenRouter({
         ) : null}
         {screen === "users" ? (
           <SiteUsersScreen
+            key={currentUser?.id ?? "anonymous"}
+            sessionKey={[currentUser?.id ?? "anonymous", ...(currentUser?.permissions ?? []).slice().sort()].join(":")}
             canManage={hasPermission(currentUser, "site_users.write")}
             createIntent={siteUserCreateIntent}
             dataSourceMode={dataSourceMode}
@@ -468,6 +488,7 @@ export function ScreenRouter({
         ) : null}
         {isEmuScreen(screen) ? (
           <EmuScreen
+            key={`${dataSourceMode}:${currentUser?.id ?? "mock"}`}
             currentUser={currentUser}
             dataSourceMode={dataSourceMode}
             employeeDirectory={employeeDirectory}

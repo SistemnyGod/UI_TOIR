@@ -72,7 +72,6 @@
 .inventory-custody-command-actions,
 .inventory-custody-row-actions,
 .inventory-custody-line-actions,
-.inventory-custody-drawer-actions,
 .inventory-custody-inspector-actions {
   align-items: center;
   display: flex;
@@ -84,7 +83,6 @@
 .inventory-custody-inspector-actions .button,
 .inventory-custody-row-actions .button,
 .inventory-custody-line-actions .button,
-.inventory-custody-drawer-actions .button,
 .inventory-custody-composer .button {
   border-radius: 8px;
   box-shadow: none;
@@ -484,23 +482,6 @@
   color: var(--issue-blue);
 }
 
-.inventory-custody-drawer-backdrop {
-  background: rgba(15, 35, 66, 0.34);
-  z-index: 2200;
-}
-
-.inventory-custody-drawer {
-  background: #f7fbff;
-  border-left: 1px solid var(--issue-border);
-  box-shadow: -18px 0 42px rgba(15, 35, 66, 0.16);
-}
-
-.inventory-custody-drawer-header,
-.inventory-custody-drawer-actions {
-  background: rgba(247, 251, 255, 0.96);
-  border-color: var(--issue-border);
-}
-
 .inventory-custody-icon-button {
   border-radius: 8px;
   box-shadow: none;
@@ -534,7 +515,6 @@
   .inventory-custody-command-actions,
   .inventory-custody-row-actions,
   .inventory-custody-line-actions,
-  .inventory-custody-drawer-actions,
   .inventory-custody-inspector-actions {
     width: 100%;
   }
@@ -542,7 +522,6 @@
   .inventory-custody-command-actions .button,
   .inventory-custody-row-actions .button,
   .inventory-custody-line-actions .button,
-  .inventory-custody-drawer-actions .button,
   .inventory-custody-inspector-actions .button {
     flex: 1 1 128px;
   }

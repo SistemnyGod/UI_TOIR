@@ -165,7 +165,7 @@ export function mapRoute(route: RouteDto): RouteDirectoryItem {
       expectedTime: point.expectedTime,
       status: point.status as RoutePoint["status"],
       nfcCode: point.nfcCode ?? undefined,
-      requiresPhoto: point.requiresPhoto,
+      requiresPhoto: false,
     })),
   };
 }

@@ -1,0 +1,53 @@
+/* Nomenclature owns its content layout; ModalShell owns focus, scroll and actions. */
+body .modal-backdrop .modal-shell:is(.item-catalog-editor, .item-catalog-detail) { width: min(900px, calc(100vw - 32px)); max-height: calc(var(--modal-viewport-height, 100dvh) - 32px); display: flex; flex-direction: column; }
+body .modal-backdrop .modal-shell.item-catalog-confirm { width: min(560px, calc(100vw - 32px)); }
+:is(.item-catalog-editor, .item-catalog-detail) > .modal-shell-header,
+:is(.item-catalog-editor, .item-catalog-detail) > .modal-shell-actions { flex: 0 0 auto; padding: 12px 20px; }
+:is(.item-catalog-editor, .item-catalog-detail) .modal-shell-header h2 { font-size: 20px; line-height: 1.35; }
+:is(.item-catalog-editor, .item-catalog-detail) .modal-shell-header p { font-size: 13px; }
+:is(.item-catalog-editor, .item-catalog-detail) > .modal-shell-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 20px; }
+.item-catalog-editor .inventory-item-form { padding: 0; }
+.item-catalog-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.item-catalog-editor .inventory-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding: 0; }
+.item-catalog-editor .inventory-field { display: grid; gap: 6px; min-width: 0; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.item-catalog-editor .inventory-field.wide, .item-catalog-editor .inventory-item-form-section { grid-column: 1 / -1; }
+.item-catalog-editor .inventory-item-form-section { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface-muted); }
+.item-catalog-editor .inventory-item-form-section strong { font-size: 14px; color: var(--ui-text); }
+.item-catalog-editor .inventory-item-form-section span { font-size: 12px; line-height: 1.45; color: var(--ui-muted); }
+.item-catalog-editor :is(input:not([type=checkbox]), select, textarea) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 9px 11px; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: 14px; }
+.item-catalog-editor textarea { min-height: 92px; line-height: 1.5; resize: vertical; }
+.item-catalog-editor .inventory-field > span em { font-style: normal; color: var(--ui-danger); }
+.item-catalog-editor .inventory-field > small { font-size: 12px; color: var(--ui-danger); }
+.item-catalog-editor [aria-invalid=true] { border-color: var(--ui-danger); }
+.item-catalog-editor .inventory-size-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.item-catalog-editor .inventory-toggle-row { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-top: 0; }
+.item-catalog-editor .inventory-toggle-row label { display: inline-flex; gap: 8px; align-items: center; min-height: 36px; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.item-catalog-editor .inventory-toggle-row input { width: 18px; height: 18px; }
+.item-catalog-error, .item-catalog-editor .inventory-item-form-alert { padding: 10px 12px; margin: 0 0 12px; border: 1px solid var(--ui-danger); border-radius: var(--radius-control); background: var(--ui-danger-soft); color: var(--ui-danger); font-size: 13px; line-height: 1.5; }
+.item-catalog-name { margin: 0 0 16px; font-size: 18px; line-height: 1.45; overflow-wrap: anywhere; color: var(--ui-text); }
+.item-catalog-state { margin: -8px 0 16px; color: var(--ui-muted); font-size: 13px; }
+.item-catalog-detail .inventory-detail-grid { padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.item-catalog-detail .inventory-detail-stat { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 4px 8px; align-content: start; min-width: 0; padding: 12px; min-height: 0; border: 1px solid var(--ui-border); background: var(--ui-surface-muted); border-radius: var(--radius-control); }
+.item-catalog-detail .inventory-detail-stat svg { grid-row: span 2; color: var(--ui-blue); }
+.item-catalog-detail .inventory-detail-stat span { grid-column: 2; color: var(--ui-muted); font-size: 12px; font-weight: 500; }
+.item-catalog-detail .inventory-detail-stat strong { grid-column: 2; overflow-wrap: anywhere; color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.item-catalog-detail .inventory-detail-comment { padding: 0; margin-block: 20px; }
+.item-catalog-detail .inventory-detail-comment p { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ui-text); font-size: 14px; line-height: 1.6; }
+.item-catalog-detail .inventory-ppe-movements-panel { margin: 0; }
+.item-catalog-confirm .inventory-confirm-copy { margin: 0; padding: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.item-catalog-confirm .item-catalog-error { margin: 12px 0 0; }
+@keyframes item-catalog-refresh { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) { .inventory-items-actions button[aria-busy=true] > svg { animation: item-catalog-refresh 1s linear infinite; } }
+.item-catalog-editor :is(input, select, textarea):focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+@media (max-width: 760px) {
+ body .modal-backdrop .modal-shell:is(.item-catalog-editor, .item-catalog-detail, .item-catalog-confirm) { width: calc(100vw - 16px); max-height: calc(var(--modal-viewport-height, 100dvh) - 16px); }
+ :is(.item-catalog-editor, .item-catalog-detail) > :is(.modal-shell-header, .modal-shell-body, .modal-shell-actions) { padding: 12px; }
+ :is(.item-catalog-editor, .item-catalog-detail) .modal-shell-header h2 { font-size: 18px; }
+ .item-catalog-editor .inventory-form-grid { grid-template-columns: minmax(0, 1fr); }
+ .item-catalog-editor :is(input:not([type=checkbox]), select, textarea) { min-height: 44px; font-size: 16px; }
+ .item-catalog-editor .inventory-size-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .item-catalog-editor .inventory-toggle-row { display: grid; gap: 4px; }
+ .item-catalog-editor .inventory-toggle-row label { min-height: 44px; }
+ .item-catalog-detail .inventory-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ :is(.item-catalog-editor, .item-catalog-detail, .item-catalog-confirm) .modal-shell-actions .ui-button { flex: 1 1 0; min-width: 0; min-height: 44px; white-space: normal; }
+}

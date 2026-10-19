@@ -1,0 +1,129 @@
+/* Assignment workspace only. Shared shell and other patrol screens keep their styling. */
+.screen-area .assignment-workspace-v2 { display: grid; gap: 14px; min-width: 0; padding: 0; background: none; }
+.screen-area .assignment-workspace-v2 > .ui-page-header { margin: 0; padding: 0 0 2px; }
+.screen-area .assignment-workspace-v2 .ui-page-header__title { font-size: 28px; line-height: 1.2; }
+.screen-area .assignment-workspace-v2 .assign-am-workspace { grid-template-columns: minmax(0, 1.05fr) minmax(0, .83fr) minmax(0, 1.17fr); gap: 12px; align-items: stretch; }
+.screen-area .assignment-workspace-v2 .assign-am-panel,
+.screen-area .assignment-workspace-v2 .assign-am-selection-bar,
+.screen-area .assignment-workspace-v2 .assignment-bottom-tabs { background: #fff; border: 1px solid #dce6f4; border-radius: 10px; box-shadow: none; padding: 14px; }
+.screen-area .assignment-workspace-v2 .assign-am-selection-bar { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; padding: 12px; }
+.screen-area .assignment-workspace-v2 .assign-am-selection-item { background: #fafcff; border-color: #e0e8f3; min-width: 0; }
+.screen-area .assignment-workspace-v2 .assign-am-selection-item strong { font-size: 14px; white-space: normal; }
+.screen-area .assignment-workspace-v2 .assign-am-selection-item small,
+.screen-area .assignment-workspace-v2 .assign-am-selection-item em { font-size: 12px; }
+.screen-area .assignment-workspace-v2 .assign-am-panel-head { margin-bottom: 12px; min-height: 26px; }
+.screen-area .assignment-workspace-v2 .assign-am-panel-action { min-height: 28px; height: 28px; width: 28px; }
+.screen-area .assignment-workspace-v2 .assign-am-panel-head h2 { font-size: 18px; font-weight: 750; }
+.screen-area .assignment-workspace-v2 .assign-am-panel-head > svg { display: none; }
+.screen-area .assignment-workspace-v2 .assign-am-panel-head h2 span { min-width: 22px; font-size: 12px; padding: 3px 6px; }
+.screen-area .assignment-workspace-v2 .assignment-employee-search { display: flex; align-items: center; gap: 8px; border: 1px solid #d6e3f4; border-radius: 7px; padding: 0 10px; margin-bottom: 10px; color: #526b8f; }
+.screen-area .assignment-workspace-v2 .assignment-employee-search input { min-width: 0; width: 100%; height: 36px; border: 0; background: transparent; font-size: 13px; box-shadow: none; }
+.screen-area .assignment-workspace-v2 .assignment-employee-search:focus-within { outline: 2px solid #1769ff; outline-offset: 2px; }
+.screen-area .assignment-workspace-v2 .assign-am-shift-settings-bar { padding: 6px 8px; margin: 0 0 10px; border: 0; border-radius: 7px; background: #f0f5fd; }
+.screen-area .assignment-workspace-v2 .assign-am-shift-settings-bar span { white-space: normal; font-size: 11px; line-height: 1.4; font-weight: 600; }
+.screen-area .assignment-workspace-v2 .assign-am-list { gap: 9px; max-height: 550px; overflow-y: auto; scrollbar-width: thin; }
+.screen-area .assignment-workspace-v2 .assign-am-employee { grid-template-columns: 38px minmax(0, 1fr) 78px; gap: 9px; padding: 9px; min-height: 68px; border-radius: 8px; box-shadow: none; transform: none; font-weight: 400; }
+.screen-area .assignment-workspace-v2 .assign-am-employee > .assign-am-radio { display: none; }
+.screen-area .assignment-workspace-v2 .assign-am-employee-main strong { font-size: 12px; font-weight: 650; line-height: 1.4; white-space: normal; }
+.screen-area .assignment-workspace-v2 .assign-am-employee-main span,
+.screen-area .assignment-workspace-v2 .assign-am-employee-main small { font-size: 11px; font-weight: 400; line-height: 1.45; white-space: normal; }
+.screen-area .assignment-workspace-v2 .assign-am-shift { border-left: 1px solid #e3ebf6; padding-left: 8px; }
+.screen-area .assignment-workspace-v2 .assign-am-shift strong,
+.screen-area .assignment-workspace-v2 .assign-am-shift span { font-size: 11px; }
+.screen-area .assignment-workspace-v2 .assign-am-employee.active { border-color: #1769ff; background: #f3f7ff; box-shadow: none; }
+.screen-area .assignment-workspace-v2 .assign-am-history-profile { padding: 12px; background: #f8fbff; border-radius: 8px; }
+.screen-area .assignment-workspace-v2 .assign-am-history-profile strong { font-size: 14px; }
+.screen-area .assignment-workspace-v2 .assign-am-history-profile span,
+.screen-area .assignment-workspace-v2 .assign-am-history-profile small { font-size: 12px; line-height: 1.5; font-weight: 400; }
+.screen-area .assignment-workspace-v2 .assign-am-history-stats { gap: 8px; margin: 12px 0; }
+.screen-area .assignment-workspace-v2 .assign-am-history-stats > span { padding: 12px; min-height: 70px; background: #fff; border-radius: 8px; }
+.screen-area .assignment-workspace-v2 .assign-am-history-stats small { font-size: 11px; }
+.screen-area .assignment-workspace-v2 .assign-am-history-section-title { text-transform: none; font-size: 13px; background: #f8faff; padding: 8px; border-radius: 6px; }
+.screen-area .assignment-workspace-v2 .assign-am-history-event { padding: 12px; border: 0; border-left: 2px solid #d8e5f5; border-bottom: 1px solid #edf1f7; border-radius: 0; background: #fff; }
+.screen-area .assignment-workspace-v2 .assign-am-history-event-main span { font-size: 12px; text-transform: none; }
+.screen-area .assignment-workspace-v2 .assign-am-history-event-main strong,
+.screen-area .assignment-workspace-v2 .assign-am-history-event-meta small { font-size: 12px; }
+.screen-area .assignment-workspace-v2 .assignment-bottom-tabs { display: block; }
+.assignment-bottom-tabs .assignment-tab-list { display: flex; gap: 8px; border-bottom: 1px solid #dde7f5; overflow-x: auto; }
+.assignment-tab-list > button { display: flex; align-items: center; gap: 8px; flex-shrink: 0; border: 0; border-bottom: 2px solid transparent; padding: 12px 14px; background: transparent; color: #4e6588; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.assignment-tab-list > button[aria-selected="true"] { border-bottom-color: #1769ff; color: #0b5ef5; }
+.assignment-tab-list > button > span { background: #edf3fc; border-radius: 12px; padding: 2px 7px; }
+.screen-area .assignment-workspace-v2 .assignment-bottom-tabs .assign-am-card { border: 0; background: none; box-shadow: none; padding: 12px 0 0; }
+.screen-area .assignment-workspace-v2 .assignment-bottom-tabs .assign-am-card > .assign-am-panel-head { display: none; }
+.screen-area .assignment-workspace-v2 .assignment-bottom-tabs .assign-am-empty { min-height: 112px; padding: 20px; background: #fff; border: 0; }
+.assignment-bottom-tabs [hidden] { display: none; }
+
+.assignment-route-choice { border: 1px solid #d9e4f4; background: #fff; border-radius: 9px; overflow: hidden; }
+.assignment-route-choice.is-selected { border-color: #1769ff; background: #f3f8ff; }
+.assignment-route-select { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 18px; gap: 12px; padding: 14px 16px 10px; border: 0; background: transparent; text-align: left; color: #142b50; cursor: pointer; font: inherit; }
+.assignment-route-select > strong { font-size: 15px; line-height: 1.4; }
+.assignment-route-select .assign-am-radio { width: 16px; height: 16px; border: 2px solid #bdcfe9; background: #fff; border-radius: 50%; }
+.assignment-route-choice.is-selected .assign-am-radio { border: 4px solid #1769ff; }
+.assignment-route-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: #556e92; }
+.assignment-route-meta > span { display: inline-flex; align-items: center; gap: 6px; }
+.assignment-route-details { padding: 0 16px 12px; font-size: 13px; }
+.assignment-route-details summary { cursor: pointer; color: #0b5ef5; }
+.assignment-route-points { padding: 0 0 0 24px; margin: 12px 0; color: #526985; }
+.assignment-route-points li { padding: 8px 4px; border-bottom: 1px solid #e2eaf5; }
+.assignment-route-points strong, .assignment-route-points span, .assignment-route-points small { display: block; line-height: 1.5; overflow-wrap: anywhere; }
+.assignment-route-points strong { color: #17365b; font-size: 13px; }
+.assignment-route-points span, .assignment-route-points small, .assignment-route-empty { font-size: 12px; }
+.assignment-route-preview .modal-shell-body { padding: 20px; }
+
+/* Portaled dialog: shared ModalShell owns focus, scroll locking and fixed actions. */
+body .modal-backdrop .modal-shell.assignment-request-v2 { display: flex; flex-direction: column; width: min(1050px, calc(100vw - 32px)); height: auto; max-height: calc(100dvh - 32px); overflow: hidden; border-radius: 14px; background: #fff; }
+body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-header { flex: 0 0 auto; padding: 20px 24px; background: #fff; }
+body .modal-backdrop .modal-shell.assignment-request-v2 h2 { font-size: 24px; line-height: 1.25; font-weight: 750; }
+body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-body { padding: 20px 24px; min-height: 0; overflow-y: auto; background: #fff; }
+body .modal-backdrop .modal-shell.assignment-request-v2 .assignment-request-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr); gap: 24px; }
+.assignment-request-v2 .assignment-request-sidebar { background: #f5f8fe; border: 1px solid #e7eef9; border-radius: 10px; padding: 16px; min-width: 0; }
+.assignment-request-v2 h3 { font-size: 18px; margin: 0 0 14px; color: #183156; }
+.assignment-request-sidebar h3 > span { display: inline-block; border-radius: 15px; background: #e5eeff; color: #1260f4; padding: 2px 7px; margin-left: 5px; font-size: 13px; }
+.assignment-request-v2 .assignment-route-list { display: grid; gap: 10px; }
+.assignment-request-v2 .assignment-message-preview { border-top: 1px solid #dfe8f5; margin-top: 20px; padding-top: 18px; }
+.assignment-request-v2 .assignment-message-preview p { margin: 0; border-radius: 8px; background: #eaf2ff; padding: 14px; font-size: 14px; font-weight: 400; line-height: 1.65; color: #385c88; overflow-wrap: anywhere; }
+.assignment-request-v2 .assignment-request-fields { min-width: 0; display: grid; align-content: start; gap: 16px; padding: 0; margin: 0; border: 0; }
+.assignment-request-v2 .assignment-request-fields label { display: grid; min-width: 0; gap: 7px; font-size: 14px; color: #52698b; font-weight: 600; }
+.assignment-request-v2 .assignment-request-fields input,
+.assignment-request-v2 .assignment-request-fields select,
+.assignment-request-v2 .assignment-request-fields textarea { width: 100%; min-width: 0; min-height: 48px; padding: 10px 12px; border: 1px solid #cfdcf1; border-radius: 8px; background: #fcfdff; color: #172f53; font: inherit; }
+.assignment-request-v2 .assignment-request-fields input:focus-visible,
+.assignment-request-v2 .assignment-request-fields select:focus-visible,
+.assignment-request-v2 .assignment-request-fields textarea:focus-visible { outline: 2px solid #1769ff; outline-offset: 2px; }
+.assignment-request-v2 .assignment-request-fields small { color: #6980a2; font-size: 12px; font-weight: 400; line-height: 1.4; }
+.assignment-request-v2 .assignment-request-fields .field-error { color: #b42318; }
+.assignment-request-v2 .assignment-employee-control { position: relative; display: grid; min-width: 0; border: 1px solid #cfdcf1; border-radius: 8px; background: #fcfdff; padding: 7px 10px 10px 60px; }
+.assignment-request-v2 .assignment-employee-control select { border: 0; padding: 2px 0; min-height: 28px; background: transparent; }
+.assignment-request-v2 .assignment-employee-control small { padding-right: 12px; }
+.assignment-request-v2 .assignment-employee-avatar { position: absolute; top: 15px; left: 12px; width: 36px; height: 36px; display: grid; place-items: center; background: #e8f1ff; color: #0b63f6; border-radius: 50%; font-size: 14px; font-weight: 700; }
+.assignment-request-v2 .assignment-request-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.assignment-request-v2 .assignment-comment { position: relative; }
+.assignment-request-v2 .assignment-comment textarea { min-height: 108px; padding-bottom: 28px; resize: vertical; }
+.assignment-request-v2 .assignment-comment > small { position: absolute; bottom: 8px; right: 12px; pointer-events: none; }
+.assignment-request-v2 .assignment-notification-note { margin: -5px 0 0; color: #6b82a4; font-size: 12px; line-height: 1.5; }
+body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-actions { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; background: #fafcff; }
+.assignment-request-v2 .assignment-submit-actions { display: flex; gap: 12px; }
+body .modal-backdrop .modal-shell.assignment-request-v2 .modal-shell-actions button { min-height: 46px; font-size: 14px; padding: 10px 20px; font-weight: 650; }
+body .modal-backdrop .modal-shell.assignment-request-v2 .modal-shell-header p { font-size: 14px; font-weight: 400; }
+.assignment-workspace-v2 button:focus-visible, .assignment-route-choice button:focus-visible, .assignment-route-details summary:focus-visible { outline: 2px solid #1769ff; outline-offset: 2px; }
+
+@media (max-width: 1250px) {
+  .screen-area .assignment-workspace-v2 .assign-am-workspace { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .screen-area .assignment-workspace-v2 .assign-am-history-panel { grid-column: 1 / -1; }
+  .screen-area .assignment-workspace-v2 .assign-am-selection-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screen-area .assignment-workspace-v2 .assign-am-selection-create { grid-column: 1 / -1; justify-self: end; }
+}
+@media (max-width: 760px) {
+  .screen-area .assignment-workspace-v2 .assign-am-workspace,
+  .screen-area .assignment-workspace-v2 .assign-am-selection-bar { grid-template-columns: minmax(0, 1fr); }
+  .screen-area .assignment-workspace-v2 .assign-am-selection-create { width: 100%; }
+  .screen-area .assignment-workspace-v2 .ui-page-header { align-items: start; gap: 12px; flex-wrap: wrap; }
+  body .modal-backdrop .modal-shell.assignment-request-v2 .assignment-request-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-header,
+  body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-body,
+  body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-actions { padding: 14px; }
+  body .modal-backdrop .modal-shell.assignment-request-v2 h2 { font-size: 20px; }
+  body .modal-backdrop .modal-shell.assignment-request-v2 > .modal-shell-actions { align-items: stretch; flex-direction: column; }
+  .assignment-request-v2 .assignment-submit-actions > .button { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .assignment-workspace-v2 *, .assignment-request-v2 * { transition: none; scroll-behavior: auto; } }

@@ -111,14 +111,15 @@ test("inventory employees import uses preview before database write", async ({ p
     buffer: Buffer.from("ФИО;Табельный;Должность\nПетров Петр Петрович;T-002;Электрик", "utf8"),
   });
 
-  await expect(page.getByRole("heading", { name: "employees.csv" })).toBeVisible();
-  await expect(page.locator(".inventory-employees-preview-table").getByText("Электрик").first()).toBeVisible();
+  const previewDialog = page.getByRole("dialog", { name: "Предпросмотр импорта сотрудников", exact: true });
+  await expect(previewDialog.getByText("employees.csv", { exact: true })).toBeVisible();
+  await expect(previewDialog.getByRole("table").getByText("Электрик").first()).toBeVisible();
   await expect.poll(() => previewRequests.length).toBe(1);
   await expect.poll(() => importRequests.length).toBe(0);
 
   await page.getByRole("button", { name: "Импортировать" }).click();
   await expect(page.getByRole("dialog", { name: "Результат импорта сотрудников" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "2 строк обработано" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Результат импорта сотрудников", exact: true }).getByText("2 строк обработано", { exact: true })).toBeVisible();
   await expect.poll(() => importRequests.length).toBe(1);
 
   await page.getByRole("dialog", { name: "Результат импорта сотрудников" }).getByRole("button", { name: "Закрыть" }).last().click();

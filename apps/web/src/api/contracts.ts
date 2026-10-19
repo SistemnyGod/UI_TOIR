@@ -520,6 +520,7 @@ export interface PatrolRequestDto {
 }
 
 export interface CreatePatrolRequestDto {
+  clientRequestId?: string;
   employeeName?: string;
   routeName?: string;
   employeeId?: string;
@@ -926,6 +927,7 @@ export interface InventoryPpeNormSetDto {
   departmentName?: string;
   positionAliases?: string[];
   scopeConfirmed?: boolean;
+  readiness?: { isReady: boolean; requiredCount: number; approvedCount: number; blockers: Array<{ code: string; rowId: string | null; message: string }> } | null;
 }
 
 export interface InventoryPpeNormSetDetailDto {
@@ -984,9 +986,10 @@ export interface InventoryPpeNormMappingDto {
   approvedBy?: string;
   approvalEvidence?: string;
   standards?: InventoryItemStandardDto[] | null;
+  itemUnitSymbol?: string;
 }
 
-export interface PpeIssueDocumentCapabilitiesDto { enabled: boolean; }
+export interface PpeIssueDocumentCapabilitiesDto { enabled: boolean; reason?: string; readyCount?: number; totalCount?: number; }
 
 export interface PpeIssueDocumentLineInputDto {
   normPoint?: string | null;
@@ -1003,6 +1006,7 @@ export interface PpeIssueDocumentLineInputDto {
 }
 
 export interface SavePpeIssueDocumentDto {
+  clientDocumentId?: string | null;
   employeeId: string;
   normSetId: string;
   documentDate: string;
@@ -1027,8 +1031,8 @@ export interface PpeDocumentContentDto {
 }
 export interface PpeIssueDocumentDto { id: string; version: number; status: string; createdAt: string; confirmedAt: string | null; content: PpeDocumentContentDto; validation: PpeDocumentValidationDto; }
 export interface PpeIssueDocumentSummaryDto { department?: string; personnelNo?: string; hasOverdue?: boolean; id: string; version: number; status: string; employeeId: string; employeeName: string; documentDate: string; linesCount: number; totalMinor: number | null; }
-export interface PpeNormApprovalDto { expectedVersion: number; departmentName: string; positionAliases: string[]; }
-export interface PpeNormRowRulesDto { expectedVersion: number; unitSymbol: string; periodMonths: number | null; lifeMonths: number | null; previousRequirementRowId: string | null; alternativeGroup: string; }
+export interface PpeNormApprovalDto { expectedVersion: number; departmentName: string; positionAliases: string[]; effectiveFrom?: string | null; effectiveTo?: string | null; updateDates?: boolean; }
+export interface PpeNormRowRulesDto { expectedVersion: number; unitSymbol: string; periodMonths: number | null; lifeMonths: number | null; previousRequirementRowId: string | null; alternativeGroup: string; quantity?: number | null; normPoint?: string | null; normItemName?: string | null; }
 export interface PpeKitTemplateLineDto { normRowId: string; itemId: string; itemName: string; unitSymbol: string; quantity: number; lifeMonths: number | null; unitPriceMinor: number | null; }
 export interface PpeKitTemplateDto { id: string; name: string; normSetId: string; ownerUserId: string; ownerName: string; isShared: boolean; version: number; updatedAt: string; lines: PpeKitTemplateLineDto[]; }
 export interface SavePpeKitTemplateLineDto { normRowId: string; itemId: string; itemName: string; unitSymbol: string; quantity: number; lifeMonths: number | null; unitPriceMinor: number | null; }
@@ -1592,6 +1596,7 @@ export interface InventoryInitialStockDto {
 }
 
 export interface CreateInventoryOperationDto {
+  clientOperationId?: string;
   type: string;
   itemId: string;
   warehouseId?: string | null;
@@ -1624,6 +1629,7 @@ export interface InventorySettingsDto {
 }
 
 export interface EmuListResponseDto<T> {
+  serverTime?: string | null;
   rows: T[];
   total: number;
   page: number;

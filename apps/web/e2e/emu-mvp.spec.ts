@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+test.use({ actionTimeout: 10_000, timezoneId: "Asia/Yekaterinburg" });
+
 const emuVisualRoutes = [
   { hash: "#emu-dashboard", text: "Дашборд" },
   { hash: "#emu-work-accounting", text: "Карточки работ" },
@@ -12,6 +14,8 @@ const visualViewports = [
 ];
 
 test.beforeEach(async ({ page }) => {
+  // History defaults to the current shift; use a stable daytime shift.
+  await page.clock.setFixedTime(new Date("2026-10-13T13:30:00+05:00"));
   await page.addInitScript(() => {
     window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "mock" }));
     window.localStorage.removeItem("patrol360.emu.workspace.v1");
@@ -90,19 +94,19 @@ test("create work modal keeps employees, quick tasks and submit action visible",
   });
   await page.setViewportSize({ height: 768, width: 1365 });
   await page.goto("/#emu-work-accounting");
-  await page.getByRole("button", { name: "↗ Отправить в работу" }).click();
+  await page.getByRole("button", { name: "Создать работу", exact: true }).first().click();
 
-  const dialog = page.getByRole("dialog", { name: "Отправить в работу / Новая работа" });
-  await expect(dialog.getByText("доступно 1")).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Создать работу", exact: true });
+  await expect(dialog.getByText(/доступно 1 из/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Тестов А\.И\./ })).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Осмотр оборудования/ })).toBeVisible();
-  const submit = dialog.getByRole("button", { name: "Отправить в работу" });
+  const submit = dialog.getByRole("button", { name: /Создать работу/ });
   await expect(submit).toBeVisible();
 
   await dialog.getByRole("button", { name: /Тестов А\.И\./ }).click();
   await dialog.getByRole("button", { name: /Осмотр оборудования/ }).click();
   await expect(submit).toBeEnabled();
-  await expect(submit).not.toHaveCSS("background-image", "none");
+  await expect(submit).toBeInViewport();
   const submitBox = await submit.boundingBox();
   expect(submitBox).not.toBeNull();
   expect((submitBox?.y ?? 0) + (submitBox?.height ?? 0)).toBeLessThanOrEqual(768);
@@ -129,7 +133,7 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
 
   await page.goto("/#emu-work-accounting");
   await expect(page.getByRole("heading", { exact: true, name: "Карточки работ" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "↗ Отправить в работу" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Создать работу", exact: true }).first()).toBeEnabled();
 
   await createWork(page, workTitle, "Сидоров А.А.");
   const workCard = page.locator(".emu-work-card").filter({ hasText: workTitle });
@@ -138,10 +142,10 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
   await clickWorkCardCommand(page, workCard, "Пауза");
   const pauseDialog = page.getByRole("dialog", { name: "Поставить на паузу" });
   await expect(pauseDialog).toBeVisible();
-  const otherWorkCheckbox = pauseDialog.locator(".emu-checkbox input[type='checkbox']");
+  const otherWorkCheckbox = pauseDialog.getByRole("checkbox", { name: /На другой работе/ });
   await otherWorkCheckbox.check();
   await expect(otherWorkCheckbox).toBeChecked();
-  await pauseDialog.getByRole("textbox", { name: "Комментарий" }).fill("Smoke пауза: другой срочный наряд");
+  await pauseDialog.getByRole("textbox", { name: "Комментарий к паузе" }).fill("Smoke пауза: другой срочный наряд");
   await pauseDialog.getByRole("button", { name: "Пауза" }).click();
   await expect(workCard.getByText("На другой работе")).toBeVisible();
 
@@ -164,7 +168,7 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
     return buttonRect.left >= dialogRect.left && buttonRect.right <= dialogRect.right;
   }, await completeDialog.elementHandle());
   expect(completionTimeFitsDialog).toBe(true);
-  await completeDialog.getByRole("textbox", { name: "Результат работы" }).fill("Smoke работа выполнена, результат зафиксирован");
+  await completeDialog.getByRole("textbox", { name: "Результат и описание выполненной работы" }).fill("Smoke работа выполнена, результат зафиксирован");
   await completeDialog.getByRole("button", { name: "Завершить работу" }).click();
   await expect(workCard).toBeHidden();
   await page.goto("/#emu-completed-work-history");
@@ -184,35 +188,41 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
   await openPlanBoard(page);
   await createPlanTask(page, weekTitle, "Сидоров А.А.");
   await page.getByRole("button", { name: /Согласовать неделю \(/ }).click();
-  const weekConfirm = page.locator(".emu-nested-confirm").filter({ hasText: "Согласовать неделю" });
+  const weekConfirm = page.getByRole("dialog", { name: "Согласовать неделю", exact: true });
   await expect(weekConfirm).toContainText("Будет согласовано задач");
   await weekConfirm.getByRole("button", { name: "Согласовать неделю" }).click();
   await expect(page.locator(".emu-plan-card").filter({ hasText: weekTitle })).toBeVisible();
 
   await createPlanTask(page, rejectTitle, "Петров М.Д.");
   const rejectCard = page.locator(".emu-plan-card").filter({ hasText: rejectTitle });
+  await rejectCard.locator("summary").click();
   await rejectCard.getByRole("button", { name: "Отклонить" }).click();
-  const rejectConfirm = page.locator(".emu-nested-confirm").filter({ hasText: rejectTitle });
+  const rejectConfirm = page.getByRole("dialog", { name: "Отклонить плановую задачу", exact: true });
   await rejectConfirm.getByRole("textbox", { name: "Комментарий" }).fill("Smoke причина отклонения");
   await rejectConfirm.getByRole("button", { name: "Отклонить" }).click();
   await expect(rejectConfirm).toBeHidden();
 
   await createPlanTask(page, planRunTitle, "Пакулин Д.А.");
   const planRunCard = page.locator(".emu-plan-card").filter({ hasText: planRunTitle });
+  await planRunCard.locator("summary").click();
   await planRunCard.getByRole("button", { name: "Согласовать" }).click();
+  await expect(planRunCard.getByText("Согласовано", { exact: true })).toBeVisible();
+  await planRunCard.locator("summary").click();
   await planRunCard.getByRole("button", { name: "Отправить в работу" }).click();
-  await page.getByRole("dialog", { name: "Доска задач / план на неделю" }).getByRole("button", { name: "×" }).click();
+  await page.getByRole("dialog", { name: "Доска задач / план на неделю" }).getByRole("button", { name: "Закрыть", exact: true }).click();
   await expect(page.locator(".emu-work-card").filter({ hasText: planRunTitle })).toBeVisible();
 
   await page.getByRole("button", { name: "Избранные" }).click();
   const favoritesDialog = page.getByRole("dialog", { name: "Избранные сотрудники ЭМУ" });
   await expect(favoritesDialog).toBeVisible();
   await favoritesDialog.getByRole("button", { name: "Убрать" }).first().click();
-  await expect(favoritesDialog.getByText("История работ и общий справочник сотрудников не изменятся.")).toBeVisible();
-  await favoritesDialog.getByRole("button", { name: "Отмена" }).click();
+  const removeFavoriteDialog = page.getByRole("dialog", { name: "Убрать сотрудника из избранного?", exact: true });
+  await expect(removeFavoriteDialog.getByText("История работ и общий справочник сотрудников не изменятся.")).toBeVisible();
+  await removeFavoriteDialog.getByRole("button", { name: "Отмена" }).click();
   await favoritesDialog.getByRole("button", { name: "Убрать" }).first().click();
-  await favoritesDialog.getByRole("button", { name: "Убрать из избранных" }).click();
-  await favoritesDialog.getByRole("button", { name: "×" }).click();
+  await removeFavoriteDialog.getByRole("button", { name: "Убрать из избранных" }).click();
+  await expect(removeFavoriteDialog).toHaveCount(0);
+  await favoritesDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
 
   await page.goto("/#emu-completed-work-history");
   const historyFilters = page.locator(".emu-history-filter-card");
@@ -228,8 +238,8 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
 });
 
 async function createWork(page: Page, title: string, _employeeName: string) {
-  await page.getByRole("button", { name: "↗ Отправить в работу" }).click();
-  const dialog = page.getByRole("dialog", { name: "Отправить в работу / Новая работа" });
+  await page.getByRole("button", { name: "Создать работу", exact: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Создать работу", exact: true });
   await expect(dialog).toBeVisible();
   const employeeButtons = dialog.locator(".emu-picker button");
   await expect(employeeButtons.first()).toBeVisible();
@@ -241,8 +251,8 @@ async function createWork(page: Page, title: string, _employeeName: string) {
   }
   await expect(dialog.locator(".emu-selected-strip span")).toHaveCount(1);
   await dialog.getByRole("textbox", { name: "Задача / ожидаемый результат" }).fill(title);
-  await expect(dialog.getByRole("button", { name: "Отправить в работу" })).toBeEnabled();
-  await dialog.getByRole("button", { name: "Отправить в работу" }).click();
+  await expect(dialog.getByRole("button", { name: /Создать работу/ })).toBeEnabled();
+  await dialog.getByRole("button", { name: /Создать работу/ }).click();
 }
 
 async function clickWorkCardCommand(page: Page, card: Locator, actionName: string) {
@@ -270,12 +280,13 @@ async function openPlanBoard(page: Page) {
 
 async function createPlanTask(page: Page, title: string, _employeeName: string) {
   const dialog = page.getByRole("dialog", { name: "Доска задач / план на неделю" });
-  await dialog.getByPlaceholder("Новая плановая задача").fill(title);
-  await dialog.getByRole("textbox", { name: "Описание" }).fill(`${title}: описание`);
-  const employeeCheckbox = dialog.locator(".emu-check-list.compact input[type='checkbox']").first();
-  await expect(employeeCheckbox).toBeVisible();
-  await employeeCheckbox.check();
-  await dialog.getByRole("button", { name: "Добавить" }).click();
+  await dialog.getByRole("button", { name: "Новая задача", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Новая плановая задача", exact: true });
+  await editor.getByPlaceholder("Новая плановая задача").fill(title);
+  await editor.getByRole("textbox", { name: "Описание", exact: true }).fill(`${title}: описание`);
+  await editor.locator(".emu-picker button").first().click();
+  await editor.getByRole("button", { name: "Добавить задачу", exact: true }).click();
+  await expect(editor).toHaveCount(0);
   await expect(dialog.locator(".emu-plan-card").filter({ hasText: title })).toBeVisible();
 }
 

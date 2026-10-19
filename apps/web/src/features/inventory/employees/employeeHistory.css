@@ -1,0 +1,12 @@
+.inventory-ppe-movements-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; color: var(--ui-muted); font-size: 13px; }
+.inventory-ppe-movements-panel .inventory-ppe-movements-table td { overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table, .inventory-ppe-movements-panel .inventory-ppe-movements-table tbody, .inventory-ppe-movements-panel .inventory-ppe-movements-table tr { display: block; min-width: 0; width: 100%; }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table tr { padding: 10px; border-bottom: 1px solid var(--ui-border); }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table td { display: grid; grid-template-columns: minmax(80px, 30%) minmax(0, 1fr); gap: 8px; padding: 5px 0; border: 0; }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table td::before { content: attr(data-label); color: var(--ui-muted); font-size: 12px; font-weight: 500; }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table td:has(strong) { display: block; }
+  .inventory-ppe-movements-panel .inventory-ppe-movements-table td:has(strong)::before { display: none; }
+  .inventory-ppe-movements-pager button { min-height: 44px; }
+}

@@ -2,7 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { PpeButton, PpeModalShell } from "../features/inventory/ppe/PpeUi";
+import { PpeButton } from "../features/inventory/ppe/PpeUi";
+
+import { ModalShell } from "../shared/ui";
 
 function ModalHarness({ closeDisabled = false }: { closeDisabled?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -10,19 +12,18 @@ function ModalHarness({ closeDisabled = false }: { closeDisabled?: boolean }) {
     <>
       <PpeButton onClick={() => setOpen(true)} variant="primary">Открыть каталог</PpeButton>
       {open ? (
-        <PpeModalShell
-          ariaLabel="Каталог СИЗ"
-          closeDisabled={closeDisabled}
-          footer={<PpeButton onClick={() => setOpen(false)}>Готово</PpeButton>}
+        <ModalShell
+          pending={closeDisabled}
+          actions={<PpeButton onClick={() => setOpen(false)}>Готово</PpeButton>}
           initialFocusSelector="[data-autofocus]"
           onClose={() => setOpen(false)}
-          title="Выбор номенклатуры"
+          title="Каталог СИЗ" subtitle="Выбор номенклатуры"
         >
           <label>
             Поиск
             <input data-autofocus />
           </label>
-        </PpeModalShell>
+        </ModalShell>
       ) : null}
     </>
   );

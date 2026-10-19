@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { InventoryListResponseDto, InventoryPpeMovementDto } from "../../api/contracts";
+import { Button } from "../../shared/ui";
+import "./employees/employeeHistory.css";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 
 type PpeMovementHistoryPanelProps = {
@@ -12,7 +14,11 @@ type PpeMovementHistoryPanelProps = {
   title: string;
 };
 
-export function PpeMovementHistoryPanel({
+export function PpeMovementHistoryPanel(props: PpeMovementHistoryPanelProps) {
+  return <MovementHistoryContent key={`${props.employeeId ?? "*"}:${props.itemId ?? "*"}`} {...props} />;
+}
+
+function MovementHistoryContent({
   employeeId,
   emptyText = "Движений СИЗ пока нет.",
   hideEmployee = false,
@@ -22,14 +28,17 @@ export function PpeMovementHistoryPanel({
   title,
 }: PpeMovementHistoryPanelProps) {
   const inventoryRepository = useInventoryRepository();
+  const [page, setPage] = useState(1);
+  const [loadedPage, setLoadedPage] = useState(1);
+  const [reload, setReload] = useState(0);
   const [rows, setRows] = useState<InventoryPpeMovementDto[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const params = useMemo(
-    () => ({ employeeId, itemId, page: 1, pageSize }),
-    [employeeId, itemId, pageSize],
+    () => ({ employeeId, itemId, page, pageSize }),
+    [employeeId, itemId, page, pageSize],
   );
 
   useEffect(() => {
@@ -43,6 +52,8 @@ export function PpeMovementHistoryPanel({
         if (!mounted) return;
         setRows(response.rows);
         setTotal(response.total);
+        setLoadedPage(response.page);
+        if (response.total > 0 && page > Math.ceil(response.total / pageSize)) setPage(Math.ceil(response.total / pageSize));
       })
       .catch((loadError) => {
         if (mounted) {
@@ -56,18 +67,18 @@ export function PpeMovementHistoryPanel({
     return () => {
       mounted = false;
     };
-  }, [inventoryRepository, params]);
+  }, [inventoryRepository, params, reload]);
 
   return (
-    <section className="inventory-ppe-movements-panel">
+    <section className="inventory-ppe-movements-panel" aria-busy={loading}>
       <header>
         <div>
           <h3>{title}</h3>
-          <p>{loading ? "Загрузка..." : `${rows.length} из ${total} записей`}</p>
+          <p role="status">{loading ? rows.length ? "Обновляем историю… Показаны предыдущие данные." : "Загружаем историю…" : `${rows.length} из ${total} записей`}</p>
         </div>
       </header>
 
-      {error ? <div className="inventory-ppe-movements-state is-error">{error}</div> : null}
+      {error ? <div className="inventory-ppe-movements-state is-error" role="alert">{error} <Button onClick={() => setReload(value => value + 1)} variant="ghost">Повторить</Button></div> : null}
       {!loading && !error && rows.length === 0 ? (
         <div className="inventory-ppe-movements-state">{emptyText}</div>
       ) : null}
@@ -90,30 +101,35 @@ export function PpeMovementHistoryPanel({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.lineId}>
-                  <td>{formatDate(row.issuedAt ?? row.createdAt)}</td>
+                  <td data-label="Дата">{formatDate(row.issuedAt ?? row.createdAt)}</td>
                   {!hideEmployee ? (
-                    <td>
+                    <td data-label="Сотрудник">
                       <strong>{row.employeeName}</strong>
                       <span>{row.employeePersonnelNo || row.employeeDepartment || "-"}</span>
                     </td>
                   ) : null}
                   {!hideItem ? (
-                    <td>
+                    <td data-label="Предмет">
                       <strong>{row.itemName}</strong>
                       <span>{row.returnedAt ? `Возврат: ${formatDate(row.returnedAt)}` : row.writtenOffAt ? `Списание: ${formatDate(row.writtenOffAt)}` : row.comment}</span>
                     </td>
                   ) : null}
-                  <td>{formatQuantity(row.quantity, row.unit)}</td>
-                  <td className={row.unitPriceMinor ? undefined : "inventory-ppe-movement-warning"}>{formatMoney(row.unitPriceMinor)}</td>
-                  <td>{formatMoney(row.amountMinor)}</td>
-                  <td>{row.dueAt ? formatDate(row.dueAt) : "-"}</td>
-                  <td><span className={`inventory-ppe-movement-status is-${row.status}`}>{statusLabel(row.status)}</span></td>
+                  <td data-label="Количество">{formatQuantity(row.quantity, row.unit)}</td>
+                  <td data-label="Цена" className={row.unitPriceMinor ? undefined : "inventory-ppe-movement-warning"}>{formatMoney(row.unitPriceMinor)}</td>
+                  <td data-label="Сумма">{formatMoney(row.amountMinor)}</td>
+                  <td data-label="Срок">{row.dueAt ? formatDate(row.dueAt) : "-"}</td>
+                  <td data-label="Статус"><span className={`inventory-ppe-movement-status is-${row.status}`}>{statusLabel(row.status)}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : null}
+      {total > pageSize ? <nav className="inventory-ppe-movements-pager" aria-label="Страницы истории СИЗ">
+        <Button disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)} variant="ghost" size="sm">Назад</Button>
+        <span>{loadedPage} / {Math.max(1, Math.ceil(total / pageSize))}</span>
+        <Button disabled={loading || page >= Math.ceil(total / pageSize)} onClick={() => setPage(value => value + 1)} variant="ghost" size="sm">Вперёд</Button>
+      </nav> : null}
     </section>
   );
 }

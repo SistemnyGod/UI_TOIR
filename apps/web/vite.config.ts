@@ -52,15 +52,12 @@ export default defineConfig({
           }
 
           if (
-            normalizedId.includes("/src/screens/InventoryScreen") ||
-            normalizedId.includes("/src/features/inventory/") ||
             normalizedId.includes("/src/repositories/inventoryRepository")
           ) {
-            return "inventory";
+            return "inventory-data";
           }
 
           if (
-            normalizedId.includes("/src/screens/ResultsScreen") ||
             normalizedId.includes("/src/features/patrol/ResultsScreen") ||
             normalizedId.includes("/src/repositories/resultsRepository") ||
             normalizedId.includes("/src/hooks/useResultsWorkspace")
@@ -69,8 +66,6 @@ export default defineConfig({
           }
 
           if (
-            normalizedId.includes("/src/screens/EmuScreen") ||
-            normalizedId.includes("/src/screens/emu/") ||
             normalizedId.includes("/src/features/emu/") ||
             normalizedId.includes("/src/hooks/useEmuWorkspace") ||
             normalizedId.includes("/src/repositories/emuRepository") ||
@@ -80,7 +75,6 @@ export default defineConfig({
           }
 
           if (
-            normalizedId.includes("/src/screens/PercoIntegrationScreen") ||
             normalizedId.includes("/src/features/perco/") ||
             normalizedId.includes("/src/repositories/percoRepository")
           ) {
@@ -114,7 +108,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    exclude: [...configDefaults.exclude, "e2e/**", "TestResults/**"],
     globals: true,
     setupFiles: ["./src/test/setup.ts"]
   }

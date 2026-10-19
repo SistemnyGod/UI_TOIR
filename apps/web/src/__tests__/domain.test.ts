@@ -10,7 +10,7 @@ import { isTerminalPatrolRequestStatus } from "../domain/patrolRequestStatus";
 import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
 import { isAssignableRequest, resolveSelectedAssignmentEmployee } from "../features/patrol/assignments/assignmentUtils";
 import { getPrimaryActionPermission } from "../security/permissions";
-import { shouldCreateAssignmentAfterRequest } from "../screens/AssignmentScreen";
+import { shouldCreateAssignmentAfterRequest } from "../features/patrol/assignments/assignmentUtils";
 import type { ServiceRequest } from "../types";
 import type { RoutePoint } from "../types";
 

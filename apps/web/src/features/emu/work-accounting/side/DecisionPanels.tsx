@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { EmuDecisionDto, EmuResolveDecisionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
+import { useWorkMutation } from "../useWorkMutation";
+import { WorkFormActions } from "../components/WorkFormActions";
 import { decisionTypeLabel, formatDate, formatMinutes, formatTime } from "../workAccountingUtils";
 import { Button } from "../../../../shared/ui";
 
@@ -97,6 +99,7 @@ export function ResolveDecisionModal({
     defaultResolution,
   );
   const [comment, setComment] = useState("");
+  const mutation = useWorkMutation({ onClose, onNotify, work: decision, values: { resolution, comment } });
   const isEmployeeConflict = decision.decisionType === "employee_conflict";
   const isPercoExit = decision.decisionType === "perco_exit_during_work";
   const isPercoMissingPresence = decision.decisionType === "perco_missing_presence_for_work";
@@ -110,21 +113,15 @@ export function ResolveDecisionModal({
       return;
     }
 
-    try {
-      await workspace.actions.resolveDecision(decision.id, {
+    await mutation.run(() => workspace.actions.resolveDecision(mutation.workId, {
         comment,
         resolution,
-        rowVersion: decision.rowVersion,
-      });
-      onNotify("Спорная ситуация закрыта");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось закрыть спорную ситуацию");
-    }
+        rowVersion: mutation.rowVersion,
+      }), "Спорная ситуация закрыта");
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Закрыть спорную ситуацию">
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} onClose={mutation.close} title="Закрыть спорную ситуацию" actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Закрыть решение" disabled={!comment.trim()} />}>
       <div className="emu-decision-modal-summary">
         <strong>{decision.employeeName}</strong>
         <span>{decision.workNumber || "Карточка не указана"} · {decision.sectionName || "Участок не указан"}</span>
@@ -229,10 +226,6 @@ export function ResolveDecisionModal({
           value={comment}
         />
       </label>
-      <div className="emu-modal-actions">
-        <Button onClick={onClose} variant="secondary">Отмена</Button>
-        <Button onClick={submit} variant="primary">Закрыть решение</Button>
-      </div>
     </ModalFrame>
   );
 }

@@ -1,141 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-test("inventory PPE screen renders journal and create wizard", async ({ page }) => {
-  const sessionUser = {
-    id: "admin-1",
-    login: "admin",
-    displayName: "Администратор",
-    roles: ["admin"],
-    permissions: ["dashboard.read", "site_users.write"],
-  };
-
-  const ppeCards = {
-    rows: [
-      {
-        id: "00000000-0000-0000-0000-000000000101",
-        employeeId: "00000000-0000-0000-0000-000000000201",
-        employeeName: "Иванов Иван Иванович",
-        position: "Электромонтер",
-        status: "active",
-        linesCount: 2,
-      },
-    ],
-    total: 1,
-    page: 1,
-    pageSize: 100,
-    pageCount: 1,
-  };
-
-  const ppeOptions = {
-    employees: [
-      {
-        id: "00000000-0000-0000-0000-000000000201",
-        fullName: "Иванов Иван Иванович",
-        personnelNo: "T-001",
-        position: "Электромонтер",
-        department: "Цех 1",
-        status: "active",
-        employeeGroup: "Производство",
-        hiredAt: null,
-        birthDate: null,
-      },
-    ],
-    items: [
-      {
-        id: "00000000-0000-0000-0000-000000000301",
-        name: "Каска защитная",
-        sku: "PPE-001",
-        categoryId: "00000000-0000-0000-0000-000000000401",
-        category: "Голова",
-        unitId: "00000000-0000-0000-0000-000000000501",
-        unit: "шт.",
-        balance: 10,
-        stockPhysical: 10,
-        stockReserved: 0,
-        stockAvailable: 10,
-        stockStatus: "normal",
-        minStockQty: 1,
-        itemKind: "ppe",
-        normItemName: "Каска",
-        actualItemName: "Каска защитная",
-        brandName: "UVEX",
-        modelName: "Фаворит",
-        article: "UV-01",
-        protectionClass: "",
-        clothingSize: "",
-        heightSize: "",
-        shoeSize: "",
-        headSize: "",
-        gloveSize: "",
-        respiratorSize: "",
-        defaultLifeMonths: 12,
-        defaultUnitPriceMinor: 250000,
-        trackingType: "ppe",
-        comment: "",
-        isConsumable: false,
-        trackLife: true,
-        isActive: true,
-        status: "active",
-      },
-    ],
-    settings: {
-      categories: [
-        {
-          id: "00000000-0000-0000-0000-000000000401",
-          name: "Голова",
-          code: "head",
-          isActive: true,
-        },
-      ],
-      units: [],
-      warehouses: [
-        {
-          id: "00000000-0000-0000-0000-000000000601",
-          name: "Основной склад",
-          code: "main",
-          isActive: true,
-        },
-      ],
-      custodyCategories: [],
-      returnReasons: [],
-      writeOffReasons: [],
-      itemSets: [],
-      positionNorms: [],
-      employeePositions: [],
-      employeeDepartments: [],
-      employeeGroups: [],
-    },
-    statuses: ["active", "issued", "not_issued", "returned", "written_off"],
-  };
-
-  await page.addInitScript(() => {
-    window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
-    window.localStorage.setItem("patrol360.sessionToken", "test-token");
-  });
-
-  await page.route("**/api/v1/auth/me", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(sessionUser),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/cards**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeCards),
-    }),
-  );
-  await page.route("**/api/v1/inventory/ppe/options", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(ppeOptions),
-    }),
-  );
-
+test("PPE journal exposes disabled issuance and keeps personal cards accessible", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "mock" })));
+  await page.route("**/api/**", route => route.abort());
   await page.goto("/#inventory-ppe");
-
-  await expect(page.getByRole("heading", { name: "СИЗ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Выдача СИЗ", exact: true })).toBeVisible();
+  await expect(page.getByText("Новые выдачи выключены до завершения проверки норм.")).toBeVisible();
+  await page.getByRole("button", { name: "Оформить выдачу" }).click();
+  await expect(page.getByRole("heading", { name: "Новые выдачи СИЗ выключены" })).toBeVisible();
+  await expect(page.locator(".ppe-document-lines")).toHaveCount(0);
+  await page.getByRole("button", { name: "Открыть журнал", exact: true }).click();
+  await page.getByRole("button", { name: "Нормы и личные карточки" }).click();
   await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Выдать СИЗ" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Предпросмотр карточки" })).toBeVisible();
+  await page.getByRole("tab", { name: /Печать/ }).click();
+  await expect(page.locator(".ppe-v2-print-grid")).toBeVisible();
 });

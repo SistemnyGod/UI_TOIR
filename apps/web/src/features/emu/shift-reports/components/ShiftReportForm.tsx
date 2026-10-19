@@ -1,10 +1,11 @@
-import { AlertCircle, Plus, Send, Wrench, Zap } from 'lucide-react';
-import type { FormEvent } from 'react';
+import { AlertCircle, Moon, Plus, Send, Sun, Wrench, Zap } from 'lucide-react';
+import type { FormEvent, ReactNode } from 'react';
 import type { EmuFavoriteEmployeeDto } from '../../../../api/contracts';
 import type {
   EmuShiftReportCategory,
   EmuShiftReportEmployeeOptionDto,
   EmuShiftReportSectionDto,
+  EmuShiftReportShiftOptionDto,
   EmuShiftType,
 } from '../../../../api/emuShiftReportContracts';
 import type { WorkRow } from '../shiftReportUi';
@@ -19,6 +20,8 @@ export function ShiftReportForm({
   reportDate,
   shiftType,
   rows,
+  shifts,
+  summary,
   errors,
   employees,
   favoriteEmployees,
@@ -56,6 +59,8 @@ export function ShiftReportForm({
   reportDate: string;
   shiftType: EmuShiftType;
   rows: WorkRow[];
+  shifts: EmuShiftReportShiftOptionDto[];
+  summary: ReactNode;
   errors: Record<string, string>;
   employees: EmuShiftReportEmployeeOptionDto[];
   favoriteEmployees: EmuFavoriteEmployeeDto[];
@@ -90,6 +95,8 @@ export function ShiftReportForm({
 }) {
   return (
     <form onSubmit={onSubmit} className='emu-shift-card emu-shift-form' noValidate>
+      <fieldset className='emu-report-editor' disabled={submitting}>
+      <legend className='visually-hidden'>Заполнение сменного отчёта</legend>
       <div className='emu-shift-tabs-row'>
         <div className='emu-shift-tabs' role='tablist' aria-label='Категория сотрудников'>
         {(['mechanic', 'electrician'] as const).map((value) => (
@@ -103,6 +110,13 @@ export function ShiftReportForm({
             tabIndex={category === value ? 0 : -1}
             className={category === value ? 'active' : ''}
             onClick={() => onSwitchCategory(value)}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === 'Home' ? 'mechanic' : event.key === 'End' ? 'electrician' : value === 'mechanic' ? 'electrician' : 'mechanic';
+              onSwitchCategory(next);
+              document.getElementById(`shift-report-tab-${next}`)?.focus();
+            }}
           >
             {value === 'mechanic' ? <Wrench aria-hidden='true' size={17} /> : <Zap aria-hidden='true' size={17} />}
             {categoryLabels[value]}
@@ -130,6 +144,7 @@ export function ShiftReportForm({
       <div id='shift-report-form-panel' className='emu-shift-panel' role='tabpanel' aria-labelledby={`shift-report-tab-${category}`}>
         <div className='emu-shift-fields'>
           <EmployeePicker
+            inputId='employeeId'
             category={category}
             employees={employees}
             favoriteEmployees={favoriteEmployees}
@@ -150,10 +165,15 @@ export function ShiftReportForm({
           <fieldset>
             <legend>Смена *</legend>
             <div className='emu-shift-segment' aria-label='Смена'>
-              {(['day', 'night'] as const).map((value) => (
-                <button type='button' key={value} aria-pressed={shiftType === value} className={shiftType === value ? 'active' : ''} onClick={() => onChooseShift(value)}>{shiftLabels[value]}</button>
-              ))}
+              {(['day', 'night'] as const).map((value) => {
+                const shift = shifts.find((item) => item.shiftType === value);
+                return <button type='button' key={value} aria-pressed={shiftType === value} className={shiftType === value ? 'active' : ''} onClick={() => onChooseShift(value)}>
+                  {value === 'day' ? <Sun aria-hidden='true' size={16} /> : <Moon aria-hidden='true' size={16} />}
+                  <span>{shiftLabels[value]}{shift ? <span className='emu-report-shift-hours'>{shift.startTime} — {shift.endTime}</span> : null}</span>
+                </button>;
+              })}
             </div>
+            {shiftType === 'night' && shifts.some((shift) => shift.shiftType === 'night' && shift.crossesMidnight) ? <span className='emu-report-field-hint'>Укажите дату начала ночной смены.</span> : null}
             {nightWarning ? <small className='warning'>{nightWarning}</small> : null}
           </fieldset>
         </div>
@@ -162,9 +182,14 @@ export function ShiftReportForm({
 
         {!sections.length ? <p className='emu-inline-notice'><AlertCircle aria-hidden='true' size={17} />Справочник участков пуст. Отчёт можно отправить без указания участка.</p> : null}
 
+        <div className='emu-report-work-heading'>
+          <div><h2>Выполненные работы</h2><p>Пустые строки не отправляются. Время укажите в часах и минутах.</p></div>
+          {summary}
+        </div>
         <div className='emu-shift-table-wrap'>
           <table className='emu-shift-table'>
-            <thead><tr><th>№</th><th>Выполненная работа *</th><th>Время *</th><th>Участок</th><th>Неисправность / примечание</th><th><span className='sr-only'>Действия</span></th></tr></thead>
+            <caption className='visually-hidden'>Работы за смену: описание, время, участок и примечание</caption>
+            <thead><tr><th>№</th><th>Выполненная работа *</th><th>Время *</th><th>Участок</th><th>Неисправность / примечание</th><th><span className='visually-hidden'>Действия</span></th></tr></thead>
             <tbody>{rows.map((item, index) => <ShiftReportWorkRow key={item.id} index={index} row={item} sections={sections} errors={errors} onChange={(patch) => onUpdateRow(item.id, patch)} onRemove={() => onRemoveRow(index)} />)}</tbody>
           </table>
         </div>
@@ -182,6 +207,7 @@ export function ShiftReportForm({
           <button type='submit' className='primary' disabled={submitting || !employees.length || Boolean(draftConflict)}><Send aria-hidden='true' size={18} />{submitting ? 'Отправляем…' : 'Отправить отчёт'}</button>
         </footer>
       </div>
+      </fieldset>
     </form>
   );
 }

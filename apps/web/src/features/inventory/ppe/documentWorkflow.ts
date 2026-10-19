@@ -1,6 +1,6 @@
 import type { InventoryPpeNormRowDto, PpeIssueDocumentLineInputDto } from "../../../api/contracts";
 
-export type DraftLine = PpeIssueDocumentLineInputDto & { itemName: string; unitSymbol: string; normName: string; approved: boolean; standards?: { designation: string; name: string }[] | null };
+export type DraftLine = PpeIssueDocumentLineInputDto & { itemName: string; unitSymbol: string; normName: string; approved: boolean; standards?: { designation: string; name: string }[] | null; priceInput?: string };
 export type KitTemplate = { id: string; name: string; normSetId: string; lines: DraftLine[] };
 export function addMonths(date: string, months: number | null | undefined) {
   if (!Number.isInteger(months) || !months || months < 1 || months > 1200 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;

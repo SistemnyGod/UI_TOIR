@@ -1,6 +1,7 @@
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef } from "react";
 import type { RouteDirectoryItem, RoutePoint, RoutePointFormPayload } from "../../../../types";
-import { EmptyState, ModalShell } from "../../../../shared/ui";
+import { EmptyState, Field, ModalShell, useDialogCloseGuard } from "../../../../shared/ui";
 import { PointEditorForm, pointToDraft } from "./PointEditorForm";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -10,6 +11,8 @@ interface RoutePointDrawerProps {
   draft: RoutePointFormPayload;
   editorMode: "create" | "edit";
   isOpen: boolean;
+  isSaving?: boolean;
+  error?: string;
   point?: RoutePoint;
   route?: RouteDirectoryItem;
   onCancel: () => void;
@@ -24,6 +27,8 @@ export function RoutePointDrawer({
   draft,
   editorMode,
   isOpen,
+  isSaving = false,
+  error = "",
   point,
   route,
   onCancel,
@@ -32,11 +37,17 @@ export function RoutePointDrawer({
   onDelete,
   onSubmit,
 }: RoutePointDrawerProps) {
+  const initial = useRef(JSON.stringify(draft));
+  useEffect(() => { if (isOpen) initial.current = JSON.stringify(draft); }, [isOpen, point?.id, editorMode]);
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty: () => canManage && JSON.stringify(draft) !== initial.current, pending: isSaving, onClose: () => {
+    onCancel();
+    if (point) onChange(pointToDraft(point));
+  } });
   if (!isOpen) return null;
 
   function handleCancel() {
-    onCancel();
-    if (point) onChange(pointToDraft(point));
+    if (isSaving) return;
+    requestClose();
   }
 
   function closeModal(event?: Pick<ReactMouseEvent, "preventDefault" | "stopPropagation">) {
@@ -49,11 +60,12 @@ export function RoutePointDrawer({
     ? "Точка не выбрана"
     : editorMode === "create"
       ? "Новая точка"
-      : "Редактирование точки";
+      : canManage ? "Редактирование точки" : "Просмотр точки";
 
   return (
-    <ModalShell
+    <><ModalShell
       className="route-point-modal"
+      pending={isSaving}
       onClose={() => closeModal()}
       subtitle={route?.name}
       title={title}
@@ -63,6 +75,9 @@ export function RoutePointDrawer({
       ) : (
         canManage ? (
           <PointEditorForm
+            key={editorMode === "edit" ? point?.id : "create"}
+            isSaving={isSaving}
+            error={error}
             draft={draft}
             mode={editorMode}
             point={point}
@@ -74,12 +89,9 @@ export function RoutePointDrawer({
             onSubmit={onSubmit}
           />
         ) : (
-          <EmptyState
-            title="Просмотр точки маршрута"
-            description={point ? `${point.name} / ${point.type} / ${point.tag || "без метки"}` : "Выберите точку маршрута для просмотра."}
-          />
+          point ? <div className="route-point-readonly"><h3>{point.name}</h3><dl className="meta-list"><Field label="Порядок" value={point.order} /><Field label="Зона" value={point.zone || "—"} /><Field label="Тип" value={point.type} /><Field label="Код метки" value={point.tag || "—"} /></dl><section><h3>Описание оборудования</h3><p>{point.description || "Описание не добавлено"}</p></section><section><h3>Инструкция к метке</h3><p>{point.instruction || "Инструкция не добавлена"}</p></section></div> : <EmptyState title="Точка не выбрана" description="Выберите точку маршрута для просмотра." />
         )
       )}
-    </ModalShell>
+    </ModalShell>{discardDialog}</>
   );
 }

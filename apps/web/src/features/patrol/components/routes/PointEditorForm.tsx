@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { RouteDirectoryItem, RoutePoint, RoutePointFormPayload } from "../../../../types";
 import { Button, EmptyState, Field } from "../../../../shared/ui";
 
@@ -7,6 +7,7 @@ type MaybePromise<T> = T | Promise<T>;
 const pointTypeOptions = ["NFC", "QR-код", "Ручной контроль"] as RoutePoint["type"][];
 
 export const emptyPointDraft: RoutePointFormPayload = {
+  requiresPhoto: false,
   name: "",
   zone: "",
   type: "NFC",
@@ -23,6 +24,8 @@ export function PointEditorForm({
   mode,
   point,
   route,
+  isSaving = false,
+  error = "",
   onCancel,
   onChange,
   onCreate,
@@ -33,12 +36,15 @@ export function PointEditorForm({
   mode: "create" | "edit";
   point?: RoutePoint;
   route: RouteDirectoryItem;
+  isSaving?: boolean;
+  error?: string;
   onCancel: () => void;
   onChange: (draft: RoutePointFormPayload) => void;
   onCreate: () => void;
   onDelete?: () => MaybePromise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => MaybePromise<void>;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const normalizedTag = draft.tag.trim().toLowerCase();
   const hasDuplicateTag =
     normalizedTag.length > 0 &&
@@ -55,8 +61,8 @@ export function PointEditorForm({
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="route-point-editor-body">
+    <form className="route-point-form" onSubmit={onSubmit} aria-busy={isSaving}>
+      <div className="route-point-editor-body"><fieldset className="patrol-route-fields" disabled={isSaving}>
         <section className="route-point-editor-section">
           <div className="route-point-editor-section-head">
             <span className="route-point-editor-step">1</span>
@@ -72,13 +78,13 @@ export function PointEditorForm({
             </label>
             <label>
               Тип точки
-              <select value={draft.type} onChange={(event) => onChange({ ...draft, type: event.currentTarget.value as RoutePoint["type"] })}>
+              <select aria-label="Тип точки" value={draft.type} onChange={(event) => onChange({ ...draft, type: event.currentTarget.value as RoutePoint["type"] })}>
                 {pointTypeOptions.map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
             <label>
               Код метки
-              <input placeholder="Например, NFC-001" value={draft.tag} onChange={(event) => onChange({ ...draft, tag: event.currentTarget.value })} />
+              <input aria-label="Код метки" placeholder="Например, NFC-001" value={draft.tag} onChange={(event) => onChange({ ...draft, tag: event.currentTarget.value })} />
               <small>Уникальный NFC/QR-код внутри маршрута.</small>
             </label>
             <label className="route-point-editor-wide">
@@ -93,13 +99,14 @@ export function PointEditorForm({
             <span className="route-point-editor-step">2</span>
             <div>
               <h3>Контекст для обходчика</h3>
-              <p>Текст сохраняется в базе и передаётся вместе с точкой маршрута.</p>
+              <p>Обходчик увидит описание и инструкцию при открытии точки.</p>
             </div>
           </div>
           <div className="route-point-editor-copy-grid">
             <label>
               Описание оборудования
               <textarea
+                aria-label="Описание оборудования"
                 maxLength={1000}
                 placeholder="Что это за оборудование и что контролируется в этой точке"
                 rows={4}
@@ -111,6 +118,7 @@ export function PointEditorForm({
             <label>
               Инструкция к метке
               <textarea
+                aria-label="Инструкция к метке"
                 maxLength={2000}
                 placeholder="Куда поднести телефон, что осмотреть и на что обратить внимание"
                 rows={4}
@@ -121,25 +129,23 @@ export function PointEditorForm({
             </label>
           </div>
         </section>
-      </div>
       <dl className="meta-list">
         <Field label="Порядок" value={point?.order ?? route.points.length + 1} />
         <Field label="Маршрут" value={route.name} />
       </dl>
-      <div className="notice info-soft">
-        <strong>NFC-метка должна быть уникальной внутри маршрута.</strong>
-        <span>Одинаковый тег допустим только в другом маршруте. В этом маршруте сохранение дубля будет заблокировано.</span>
-      </div>
       {hasDuplicateTag ? (
         <div className="notice warning-soft">
           <strong>Такая NFC/QR-метка уже есть в этом маршруте.</strong>
           <span>Измените тег или выберите существующую точку с этой меткой.</span>
         </div>
       ) : null}
+      {confirmDelete ? <div className="notice warning-soft"><strong>Удалить точку «{point?.name}» из маршрута?</strong><span>Сохранение формы не требуется. Проверьте выбранную точку перед удалением.</span><div className="inline-actions"><Button variant="danger" onClick={onDelete}>Да, удалить точку</Button><Button variant="ghost" onClick={() => setConfirmDelete(false)}>Оставить точку</Button></div></div> : null}
+      </fieldset></div>
       <div className="drawer-actions">
-        {onDelete ? <Button className="danger-outline" onClick={onDelete} variant="danger">Удалить</Button> : null}
-        <Button onClick={onCancel} variant="ghost">Отмена</Button>
-        <Button disabled={hasDuplicateTag} type="submit" variant="primary">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</Button>
+        {error ? <p role="alert" className="route-form-error">{error}</p> : null}
+        {onDelete ? <Button disabled={isSaving} className="danger-outline" onClick={() => setConfirmDelete(true)} variant="ghost">Удалить точку</Button> : null}
+        <Button disabled={isSaving} onClick={onCancel} variant="ghost">Отмена</Button>
+        <Button disabled={hasDuplicateTag || isSaving} isLoading={isSaving} type="submit" variant="primary">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</Button>
       </div>
     </form>
   );
@@ -147,6 +153,7 @@ export function PointEditorForm({
 
 export function pointToDraft(point: RoutePoint): RoutePointFormPayload {
   return {
+    requiresPhoto: false,
     name: point.name,
     zone: point.zone,
     type: point.type,

@@ -91,9 +91,9 @@ export function createApiResultsRepository({
   };
 }
 
-export async function downloadResultAttachment(attachment: PatrolResultAttachment) {
+export async function downloadResultAttachment(attachment: PatrolResultAttachment, options: ApiRequestOptions = {}) {
   const client = new ApiClient();
-  return client.download(attachment.downloadUrl);
+  return client.download(attachment.downloadUrl, { method: "GET" }, { timeoutMs: 120_000, ...options });
 }
 
 async function getResultPage(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions & { page?: number }): Promise<ResultPage> {

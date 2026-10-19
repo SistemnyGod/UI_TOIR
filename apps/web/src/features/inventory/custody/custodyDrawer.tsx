@@ -1,5 +1,4 @@
-import { createPortal } from "react-dom";
-import { Archive, History, Lock, Unlock, X } from "lucide-react";
+import { Archive, History, Lock, Unlock } from "lucide-react";
 import type { InventoryCustodyRecordDto, InventoryEmployeeDto, InventoryHistoryDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import {
@@ -12,11 +11,14 @@ import {
   formatDate,
   statusDescription,
 } from "./custodyCommon";
+import { ModalShell } from "../../../shared/ui";
 import { CustodyRecordTable } from "./custodyJournal";
 import type { CustodyDocumentAction, CustodyDrawer } from "./custodyTypes";
 
 export function CustodyDetailDrawer({
   busyAction,
+  pending = false,
+  actionError,
   drawer,
   employees,
   onArchiveRecord,
@@ -28,15 +30,17 @@ export function CustodyDetailDrawer({
   onUpdateRecordStatus,
 }: {
   busyAction: string;
+  pending?: boolean;
+  actionError?: string;
   drawer: CustodyDrawer;
   employees: InventoryEmployeeDto[];
-  onArchiveRecord: (row: InventoryCustodyRecordDto, documentId?: string) => Promise<void>;
+  onArchiveRecord: (row: InventoryCustodyRecordDto, documentId?: string) => Promise<void | boolean>;
   onClose: () => void;
   onDownload: (action: () => Promise<{ blob: Blob; fileName: string }>) => Promise<void>;
   onOpenRecordHistory: (row: InventoryCustodyRecordDto) => Promise<void>;
-  onTransferRecord: (row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) => Promise<void>;
-  onUpdateDocumentState: (documentId: string, action: CustodyDocumentAction) => Promise<void>;
-  onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void>;
+  onTransferRecord: (row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) => Promise<void | boolean>;
+  onUpdateDocumentState: (documentId: string, action: CustodyDocumentAction) => Promise<void | boolean>;
+  onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void | boolean>;
 }) {
   const inventoryRepository = useInventoryRepository();
   if (!drawer) return null;
@@ -45,33 +49,22 @@ export function CustodyDetailDrawer({
     ? `Акт под запись: ${drawer.detail.number}`
     : drawer.title;
 
-  return createPortal(
-    <div className="inventory-custody-drawer-backdrop" onMouseDown={onClose} role="presentation">
-      <aside className="inventory-custody-drawer" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        <header className="inventory-custody-drawer-header">
-          <div>
-            <p>{drawer.type === "document" ? "Детали акта" : "История операций"}</p>
-            <h2>{title}</h2>
-          </div>
-          <button className="inventory-custody-icon-button" onClick={onClose} title="Закрыть" type="button">
-            <X size={20} />
-          </button>
-        </header>
-
+  return <ModalShell title={title} subtitle={drawer.type === "document" ? "Детали акта под запись" : "История операций"} className="custody-document-dialog" pending={pending} onClose={onClose}
+    actions={<>
         {drawer.type === "document" ? (
-          <div className="inventory-custody-drawer-actions">
+          <div className="custody-document-actions">
             {drawer.detail.status === "closed" ? (
-              <button className="button ghost" disabled={busyAction === `open-${drawer.detail.id}`} onClick={() => void onUpdateDocumentState(drawer.detail.id, "open")} type="button">
+              <button className="button ghost" disabled={Boolean(busyAction)} onClick={() => void onUpdateDocumentState(drawer.detail.id, "open")} type="button">
                 <Unlock size={15} />
                 Открыть
               </button>
             ) : (
-              <button className="button ghost" disabled={busyAction === `close-${drawer.detail.id}`} onClick={() => void onUpdateDocumentState(drawer.detail.id, "close")} type="button">
+              <button className="button ghost" disabled={Boolean(busyAction)} onClick={() => void onUpdateDocumentState(drawer.detail.id, "close")} type="button">
                 <Lock size={15} />
                 Закрыть
               </button>
             )}
-            <button className="button ghost danger" disabled={busyAction === `archive-${drawer.detail.id}`} onClick={() => void onUpdateDocumentState(drawer.detail.id, "archive")} type="button">
+            <button className="button ghost danger" disabled={Boolean(busyAction)} onClick={() => void onUpdateDocumentState(drawer.detail.id, "archive")} type="button">
               <Archive size={15} />
               Архив
             </button>
@@ -80,7 +73,11 @@ export function CustodyDetailDrawer({
           </div>
         ) : null}
 
-        <div className="inventory-custody-drawer-body">
+
+      <button className="button ghost" disabled={pending} onClick={onClose} type="button">Закрыть просмотр</button>
+    </>}>
+    {actionError ? <p role="alert" className="field-error">{actionError}</p> : null}
+        <div className="custody-document-content">
           {drawer.type === "document" ? (
             <>
               <section className="inventory-custody-drawer-meta">
@@ -142,10 +139,7 @@ export function CustodyDetailDrawer({
             </>
           )}
         </div>
-      </aside>
-    </div>,
-    document.body,
-  );
+  </ModalShell>;
 }
 
 function CustodyHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
@@ -168,11 +162,11 @@ function CustodyHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
-              <td>{formatDate(row.createdAt)}</td>
-              <td>{entityLabel(row.entityType)}</td>
-              <td>{actionLabel(row.action)}</td>
-              <td>{row.description?.trim() && row.description.trim() !== "->" ? statusDescription(row.description) : "Без описания"}</td>
-              <td>{row.actor || "Система"}</td>
+              <td data-label="Дата">{formatDate(row.createdAt)}</td>
+              <td data-label="Сущность">{entityLabel(row.entityType)}</td>
+              <td data-label="Действие">{actionLabel(row.action)}</td>
+              <td data-label="Описание">{row.description?.trim() && row.description.trim() !== "->" ? statusDescription(row.description) : "Без описания"}</td>
+              <td data-label="Пользователь">{row.actor || "Система"}</td>
             </tr>
           ))}
         </tbody>

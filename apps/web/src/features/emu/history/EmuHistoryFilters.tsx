@@ -1,7 +1,6 @@
-import { CalendarDays, ChevronDown, ChevronUp, Download, Filter, RotateCcw, Search, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Button, FilterBar, IconButton } from "../../../shared/ui";
-import { addMonths, buildCalendarDays, formatDate, formatMonthLabel, formatPeriodLabel, getCalendarDayClass, normalizeDateRange, parseDateKey, startOfMonth } from "../../patrol/assignments/assignmentDateUtils";
+import { ChevronDown, ChevronUp, Download, Filter, RotateCcw, Search, Settings2 } from "lucide-react";
+import { useState } from "react";
+import { Button, DateRangePicker, FilterBar } from "../../../shared/ui";
 import { statusFilterOptions } from "./emuHistoryTypes";
 
 type ShiftType = "" | "day" | "night";
@@ -103,10 +102,6 @@ export function EmuHistoryFilters({
   waitReasons: IdNameOption[];
   notCompletedReasons: IdNameOption[];
 }) {
-  const [periodOpen, setPeriodOpen] = useState(false);
-  const [periodDraftFrom, setPeriodDraftFrom] = useState(dateFrom);
-  const [periodDraftTo, setPeriodDraftTo] = useState(dateTo);
-  const [periodMonth, setPeriodMonth] = useState(() => startOfMonth(parseDateKey(dateFrom || dateTo) ?? new Date()));
   const [filterSettingsOpen, setFilterSettingsOpen] = useState(false);
   const [visibleFilters, setVisibleFilters] = useState<Record<VisibleFilterKey, boolean>>({
     flags: true,
@@ -114,91 +109,13 @@ export function EmuHistoryFilters({
     sort: true,
     waitReason: true,
   });
-  const periodCalendarDays = useMemo(() => buildCalendarDays(periodMonth), [periodMonth]);
   const visibleFilterCount = visibleFilterOptions.filter((option) => visibleFilters[option.key]).length;
-
-  useEffect(() => {
-    if (!periodOpen) {
-      setPeriodDraftFrom(dateFrom);
-      setPeriodDraftTo(dateTo);
-      setPeriodMonth(startOfMonth(parseDateKey(dateFrom || dateTo) ?? new Date()));
-    }
-  }, [dateFrom, dateTo, periodOpen]);
-
-  function openPeriodPicker() {
-    setPeriodDraftFrom(dateFrom);
-    setPeriodDraftTo(dateTo);
-    setPeriodMonth(startOfMonth(parseDateKey(dateFrom || dateTo) ?? new Date()));
-    setPeriodOpen(true);
-  }
-
-  function selectPeriodDate(value: string) {
-    if (!periodDraftFrom || periodDraftTo) {
-      setPeriodDraftFrom(value);
-      setPeriodDraftTo("");
-      return;
-    }
-
-    const range = normalizeDateRange(periodDraftFrom, value);
-    setPeriodDraftFrom(range.from);
-    setPeriodDraftTo(range.to);
-  }
-
-  function applyPeriod() {
-    const range = normalizeDateRange(periodDraftFrom, periodDraftTo);
-    setDateFrom(range.from);
-    setDateTo(range.to);
-    setPeriodDraftFrom(range.from);
-    setPeriodDraftTo(range.to);
-    setPeriodOpen(false);
-  }
-
-  function clearPeriod() {
-    setPeriodDraftFrom("");
-    setPeriodDraftTo("");
-    setDateFrom("");
-    setDateTo("");
-    setPeriodOpen(false);
-  }
 
   return (
     <FilterBar ariaLabel="Фильтры истории выполненных работ" className="emu-history-filter-card">
       <div className="emu-history-period-field">
         <span>Период</span>
-        <div className="emu-history-period-picker">
-          <CalendarDays size={16} />
-          <Button aria-expanded={periodOpen} aria-haspopup="dialog" className="emu-history-period-trigger" onClick={openPeriodPicker} variant="ghost">
-            <strong>{formatPeriodLabel(dateFrom, dateTo)}</strong>
-            <small>{periodOpen ? "Закрыть" : "Выбрать"}</small>
-          </Button>
-          {periodOpen ? (
-            <div className="emu-history-period-popover date-range-popover calendar-popover" role="dialog" aria-label="Выбор периода">
-              <div className="date-range-calendar-head">
-                <IconButton label="Предыдущий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, -1))}>‹</IconButton>
-                <strong>{formatMonthLabel(periodMonth)}</strong>
-                <IconButton label="Следующий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, 1))}>›</IconButton>
-              </div>
-              <div className="date-range-calendar-weekdays" aria-hidden="true">
-                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}
-              </div>
-              <div className="date-range-calendar-grid">
-                {periodCalendarDays.map((day) => (
-                  <button aria-label={formatDate(day.value)} className={getCalendarDayClass(day.value, day.inCurrentMonth, periodDraftFrom, periodDraftTo)} key={day.value} onClick={() => selectPeriodDate(day.value)} type="button">
-                    {day.date.getDate()}
-                  </button>
-                ))}
-              </div>
-              <div className="date-range-summary">
-                <strong>{formatPeriodLabel(periodDraftFrom, periodDraftTo)}</strong>
-                <small>{periodDraftFrom && !periodDraftTo ? "Теперь выберите дату окончания" : "Диапазон готов к применению"}</small>
-              </div>
-              <div className="date-range-actions">
-                <Button onClick={clearPeriod} variant="secondary">Очистить</Button>
-                <Button disabled={!periodDraftFrom || !periodDraftTo} onClick={applyPeriod} variant="primary">Применить</Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <DateRangePicker allowClear dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to); }} triggerClassName="emu-history-period-trigger" />
       </div>
       <label>
         <span>Смена</span>

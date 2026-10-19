@@ -1,4 +1,4 @@
-import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   EmuShiftReportCategory,
@@ -25,7 +25,7 @@ function displayDate(value: string) {
   return year && month && day ? `${day}.${month}.${year}` : value;
 }
 
-export function ShiftReportHistoryScreen({ workspace }: { workspace: Workspace }) {
+export function ShiftReportHistoryScreen({ workspace, canCreate }: { workspace: Workspace; canCreate: boolean }) {
   const today = localDate();
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
@@ -127,16 +127,19 @@ export function ShiftReportHistoryScreen({ workspace }: { workspace: Workspace }
   }
 
   return (
-    <main className='emu-shift-report-page emu-history-page'>
+    <main className='emu-shift-report-page emu-report-workspace emu-history-page'>
       <PageHeader
         className='emu-shift-header emu-history-header'
         description='Дневные и ночные отчёты слесарей и электриков за выбранный период.'
         eyebrow='ЭМУ · СМЕННЫЕ ОТЧЁТЫ'
         title='История сменных отчётов'
         actions={(
+          <div className='emu-shift-header-actions'>
+          {canCreate ? <a className='emu-report-link is-primary' href='#emu-shift-report-entry'><Plus aria-hidden='true' size={18} />Новый отчёт</a> : null}
           <Button className='emu-refresh-button' disabled={workspace.historyLoading} onClick={() => void refresh()} variant='secondary'>
           <RefreshCw className={workspace.historyLoading ? 'spin' : ''} aria-hidden='true' size={17} />{workspace.historyLoading ? 'Обновляем…' : 'Обновить'}
           </Button>
+          </div>
         )}
       />
       <div className='emu-history-period-summary'><CalendarRange aria-hidden='true' size={15} /><span>{periodLabel}</span><b>{workspace.historyInitialized ? `${workspace.historyTotal} отч.` : 'Загрузка…'}</b></div>

@@ -119,6 +119,7 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   await page.route("**/api/v1/auth/me", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify(sessionUser) }),
   );
+  await page.route("**/api/v1/system-notifications**", route => route.fulfill({ json: [] }));
   await page.route("**/api/v1/inventory/issues**", (route) => {
     requests.push(route.request().url());
     if (route.request().url().includes("/options")) {
@@ -161,7 +162,7 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   await expect(page.locator(".inventory-issue-item-grid").getByText("Каска для issue smoke")).toBeVisible();
   await page.getByRole("button", { name: "История выдачи" }).click();
   await expect(page.locator(".inventory-issue-journal")).toContainText("INV-ISSUE-001");
-  await page.getByRole("button", { name: "Выдача", exact: true }).click();
+  await page.getByRole("navigation", { name: "Разделы выдачи" }).getByRole("button", { name: "Выдача", exact: true }).click();
   expect(requests.some((url) => url.includes("/inventory/employees"))).toBeFalsy();
   expect(requests.some((url) => url.includes("/inventory/items?"))).toBeFalsy();
   expect(requests.some((url) => url.includes("/inventory/settings"))).toBeFalsy();

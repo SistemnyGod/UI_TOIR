@@ -27,10 +27,7 @@
   min-height: 0;
 }
 
-.emu-modal-wide .emu-picker-shell,
-.emu-dashboard-drilldown-body,
-.emu-catalog-editor,
-.emu-plan-board {
+.emu-modal-wide .emu-picker-shell {
   min-height: 0;
   overflow: auto;
 }
@@ -114,44 +111,6 @@
   z-index: 2;
 }
 
-.modal-shell.emu-modal .modal-shell-body > .emu-catalog-modal {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-body,
-.modal-shell.emu-modal.emu-favorites-modal-frame .modal-shell-body {
-  padding: 0 22px 16px;
-}
-
-.modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-header,
-.modal-shell.emu-modal.emu-favorites-modal-frame .modal-shell-header {
-  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
-}
-
-.modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-body > .emu-catalog-modal {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-body > .emu-catalog-modal .emu-catalog-content {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-body > .emu-catalog-modal .emu-catalog-footer {
-  flex: 0 0 auto;
-}
-
-.modal-shell.emu-modal.emu-favorites-modal-frame .modal-shell-body > .emu-favorite-grid {
-  min-height: 0;
-}
-
 @media (max-width: 720px) {
   .modal-shell.emu-modal,
   .modal-shell.emu-modal.emu-modal-wide {
@@ -161,10 +120,5 @@
 
   .modal-shell.emu-modal .modal-shell-body {
     padding: 12px;
-  }
-
-  .modal-shell.emu-modal.emu-catalogs-modal-frame .modal-shell-body,
-  .modal-shell.emu-modal.emu-favorites-modal-frame .modal-shell-body {
-    padding: 0 12px 12px;
   }
 }

@@ -1,0 +1,87 @@
+.modal-shell.ppe-norm-editor-dialog { width: min(820px, 100%); }
+.ppe-norm-editor-dialog .modal-shell-body { display: grid; align-content: start; gap: 16px; }
+.ppe-norm-editor-context, .ppe-norm-editor-hint { margin: 0; color: var(--ui-muted); font-size: 13px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-norm-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.ppe-norm-editor-fields label { display: grid; align-content: start; min-width: 0; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ui-text); }
+.ppe-norm-editor-fields :is(input, textarea, select) { width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-text); background: var(--ui-surface); font: inherit; font-weight: 400; line-height: 1.5; }
+.ppe-norm-editor-fields textarea { resize: vertical; }
+.ppe-norm-editor-fields :is(input, textarea, select):focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.ppe-norm-editor-fields small { color: var(--ui-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.ppe-norm-editor-wide { grid-column: 1 / -1; }
+.ppe-norm-editor-dialog .field-error { margin: 0; color: var(--ui-danger); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ppe-norm-editor-facts { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); overflow-wrap: anywhere; }
+.ppe-norm-editor-facts strong { color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.ppe-norm-editor-facts span { color: var(--ui-muted); font-size: 13px; line-height: 1.5; }
+.ppe-norm-scope-summary { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; border-top: 1px solid var(--ui-border); padding-top: 12px; }
+.ppe-norm-scope-summary dl { display: grid; flex: 1 1 400px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; }
+.ppe-norm-scope-summary dl > div { min-width: 0; }
+.ppe-norm-scope-summary dt { color: var(--ui-muted); font-size: 12px; }
+.ppe-norm-scope-summary dd { margin: 3px 0 0; color: var(--ui-text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-norm-reload-required { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px; color: var(--ui-danger); background: var(--ui-danger-soft); font-size: 13px; line-height: 1.5; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-set { grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-set-meta { display: flex; flex-wrap: wrap; align-self: start; gap: 8px 16px; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-publish { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px 16px; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-publish-actions { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.ppe-norm-publish-context { flex: 1 1 220px; min-width: 0; color: var(--ui-muted); font-size: 13px; line-height: 1.5; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-publish-actions > label { flex: 1 1 280px; min-width: 0; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-areas: "copy mappings" "actions mappings" "catalog catalog"; align-items: start; gap: 10px 16px; padding: 14px; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-row-copy { grid-area: copy; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-row-copy strong { color: var(--ui-text); font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-row-copy small { white-space: normal; overflow-wrap: anywhere; }
+.ppe-norm-row-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.ppe-norm-row-actions > span { white-space: normal; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-mappings { grid-area: mappings; min-width: 0; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-mappings > span { display: flex; flex-wrap: wrap; align-items: start; gap: 8px; min-width: 0; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-mappings > span > span { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+.inventory-ppe-norm-admin .inventory-ppe-norm-row > .inventory-ppe-norm-catalog-selector { grid-area: catalog; }
+.modal-shell.ppe-legacy-template-dialog { width: min(1120px, 100%); }
+.ppe-legacy-template-dialog .modal-shell-body { display: grid; align-content: start; gap: 16px; }
+.ppe-norm-editor-fields .ppe-norm-editor-checkbox { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.ppe-norm-editor-fields .ppe-norm-editor-checkbox input { width: 18px; height: 18px; min-height: 18px; margin: 0; flex: 0 0 auto; }
+.ppe-legacy-source { border: 1px solid var(--ui-border); padding: 10px 12px; border-radius: var(--ui-radius-control); font-size: 13px; overflow-wrap: anywhere; }
+.ppe-legacy-source summary { cursor: pointer; min-height: 28px; font-weight: 600; }
+.ppe-legacy-source ul { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.ppe-legacy-source li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; line-height: 1.5; }
+.ppe-legacy-source li strong { font-weight: 500; }
+.ppe-legacy-source li span { color: var(--ui-muted); }
+.ppe-legacy-lines { display: grid; gap: 12px; min-width: 0; }
+.ppe-legacy-lines > section { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.5fr) minmax(120px, .4fr); align-items: start; gap: 12px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+.ppe-legacy-line-title { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.ppe-legacy-line-title strong { color: var(--ui-text); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.ppe-legacy-line-title span, .ppe-legacy-lines label small { font-size: 12px; color: var(--ui-muted); font-weight: 400; line-height: 1.5; }
+.ppe-legacy-lines label { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 500; }
+.ppe-legacy-lines :is(select, input) { width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-text); background: var(--ui-surface); font: inherit; font-weight: 400; }
+.ppe-legacy-template-dialog .field-error, .ppe-legacy-templates .field-error { margin: 0; color: var(--ui-danger); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ppe-legacy-template-dialog .field-error .ui-button { margin-left: 8px; }
+.ppe-legacy-list-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; font-size: 13px; color: var(--ui-muted); }
+.ppe-legacy-template-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.ppe-legacy-template-list > li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+.ppe-legacy-template-list > li > div { display: grid; gap: 5px; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+.ppe-legacy-template-list strong { color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.ppe-legacy-template-list span { color: var(--ui-muted); font-size: 12px; }
+.modal-shell.ppe-norm-catalog-dialog { width: min(1040px, 100%); }
+.ppe-norm-catalog-dialog .modal-shell-body { display: grid; align-content: start; gap: 14px; }
+.ppe-norm-catalog-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.ppe-norm-catalog-tools label { display: grid; flex: 1 1 320px; min-width: 0; gap: 6px; font-size: 13px; font-weight: 500; }
+.ppe-norm-catalog-tools input { width: 100%; min-width: 0; min-height: 42px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); color: var(--ui-text); background: var(--ui-surface); font: inherit; font-weight: 400; }
+.ppe-norm-catalog-list { display: grid; gap: 8px; }
+.ppe-norm-catalog-list > article { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+.ppe-norm-catalog-list > article > div { display: grid; flex: 1 1 320px; min-width: 0; gap: 4px; overflow-wrap: anywhere; }
+.ppe-norm-catalog-list strong { color: var(--ui-text); font-size: 14px; font-weight: 600; line-height: 1.5; }
+.ppe-norm-catalog-list :is(small, span) { color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+.ppe-norm-catalog-dialog .field-error { margin: 0; color: var(--ui-danger); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.ppe-norm-catalog-range { margin-right: auto; font-size: 13px; color: var(--ui-muted); }
+@media (max-width: 767px) {
+  .ppe-norm-editor-fields, .ppe-norm-scope-summary dl { grid-template-columns: minmax(0, 1fr); }
+  .ppe-norm-editor-fields :is(input, textarea, select) { font-size: 16px; min-height: 44px; }
+  .ppe-norm-scope-summary > .ui-button { width: 100%; min-height: 44px; }
+  .ppe-legacy-lines > section { grid-template-columns: minmax(0, 1fr); }
+  .ppe-legacy-lines :is(select, input) { font-size: 16px; min-height: 44px; }
+  .ppe-legacy-template-list .ui-button { width: 100%; min-height: 44px; }
+  .inventory-ppe-norm-admin .inventory-ppe-norm-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "copy" "actions" "mappings" "catalog"; }
+  .inventory-ppe-norm-admin .inventory-ppe-norm-set, .inventory-ppe-norm-admin .inventory-ppe-norm-publish { grid-template-columns: minmax(0, 1fr); }
+  .inventory-ppe-norm-admin .inventory-ppe-norm-publish-actions > .button { width: 100%; min-height: 44px; }
+  .ppe-norm-row-actions .ui-button, .inventory-ppe-norm-admin .inventory-ppe-norm-mappings .ui-button { min-height: 44px; }
+  .ppe-norm-catalog-tools input { font-size: 16px; min-height: 44px; }
+  .ppe-norm-catalog-list .ui-button { min-height: 44px; }
+}

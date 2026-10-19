@@ -1,170 +1,50 @@
-import { Bell, BellRing, Clock3, Monitor, Settings2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Button, ModalShell } from '../../../../shared/ui';
-
-const SETTINGS_KEY = 'patrol360.emu.shift-report.reminder.v1';
-const DISMISSED_KEY = 'patrol360.emu.shift-report.reminder.dismissed.v1';
-const DESKTOP_SENT_KEY = 'patrol360.emu.shift-report.reminder.desktop-sent.v1';
-
-type ReminderSettings = {
-  enabled: boolean;
-  time: string;
-  inApp: boolean;
-  desktop: boolean;
-};
-
-const defaultSettings: ReminderSettings = {
-  enabled: false,
-  time: '19:30',
-  inApp: true,
-  desktop: false,
-};
-
-function localDay(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function currentTime(date = new Date()) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
-function storageGet(key: string) {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function storageSet(key: string, value: string) {
-  try {
-    window.localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readSettings(): ReminderSettings {
-  try {
-    const stored = JSON.parse(storageGet(SETTINGS_KEY) ?? 'null') as Partial<ReminderSettings> | null;
-    if (!stored || typeof stored !== 'object') return defaultSettings;
-    return {
-      enabled: stored.enabled === true,
-      time: typeof stored.time === 'string' && /^\d{2}:\d{2}$/.test(stored.time) ? stored.time : defaultSettings.time,
-      inApp: stored.inApp !== false,
-      desktop: stored.desktop === true,
-    };
-  } catch {
-    return defaultSettings;
-  }
-}
-
-function notificationPermission(): NotificationPermission | 'unsupported' {
-  return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
-}
+import { Bell, BellRing, Clock3, Monitor, X } from 'lucide-react';
+import { useRef } from 'react';
+import { Button, ModalShell, useDialogCloseGuard } from '../../../../shared/ui';
+import { usePageLeaveGuard } from '../../../../shared/navigation/usePageLeaveGuard';
+import { useShiftReportReminder } from './useShiftReportReminder';
+import { validReminderTime } from './shiftReportReminderModel';
+import './shiftReportReminder.css';
 
 export function ShiftReportReminder({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [settings, setSettings] = useState<ReminderSettings>(readSettings);
-  const [due, setDue] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
-  const secureContext = typeof window !== 'undefined' && window.isSecureContext !== false;
-
-  useEffect(() => {
-    storageSet(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    function checkReminder() {
-      if (!settings.enabled) {
-        setDue(false);
-        return;
-      }
-      const today = localDay();
-      const isDue = currentTime() >= settings.time;
-      const dismissed = storageGet(DISMISSED_KEY) === today;
-      setDue(isDue && settings.inApp && !dismissed);
-
-      if (!isDue || !settings.desktop || permission !== 'granted' || !secureContext) return;
-      if (storageGet(DESKTOP_SENT_KEY) === today) return;
-      try {
-        new Notification('Пора отправить сменный отчёт', {
-          body: 'Откройте сменный отчёт ЭМУ, проверьте черновик и отправьте его.',
-          tag: 'patrol360-emu-shift-report',
-        });
-        storageSet(DESKTOP_SENT_KEY, today);
-      } catch {
-        // A browser may revoke notification access while the page is open.
-      }
-    }
-
-    checkReminder();
-    const interval = window.setInterval(checkReminder, 30_000);
-    return () => window.clearInterval(interval);
-  }, [permission, secureContext, settings]);
-
-  function update(patch: Partial<ReminderSettings>) {
-    setSettings((current) => ({ ...current, ...patch }));
-  }
-
-  function dismiss() {
-    storageSet(DISMISSED_KEY, localDay());
-    setDue(false);
-  }
-
-  async function requestDesktopPermission() {
-    if (typeof Notification === 'undefined' || !secureContext) return;
-    const next = await Notification.requestPermission();
-    setPermission(next);
-    if (next === 'granted') {
-      update({ desktop: true });
-      try {
-        new Notification('Уведомления включены', {
-          body: `Напомним о сменном отчёте в ${settings.time}, пока приложение открыто.`,
-          tag: 'patrol360-emu-shift-report-permission',
-        });
-      } catch {
-        // Permission state can change between the request and notification creation.
-      }
-    }
-  }
-
-  return (
-    <>
-      {due ? (
-        <div className='emu-reminder-stack'>
-          <div className='emu-reminder-banner' role='alert'>
-            <BellRing aria-hidden='true' size={19} />
-            <div><strong>Пора отправить сменный отчёт</strong><span>Проверьте сохранённый черновик и отправьте отчёт за смену.</span></div>
-            <button type='button' aria-label='Закрыть напоминание' onClick={dismiss}><X aria-hidden='true' size={17} /></button>
-          </div>
-        </div>
-      ) : null}
-
-      {open ? (
-        <ModalShell
-          className='emu-reminder-dialog'
-          title='Настройки уведомлений'
-          subtitle={settings.enabled ? `Напоминание включено ежедневно в ${settings.time}.` : 'Настройте время и способы получения напоминания.'}
-          onClose={onClose}
-          actions={<Button onClick={onClose} variant='primary'>Готово</Button>}
-        >
-          <div className='emu-reminder-settings'>
-            <label className='emu-reminder-time'><span><Clock3 aria-hidden='true' size={15} />Время</span><input type='time' value={settings.time} onChange={(event) => update({ time: event.target.value })} /></label>
-            <label className='emu-reminder-toggle'><input type='checkbox' checked={settings.enabled} onChange={(event) => update({ enabled: event.target.checked })} /><span /><b>Включить напоминание</b></label>
-            <label className='emu-reminder-check'><input type='checkbox' checked={settings.inApp} onChange={(event) => update({ inApp: event.target.checked })} /><Bell aria-hidden='true' size={15} /><span><b>Во вкладке</b><small>Покажем закрываемый баннер</small></span></label>
-            <label className='emu-reminder-check'><input type='checkbox' checked={settings.desktop} disabled={permission === 'denied' || permission === 'unsupported' || !secureContext} onChange={(event) => update({ desktop: event.target.checked })} /><Monitor aria-hidden='true' size={15} /><span><b>Windows</b><small>Системное уведомление браузера</small></span></label>
-            <div className='emu-reminder-permission'>
-              <Settings2 aria-hidden='true' size={15} />
-              {!secureContext ? <span>Для Windows-уведомлений откройте приложение по HTTPS.</span> : null}
-              {secureContext && permission === 'default' ? <button type='button' onClick={() => void requestDesktopPermission()}>Разрешить Windows-уведомления</button> : null}
-              {secureContext && permission === 'granted' ? <span className='is-success'>Разрешение браузера получено</span> : null}
-              {permission === 'denied' ? <span>Уведомления заблокированы в настройках браузера.</span> : null}
-              {permission === 'unsupported' ? <span>Этот браузер не поддерживает системные уведомления.</span> : null}
-            </div>
-          </div>
-        </ModalShell>
-      ) : null}
-    </>
-  );
+  const reminder = useShiftReportReminder(open);
+  const { settings, committed, permission, secureContext, requestingPermission } = reminder;
+  const close = () => { reminder.invalidatePermissionRequest(); reminder.discard(); onClose(); };
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty: reminder.dirty, pending: false, onClose: close });
+  const { leaveDialog } = usePageLeaveGuard({ dirty: open && reminder.dirty, pending: false });
+  const permissionRegion = useRef<HTMLDivElement>(null);
+  const desktopDisabled = requestingPermission || (!settings.desktop && (permission === 'denied' || permission === 'unsupported' || !secureContext));
+  const requestPermission = () => {
+    permissionRegion.current?.focus({ preventScroll: true });
+    void reminder.requestDesktopPermission();
+  };
+  return <>
+    {reminder.due ? <div className='emu-reminder-stack'><div className='emu-reminder-banner' role='alert'>
+      <BellRing aria-hidden='true' size={20} /><div><strong>Пора отправить сменный отчёт</strong><span>Проверьте сохранённый черновик и отправьте отчёт за смену.</span></div>
+      <button type='button' aria-label='Закрыть напоминание' onClick={reminder.dismiss}><X aria-hidden='true' size={18} /></button>
+    </div></div> : null}
+    {open ? <ModalShell className='emu-reminder-dialog' title='Настройки уведомлений'
+      subtitle={committed.enabled ? `Напоминание сохранено: ежедневно в ${committed.time}.` : 'Напоминание в этом браузере отключено.'}
+      onClose={requestClose} actions={<>{reminder.storageError ? <Button onClick={() => reminder.save()}>Повторить сохранение</Button> : null}<Button onClick={requestClose} variant='primary'>Готово</Button></>}>
+      <p className='emu-reminder-help'>Настройки этого браузера сохраняются автоматически. Напоминание работает, пока открыта форма сменного отчёта.</p>
+      <div className='emu-reminder-settings'>
+        <label className='emu-reminder-time'><span><Clock3 aria-hidden='true' size={17} />Время</span><input type='time' value={settings.time} aria-invalid={!validReminderTime(settings.time) || undefined} onChange={event => reminder.update({ time: event.target.value })} /></label>
+        <label className='emu-reminder-check'><input type='checkbox' checked={settings.enabled} onChange={event => reminder.update({ enabled: event.target.checked })} /><span><b>Включить напоминание</b><small>Ежедневно в выбранное время</small></span></label>
+        <label className='emu-reminder-check'><input type='checkbox' checked={settings.inApp} onChange={event => reminder.update({ inApp: event.target.checked })} /><Bell aria-hidden='true' size={17} /><span><b>Во вкладке</b><small>Баннер можно закрыть до следующего дня</small></span></label>
+        <label className={`emu-reminder-check${desktopDisabled ? ' is-disabled' : ''}`}><input type='checkbox' checked={settings.desktop} disabled={desktopDisabled} onChange={event => { if (event.target.checked && permission !== 'granted') requestPermission(); else reminder.toggleDesktop(event.target.checked); }} /><Monitor aria-hidden='true' size={17} /><span><b>На устройстве</b><small>Системное уведомление браузера</small></span></label>
+      </div>
+      <div className='emu-reminder-permission' ref={permissionRegion} tabIndex={-1} role='region' aria-label='Разрешение системных уведомлений'>
+        {!secureContext ? <p>Для системных уведомлений откройте приложение по HTTPS.</p> : null}
+        {secureContext && permission === 'default' ? <Button disabled={requestingPermission} isLoading={requestingPermission} onClick={requestPermission}>Разрешить системные уведомления</Button> : null}
+        {requestingPermission ? <p role='status'>Ожидаем ответ браузера. Это окно можно закрыть.</p> : null}
+        {secureContext && permission === 'granted' ? <p>Разрешение браузера получено.</p> : null}
+        {permission === 'denied' ? <p>Уведомления заблокированы в настройках браузера. Баннер во вкладке остаётся доступен.</p> : null}
+        {permission === 'unsupported' ? <p>Этот браузер не поддерживает системные уведомления. Используйте баннер во вкладке.</p> : null}
+      </div>
+      {reminder.permissionError ? <p className='emu-reminder-error' role='alert'>{reminder.permissionError}</p> : null}
+      {reminder.storageError ? <p className='emu-reminder-error' role='alert'>{reminder.storageError}</p> : <p className='emu-reminder-status' role='status'>{reminder.saved ? 'Настройки сохранены в этом браузере.' : 'Изменения сохраняются автоматически.'}</p>}
+      {settings.enabled && !settings.inApp && !settings.desktop ? <p className='emu-reminder-help'>Выберите хотя бы один способ, чтобы получать напоминание.</p> : null}
+    </ModalShell> : null}
+    {open ? discardDialog : null}{leaveDialog}
+  </>;
 }

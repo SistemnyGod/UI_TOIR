@@ -143,7 +143,6 @@
 .inventory-employees-actions .button,
 .inventory-employees-table .button,
 .inventory-users-table .button,
-.inventory-employees-dialog .button,
 .inventory-system-log-table .button {
   display: inline-flex;
   align-items: center;
@@ -558,7 +557,6 @@
   background: #fee2e2;
 }
 
-.inventory-employees-dialog-backdrop,
 .inventory-system-log-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -567,117 +565,6 @@
   backdrop-filter: blur(4px);
 }
 
-.inventory-employees-dialog-backdrop {
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-
-.inventory-employees-dialog {
-  width: min(560px, 100%);
-  border: 1px solid var(--inventory-border);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
-  overflow: hidden;
-}
-
-.inventory-employees-dialog-wide {
-  width: min(1180px, 96vw);
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.inventory-employees-dialog header,
-.inventory-employees-dialog footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid #e1ebf8;
-}
-
-.inventory-employees-dialog footer {
-  justify-content: flex-end;
-  border-top: 1px solid #e1ebf8;
-  border-bottom: 0;
-}
-
-.inventory-employees-dialog header > span {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border-radius: 8px;
-  color: #1d4ed8;
-  background: #eaf2ff;
-}
-
-.inventory-employees-dialog h2,
-.inventory-employees-dialog p,
-.inventory-employees-dialog h3 {
-  margin: 0;
-}
-
-.inventory-employees-dialog h2 {
-  color: var(--inventory-text);
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.inventory-employees-dialog p {
-  margin-top: 2px;
-  color: var(--inventory-muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.inventory-employees-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px 16px 0;
-}
-
-.inventory-employees-form-grid label {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--inventory-text);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.inventory-employees-form-grid input,
-.inventory-employees-form-grid select {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid #c7d9ef;
-  border-radius: 8px;
-  background: #fff;
-  color: var(--inventory-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 0 12px;
-}
-
-.inventory-employees-dialog-text {
-  margin: 0;
-  padding: 12px 16px 0;
-}
-
-.inventory-employees-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px;
-}
-
-.inventory-employees-icon-button,
 .inventory-system-log-icon-button {
   display: grid;
   place-items: center;
@@ -689,111 +576,6 @@
   color: var(--inventory-text);
   background: #fff;
   cursor: pointer;
-}
-
-.inventory-employees-import-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  padding: 16px;
-}
-
-.inventory-employees-import-grid div {
-  padding: 12px;
-  border: 1px solid #d8e5f5;
-  border-radius: 8px;
-  background: #f7fbff;
-}
-
-.inventory-employees-import-grid span,
-.inventory-employees-import-grid strong {
-  display: block;
-}
-
-.inventory-employees-import-grid span {
-  color: var(--inventory-muted);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.inventory-employees-import-grid strong {
-  margin-top: 4px;
-  color: var(--inventory-text);
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.inventory-employees-import-errors {
-  margin: 0 16px 16px;
-  padding: 12px;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fff7f7;
-}
-
-.inventory-employees-import-errors h3 {
-  color: #b91c1c;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.inventory-employees-import-references {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0 16px 16px;
-}
-
-.inventory-employees-import-references div {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid #d8e5f5;
-  border-radius: 8px;
-  background: #fbfdff;
-}
-
-.inventory-employees-import-references strong {
-  display: block;
-  color: var(--inventory-text);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.inventory-employees-import-references p {
-  margin-top: 5px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.inventory-employees-preview-table-wrap {
-  margin: 0 16px 16px;
-  border: 1px solid #d8e5f5;
-  border-radius: 8px;
-  overflow: auto;
-}
-
-.inventory-employees-preview-table {
-  width: 100%;
-  min-width: 960px;
-  border-collapse: collapse;
-}
-
-.inventory-employees-preview-table th,
-.inventory-employees-preview-table td {
-  padding: 10px;
-  border-bottom: 1px solid #e7eef7;
-  text-align: left;
-  font-size: 12px;
-}
-
-.inventory-employees-preview-table th {
-  color: var(--inventory-muted);
-  background: #f7fbff;
-  font-weight: 900;
-}
-
-.inventory-employees-preview-table tr.is-error td {
-  background: #fff7f7;
 }
 
 .inventory-employees-change {
@@ -1003,7 +785,7 @@
 
 .inventory-settings-actions .button,
 .inventory-settings-card .button,
-.inventory-settings-modal .button {
+.inventory-settings-dialog .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1329,67 +1111,42 @@
   background: #fff7f7;
 }
 
-.inventory-settings-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1400;
+.modal-shell.inventory-settings-dialog {
+  --inventory-text: var(--ui-text);
+  --inventory-border: var(--ui-border);
+  width: min(560px, calc(100vw - 32px));
+  border-radius: var(--radius-dialog);
+}
+.modal-shell.inventory-settings-dialog.is-wide { width: min(860px, calc(100vw - 32px)); }
+.inventory-settings-dialog .modal-shell-body { display: grid; min-height: 0; overflow: hidden; padding: 0; }
+.inventory-settings-dialog .inventory-settings-modal-form {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+}
+.inventory-settings-modal-fields {
   display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.36);
-  backdrop-filter: blur(4px);
-}
-
-.inventory-settings-modal {
-  width: min(560px, 100%);
-  border: 1px solid var(--inventory-border);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
-  overflow: hidden;
-}
-
-.inventory-settings-modal.is-wide {
-  width: min(860px, 100%);
-}
-
-.inventory-settings-modal header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid #e1ebf8;
-}
-
-.inventory-settings-modal header > span {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border-radius: 8px;
-  color: #1d4ed8;
-  background: #eaf2ff;
-}
-
-.inventory-settings-modal h2 {
+  gap: var(--space-3);
+  border: 0;
   margin: 0;
-  color: var(--inventory-text);
-  font-size: 18px;
-  font-weight: 900;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
 }
-
-.inventory-settings-icon-button {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-left: auto;
-  border: 1px solid #d8e5f5;
-  border-radius: 8px;
-  color: var(--inventory-text);
-  background: #fff;
-  cursor: pointer;
+.inventory-settings-dialog .inventory-settings-modal-form > footer {
+  flex-wrap: wrap;
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+}
+.inventory-settings-save-error { color: var(--ui-danger); flex-basis: 100%; margin: 0; }
+@media (max-width: 767px) {
+  .modal-shell.inventory-settings-dialog { width: calc(100vw - 16px); }
+  .inventory-settings-modal-fields { padding: var(--space-3); }
+  .inventory-settings-dialog .inventory-settings-modal-form > footer { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+  .inventory-settings-dialog .inventory-settings-modal-form > footer button { flex: 1; min-height: 44px; }
 }
 
 .inventory-settings-modal-form {

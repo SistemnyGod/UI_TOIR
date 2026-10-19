@@ -1,4 +1,4 @@
-import type { EmployeeDirectoryItem } from "../../../types";
+export type { EmuEmployeeOption } from "../../../domain/emuEmployeeOptions";
 
 export type ModalKind =
   | "create"
@@ -17,7 +17,6 @@ export type ModalKind =
   | "favorites"
   | null;
 
-export type EmuEmployeeOption = Pick<EmployeeDirectoryItem, "department" | "fullName" | "id" | "personnelNo" | "position" | "status">;
 export type EmployeeWorkState = "Работает" | "На другой работе" | "В ожидании" | "На паузе" | "Завершил" | "Частично выполнено" | "Добавлен ошибочно" | "Свободен";
 export type WorkCardFilter = "all" | "working" | "mixed" | "paused" | "attention";
 export type WorkCardState = "working" | "mixed" | "paused" | "attention";

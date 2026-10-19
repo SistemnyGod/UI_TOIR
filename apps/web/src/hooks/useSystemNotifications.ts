@@ -19,13 +19,12 @@ export function useSystemNotifications({
   const repository = useMemo(() => createSystemNotificationsRepository(), []);
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
-  const [items, setItems] = useState<SystemNotificationDto[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const owner = `${dataSourceMode}:${enabled}:${sessionKey}`;
+  const [feed, setFeed] = useState<{ owner: string; items: SystemNotificationDto[]; status: "idle" | "loading" | "ready" | "error" }>({ owner, items: [], status: "idle" });
 
   useEffect(() => {
     if (dataSourceMode !== "api" || !enabled) {
-      setItems([]);
-      setStatus("idle");
+      setFeed({ owner, items: [], status: "idle" });
       return;
     }
 
@@ -36,15 +35,14 @@ export function useSystemNotifications({
     async function load({ silent = false }: { silent?: boolean } = {}) {
       if (cancelled || refreshInProgress) return;
       refreshInProgress = true;
-      if (!silent) setStatus("loading");
+      if (!silent) setFeed(previous => ({ owner, items: previous.owner === owner ? previous.items : [], status: "loading" }));
       try {
         const next = await repository.list(24);
         if (cancelled) return;
-        setItems(next);
-        setStatus("ready");
+        setFeed({ owner, items: next, status: "ready" });
       } catch (error) {
         if (cancelled) return;
-        setStatus("error");
+        setFeed(previous => ({ owner, items: previous.owner === owner ? previous.items : [], status: "error" }));
         if (!didReportError) {
           didReportError = true;
           showToastRef.current(error instanceof Error ? error.message : "Не удалось загрузить системные уведомления");
@@ -55,13 +53,16 @@ export function useSystemNotifications({
     }
 
     void load();
-    const intervalId = window.setInterval(() => void load({ silent: true }), REFRESH_INTERVAL_MS);
+    const refreshVisible = () => { if (document.visibilityState === "visible") void load({ silent: true }); };
+    const intervalId = window.setInterval(refreshVisible, REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshVisible);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, [dataSourceMode, enabled, repository, sessionKey]);
+  }, [dataSourceMode, enabled, repository, owner]);
 
-  return { items, status };
+  return feed.owner === owner ? { items: feed.items, status: feed.status } : { items: [], status: "idle" as const };
 }

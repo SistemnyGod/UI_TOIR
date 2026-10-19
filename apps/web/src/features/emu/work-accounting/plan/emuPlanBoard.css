@@ -1,0 +1,77 @@
+/* Week board and its editors use the shared dialog shell and one body scroll. */
+.emu-accounting-dialog.emu-plan-board { height: min(820px, calc(100dvh - 32px)); min-height: 0; gap: 0; }
+body .modal-backdrop .emu-accounting-dialog.emu-plan-board .emu-work-dialog-fields { gap: var(--space-2); }
+.emu-accounting-dialog .emu-plan-toolbar { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,1fr); gap: 12px; }
+.emu-accounting-dialog .emu-plan-filters > summary { cursor: pointer; font-size: 13px; color: var(--ui-blue); padding: 8px 0; }
+.emu-accounting-dialog .emu-plan-filters[open] > summary { margin-bottom: 8px; }
+.emu-accounting-dialog .emu-plan-week-nav { display: flex; align-items: end; gap: 6px; flex-wrap: wrap; }
+.emu-accounting-dialog .emu-plan-week-nav > label { flex: 1 1 130px; }
+.emu-accounting-dialog .emu-plan-toolbar label { display: grid; min-width: 0; gap: 5px; font-size: 12px; color: var(--ui-text); }
+.emu-accounting-dialog .emu-plan-toolbar :is(input,select) { width: 100%; min-width: 0; font-size: 14px; min-height: 40px; }
+.emu-accounting-dialog .emu-plan-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1/-1; }
+.emu-accounting-dialog .emu-plan-columns { display: grid; align-items: start; gap: 12px; grid-template-columns: repeat(4,minmax(0,1fr)); }
+.emu-accounting-dialog .emu-plan-column { min-width: 0; padding: 10px; border: 1px solid var(--ui-border); background: var(--ui-surface-muted); border-radius: var(--radius-panel); }
+.emu-accounting-dialog .emu-plan-column > h3 { display: flex; justify-content: space-between; align-items: start; gap: 8px; margin: 0 0 10px; font-size: 13px; line-height: 1.4; }
+.emu-accounting-dialog .emu-plan-column > h3 > span { color: var(--ui-blue); background: var(--ui-blue-soft); border-radius: 20px; padding: 1px 6px; }
+.emu-accounting-dialog .emu-plan-card { display: grid; gap: 8px; padding: 10px; margin: 0 0 8px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface); box-shadow: none; min-width: 0; }
+.emu-accounting-dialog .emu-plan-card:last-child { margin-bottom: 0; }
+.emu-accounting-dialog .emu-plan-title { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; color: var(--ui-text); font: inherit; font-weight: 650; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-title:hover { color: var(--ui-blue); }
+.emu-accounting-dialog .emu-plan-card > span { color: var(--ui-muted); font-size: 12px; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-badges { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; }
+.emu-accounting-dialog .emu-plan-badges > span { padding: 2px 6px; border-radius: 6px; background: var(--ui-blue-soft); color: var(--ui-text); overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-card[data-priority="Срочно"] { border-left: 3px solid var(--ui-danger); }
+.emu-accounting-dialog .emu-plan-card[data-priority="Высокий"] { border-left: 3px solid var(--ui-warning); }
+.emu-accounting-dialog .emu-plan-card-menu > summary { cursor: pointer; color: var(--ui-blue); padding: 6px 0; font-size: 12px; }
+.emu-accounting-dialog .emu-plan-card-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+.emu-accounting-dialog .emu-plan-card-actions > button { flex: 1 1 80px; min-width: 0; min-height: 36px; background: var(--ui-surface); border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); color: var(--ui-blue); font: inherit; font-size: 12px; padding: 6px; cursor: pointer; }
+.emu-accounting-dialog .emu-plan-card-actions > button:disabled { cursor: default; opacity: .55; }
+.emu-accounting-dialog .emu-plan-card > p { font-size: 12px; margin: 0; color: var(--ui-muted); }
+.emu-accounting-dialog .emu-plan-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.emu-accounting-dialog .emu-plan-footer > span { flex: 1 1 160px; color: var(--ui-muted); font-size: 12px; }
+.emu-accounting-dialog .emu-plan-footer > .emu-work-form-error { flex-basis: 100%; }
+.emu-accounting-dialog .emu-plan-empty { margin: 0; color: var(--ui-muted); font-size: 12px; padding: 12px 0; }
+.emu-accounting-dialog .emu-plan-column-switch { display: none; }
+body .modal-backdrop .emu-accounting-dialog.emu-plan-editor :is(.emu-picker, .emu-picker-shell) { max-height: none; overflow: visible; }
+.emu-accounting-dialog.emu-plan-editor :is(input,select,textarea) { min-width: 0; width: 100%; }
+.emu-accounting-dialog .emu-plan-missing { padding: 10px; background: var(--ui-warning-soft); border: 1px solid var(--ui-border); border-radius: var(--radius-control); font-size: 12px; }
+.emu-accounting-dialog .emu-plan-missing button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.emu-accounting-dialog .emu-plan-approval-list { display: grid; gap: 8px; padding-left: 20px; margin: 0; font-size: 13px; }
+.emu-accounting-dialog .emu-plan-approval-list strong, .emu-accounting-dialog .emu-plan-approval-list span { display: block; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-approval-list span { color: var(--ui-muted); font-size: 12px; margin-top: 4px; }
+.emu-accounting-dialog .emu-plan-view-title { font-size: 18px; margin: 0; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-view-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 0; font-size: 13px; }
+.emu-accounting-dialog .emu-plan-view-fields dt { color: var(--ui-muted); margin-bottom: 4px; }
+.emu-accounting-dialog .emu-plan-view-fields dd { margin: 0; overflow-wrap: anywhere; }
+.emu-accounting-dialog .emu-plan-description h4 { margin: 0 0 8px; }
+.emu-accounting-dialog .emu-plan-description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; font-weight: 400; }
+@media (max-width: 1000px) {
+  .emu-accounting-dialog .emu-plan-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 760px) {
+  .emu-accounting-dialog .emu-plan-toolbar { grid-template-columns: minmax(0,1fr); }
+  .emu-accounting-dialog .emu-plan-toolbar :is(input,select), .emu-accounting-dialog.emu-plan-editor :is(input,select,textarea) { font-size: 16px; }
+  .emu-accounting-dialog .emu-plan-week-nav > label { flex: 1 1 100px; }
+  .emu-accounting-dialog .emu-plan-week-nav .ui-button { min-width: 40px; padding-inline: 8px; }
+  .emu-accounting-dialog .emu-plan-columns { grid-template-columns: minmax(0,1fr); }
+  .emu-accounting-dialog .emu-plan-column > h3 { display: none; }
+  .emu-accounting-dialog .emu-plan-title { min-height: 44px; }
+  .emu-accounting-dialog .emu-plan-column-switch { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+  .emu-accounting-dialog .emu-plan-column-switch > button { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 44px; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--radius-control); font: inherit; font-size: 12px; color: var(--ui-text); padding: 8px; cursor: pointer; }
+  .emu-accounting-dialog .emu-plan-column-switch > button[aria-pressed="true"] { color: var(--ui-blue); border-color: var(--ui-blue); background: var(--ui-blue-soft); }
+  .emu-accounting-dialog .emu-plan-columns[data-column="draft"] > :not(.emu-plan-column-draft),
+  .emu-accounting-dialog .emu-plan-columns[data-column="approved"] > :not(.emu-plan-column-approved),
+  .emu-accounting-dialog .emu-plan-columns[data-column="active"] > :not(.emu-plan-column-active),
+  .emu-accounting-dialog .emu-plan-columns[data-column="done"] > :not(.emu-plan-column-done) { display: none; }
+  .emu-accounting-dialog .emu-plan-card-actions > button { min-height: 44px; }
+  .emu-accounting-dialog .emu-plan-filters > summary { min-height: 44px; padding-block: 12px; }
+  .emu-accounting-dialog .emu-plan-card-menu > summary { padding-block: 12px; }
+  .emu-accounting-dialog .emu-plan-footer > .ui-button { min-height: 44px; }
+}
+@media (min-width: 600px) and (max-width: 760px) {
+  .emu-accounting-dialog .emu-plan-column-switch { grid-template-columns: repeat(4,minmax(0,1fr)); }
+}
+@media (max-width: 420px) {
+  .emu-accounting-dialog .emu-plan-footer > span { flex-basis: 100%; }
+  .emu-accounting-dialog .emu-plan-footer > button { flex: 1; }
+}

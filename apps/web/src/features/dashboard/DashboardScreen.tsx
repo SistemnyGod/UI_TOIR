@@ -1,69 +1,23 @@
-import { useEffect, useMemo, type ReactNode } from "react";
-import { useResultsWorkspace } from "../../hooks/useResultsWorkspace";
-import { isTerminalPatrolRequestStatus } from "../../domain/patrolRequestStatus";
-import { subscribeAssignmentAutoRefresh } from "../patrol/assignments/assignmentAutoRefresh";
-import { Button, PageHeader, Panel } from "../../shared/ui";
-import type {
-  ActivePatrol,
-  DataSourceMode,
-  DataSourceStatus,
-  Metric,
-  PatrolResult,
-  RouteDirectoryItem,
-  ScreenId,
-  ServiceRequest,
-  Tone,
-} from "../../types";
+import { useMemo, useState, type ReactNode } from "react";
+import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileText, MapPin, RefreshCw, TriangleAlert, UserRoundPlus } from "lucide-react";
+import type { ActivePatrol, DataSourceMode, DataSourceStatus, Metric, RouteDirectoryItem, ScreenId, ServiceRequest } from "../../types";
+import { resultDateTime } from "../patrol/results/resultPresentation";
+import { buildDashboardPlan, buildDashboardSummary, dashboardShortName, isDashboardPatrolInProgress, type DashboardPeriod, type DashboardPlanItem, type DashboardRange, type DashboardSummary } from "./dashboardSummary";
+import { useDashboardOverview } from "./useDashboardOverview";
+import "./dashboardWorkspace.css";
 
-const emptyDashboardMetrics: Metric[] = [
-  { label: "Завершено обходов сегодня", value: "0", delta: "живых результатов пока нет", tone: "green", icon: "ok" },
-  { label: "Активные обходы", value: "0", delta: "нет активных обходов", tone: "blue", icon: "run" },
-  { label: "Заявки на обход", value: "0", delta: "ожидают прохождения", tone: "orange", icon: "request" },
-  { label: "Маршрутов в справочнике", value: "0", delta: "локальный справочник", tone: "violet", icon: "map" },
-];
+export { buildLatestAssignmentResults } from "./dashboardSummary";
 
-type DashboardKpi = {
-  key: string;
-  title: string;
-  value: string;
-  subtitle: string;
-  tone: Tone;
-  icon: DashboardIconName;
-  helper: string;
-};
-
-type DashboardIconName =
-  | "alert"
-  | "calendar"
-  | "check"
-  | "document"
-  | "map"
-  | "mobile"
-  | "pin"
-  | "route"
-  | "target"
-  | "walk";
-
-export function DashboardScreen({
-  activePatrols = [],
-  dashboardMetrics = [],
-  onCreateRequest,
-  dataSourceMode,
-  onNavigate,
-  onNotify,
-  onOpenResult,
-  onOpenRequestById,
-  onRetryRequests,
-  onSelectResult,
-  requestListErrorMessage,
-  requestListStatus,
-  routeDirectory = [],
-  requests = [],
-  selectedResultId,
-}: {
+interface DashboardScreenProps {
   activePatrols?: ActivePatrol[];
   dashboardMetrics?: Metric[];
   dataSourceMode: DataSourceMode;
+  ownerId?: string;
+  canCreateRequest?: boolean;
+  canViewResults?: boolean;
+  canViewSchedule?: boolean;
+  patrolDataStatus?: DataSourceStatus;
+  onQuickAssign?: () => void;
   onCreateRequest: (sourceResultId?: string) => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (message: string) => void;
@@ -76,710 +30,120 @@ export function DashboardScreen({
   routeDirectory?: RouteDirectoryItem[];
   requests: ServiceRequest[];
   selectedResultId: string;
-}) {
-  const { errorMessage: resultListErrorMessage, listStatus: resultListStatus, refreshResults, results: patrolResults } = useResultsWorkspace({
-    dataSourceMode,
-    onSelectResult,
-    selectedResultId,
-    showToast: onNotify,
-  });
-
-  useEffect(() => {
-    if (dataSourceMode !== "api") return;
-    return subscribeAssignmentAutoRefresh(() => refreshResults({ silent: true }));
-  }, [dataSourceMode, refreshResults]);
-
-  const normalizedMetrics = dashboardMetrics.length > 0 ? dashboardMetrics : emptyDashboardMetrics;
-  const issueResults = patrolResults.filter((result) => isIssueResult(result.status));
-  const activeCount = activePatrols.length;
-  const completedValue = getMetricValue(normalizedMetrics, ["Завершено", "Completed"]);
-  const assignedRequestIds = new Set(activePatrols.map((patrol) => patrol.patrolRequestId).filter(Boolean));
-  const openRequests = requests.filter(isOpenRequest);
-  const unassignedRequests = openRequests.filter((request) => !assignedRequestIds.has(request.id));
-  const upcomingDashboardRequests = openRequests
-    .filter(isTodayOrFutureRequest)
-    .sort((left, right) => requestTimestamp(left) - requestTimestamp(right));
-  const requestsCount = unassignedRequests.length;
-  const routesCount = routeDirectory.filter((route) => !isArchivedRoute(route.status)).length;
-  const problemCount = issueResults.length + activePatrols.filter(isProblemPatrol).length;
-  const completedCount = Number.parseInt(completedValue, 10) || 0;
-  const plan = completedCount + activeCount + requestsCount;
-  const completed = plan > 0 ? Math.min(completedCount, plan) : 0;
-  const remaining = Math.max(plan - completed, 0);
-  const progress = plan > 0 ? Math.min(100, Math.round((completed / plan) * 100)) : 0;
-  const showRoutesEmptyNotice = routesCount === 0 && activeCount === 0 && requestsCount === 0 && patrolResults.length === 0;
-
-  const kpis: DashboardKpi[] = [
-    {
-      key: "completed",
-      title: "Завершено сегодня",
-      value: String(completedCount),
-      subtitle: completedCount === 0 ? "результатов пока нет" : "по журналу результатов",
-      tone: "green",
-      icon: "check",
-      helper: "Факт закрытых обходов за текущую смену или день.",
-    },
-    {
-      key: "active",
-      title: "В работе сейчас",
-      value: String(activeCount),
-      subtitle: activeCount === 0 ? "на маршрутах никого нет" : "активные назначения",
-      tone: "blue",
-      icon: "walk",
-      helper: "Сотрудники, которые сейчас проходят маршрут.",
-    },
-    {
-      key: "requests",
-      title: "Ожидают назначения",
-      value: String(requestsCount),
-      subtitle: requestsCount === 0 ? "очередь чистая" : "заявки без обходчика",
-      tone: "orange",
-      icon: "document",
-      helper: "Заявки, которые еще не привязаны к активному обходу.",
-    },
-    {
-      key: "routes",
-      title: "Маршруты",
-      value: String(routesCount),
-      subtitle: routesCount === 0 ? "справочник пуст" : "доступно для назначения",
-      tone: "violet",
-      icon: "route",
-      helper: "Активные маршруты с точками контроля.",
-    },
-    {
-      key: "problems",
-      title: "Требуют внимания",
-      value: String(problemCount),
-      subtitle: problemCount === 0 ? "критичных замечаний нет" : "замечания и задержки",
-      tone: problemCount > 0 ? "red" : "green",
-      icon: "alert",
-      helper: "Замечания из результатов и проблемные активные обходы.",
-    },
-  ];
-
-  return (
-    <div className="dashboard-am">
-      <PageHeader
-        actions={(
-          <div className="dashboard-am-hero-actions">
-            <Button variant="primary" onClick={() => onCreateRequest()}>
-              Создать заявку
-            </Button>
-          </div>
-        )}
-        className="dashboard-am-hero"
-        description="Короткая картина по заявкам, активным обходам, результатам, замечаниям и готовности маршрутов."
-        eyebrow="Обход"
-        title="Дашборд смены"
-      />
-
-      <section className="dashboard-am-kpis" aria-label="Показатели смены">
-        {kpis.map((card) => (
-          <KpiCard card={card} key={card.key} />
-        ))}
-      </section>
-
-      {showRoutesEmptyNotice ? <RoutesEmptyNotice onNavigate={onNavigate} /> : null}
-
-      <section className="dashboard-am-top-grid">
-        <OperationalSummary
-          completed={completed}
-          plan={plan}
-          progress={progress}
-          resultListErrorMessage={resultListErrorMessage}
-          resultListStatus={resultListStatus}
-          patrolResults={patrolResults}
-          onNavigate={onNavigate}
-          onOpenResult={onOpenResult}
-          onRefreshResults={refreshResults}
-          remaining={remaining}
-        />
-        <QuickActions onNavigate={onNavigate} />
-      </section>
-
-      <section className="dashboard-am-lists">
-        <ActivePatrolsList activePatrols={activePatrols} onNavigate={onNavigate} />
-        <UpcomingAssignments
-          activePatrols={activePatrols}
-          requests={upcomingDashboardRequests}
-          onNavigate={onNavigate}
-          onOpenRequestById={onOpenRequestById}
-          onRetry={onRetryRequests}
-          status={requestListStatus}
-          errorMessage={requestListErrorMessage}
-        />
-        <IncidentsList incidents={issueResults} onNavigate={onNavigate} onSelectResult={onSelectResult} />
-      </section>
-
-    </div>
-  );
 }
 
-function RoutesEmptyNotice({ onNavigate }: { onNavigate: (screen: ScreenId) => void }) {
-  return (
-    <article className="dashboard-am-panel dashboard-am-setup-notice">
-      <span className="dashboard-am-icon">
-        <DashboardIcon name="route" />
-      </span>
-      <div>
-        <strong>Маршруты обхода не заведены</strong>
-        <p>
-          Рабочий цикл пока пустой: нет маршрутов, заявок, назначений и результатов. Сначала заведите маршруты и контрольные точки, затем создайте первое
-          назначение.
-        </p>
-      </div>
-      <div className="dashboard-am-setup-actions">
-        <Button variant="primary" onClick={() => onNavigate("routes")}>
-          Добавить маршрут
-        </Button>
-        <Button variant="ghost" onClick={() => onNavigate("assign")}>
-          К назначениям
-        </Button>
-      </div>
-    </article>
-  );
+export function DashboardScreen(props: DashboardScreenProps) {
+  const [period, setPeriod] = useState<DashboardPeriod>("week");
+  const overview = useDashboardOverview({ dataSourceMode: props.dataSourceMode, ownerId: props.ownerId, enabled: props.canViewResults !== false, period });
+  const summary = useMemo(() => buildDashboardSummary(overview.results ?? [], overview.range), [overview.results, overview.range.dateFrom, overview.range.through.getTime()]);
+  return <DashboardView {...props} period={period} onPeriodChange={setPeriod} range={overview.range} summary={summary} hasResults={overview.results !== undefined} resultsLoading={overview.loading} resultsError={overview.error} refreshedAt={overview.refreshedAt} onRefreshResults={overview.refresh} />;
 }
 
-function KpiCard({ card }: { card: DashboardKpi }) {
-  return (
-    <article className={`dashboard-am-kpi ${card.tone}`} title={card.helper}>
-      <span className="dashboard-am-icon">
-        <DashboardIcon name={card.icon} />
-      </span>
-      <div>
-        <p>{card.title}</p>
-        <strong>{card.value}</strong>
-        <small>{card.subtitle}</small>
-      </div>
-    </article>
-  );
+export interface DashboardViewProps extends DashboardScreenProps {
+  period: DashboardPeriod;
+  onPeriodChange: (period: DashboardPeriod) => void;
+  range: DashboardRange;
+  summary: DashboardSummary;
+  hasResults: boolean;
+  resultsLoading: boolean;
+  resultsError?: string;
+  refreshedAt?: Date;
+  onRefreshResults: () => Promise<void>;
 }
 
-function OperationalSummary({
-  completed,
-  onNavigate,
-  onOpenResult,
-  onRefreshResults,
-  patrolResults,
-  plan,
-  progress,
-  remaining,
-  resultListErrorMessage,
-  resultListStatus,
-}: {
-  completed: number;
-  onNavigate: (screen: ScreenId) => void;
-  onOpenResult: (resultId: string) => void;
-  onRefreshResults: () => void | Promise<void>;
-  patrolResults: PatrolResult[];
-  plan: number;
-  progress: number;
-  remaining: number;
-  resultListErrorMessage?: string;
-  resultListStatus: DataSourceStatus;
-}) {
-  return (
-    <article className="dashboard-am-panel dashboard-am-summary">
-      <PanelHeader title="Оперативная сводка" />
-      <div className="dashboard-am-summary-grid">
-        <div className="dashboard-am-progress-block">
-          <h3>План смены</h3>
-          <div className="dashboard-am-progress-row">
-            <div className="dashboard-am-progress-summary" aria-label={`Выполнено ${completed} из ${plan}`}>
-              <div>
-                <strong>Выполнено {completed} из {plan}</strong>
-                <span>{progress}% закрыто</span>
-              </div>
-              <div aria-hidden="true" className="dashboard-am-progress-bar"><span style={{ width: `${progress}%` }} /></div>
-            </div>
+/** Shared by the live screen and its isolated, development-only visual fixture. */
+export function DashboardView({
+  activePatrols = [], canCreateRequest = true, canViewResults = true, canViewSchedule = true,
+  patrolDataStatus = "ready", onQuickAssign, onCreateRequest, onNavigate, onNotify, onOpenResult, onOpenRequestById,
+  requests, requestListStatus, requestListErrorMessage, onRetryRequests,
+  period, onPeriodChange, range, summary, hasResults, resultsLoading, resultsError, refreshedAt, onRefreshResults,
+}: DashboardViewProps) {
+  const [refreshing, setRefreshing] = useState(false);
+  const periodText = period === "week" ? "за неделю" : "за месяц";
+  const today = range.through;
+  const plan = buildDashboardPlan(requests, activePatrols, today);
+  const active = activePatrols.filter(isDashboardPatrolInProgress).length;
+  const value = (count: number) => !canViewResults || !hasResults ? "—" : count;
+  const metricNote = !canViewResults ? "нет доступа" : !hasResults ? resultsLoading ? "загрузка…" : "нет данных" : period === "week" ? "с начала недели" : "с начала месяца";
+  const issueNote = canViewResults && hasResults && summary.completed > 0
+    ? `${Math.round(summary.withIssues / summary.completed * 100)}% от завершённых`
+    : metricNote;
 
-            <dl className="dashboard-am-metrics">
-              <div>
-                <dt>Всего задач</dt>
-                <dd>{plan}</dd>
-              </div>
-              <div>
-                <dt>Завершено</dt>
-                <dd className="success-text">{completed}</dd>
-              </div>
-              <div>
-                <dt>В очереди/работе</dt>
-                <dd className="blue-text">{remaining}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-
-        <LatestResultsPreview
-          errorMessage={resultListErrorMessage}
-          onNavigate={onNavigate}
-          onOpenResult={onOpenResult}
-          onRefresh={onRefreshResults}
-          results={patrolResults}
-          status={resultListStatus}
-        />
-      </div>
-    </article>
-  );
-}
-
-function LatestResultsPreview({
-  errorMessage,
-  onNavigate,
-  onOpenResult,
-  onRefresh,
-  results,
-  status,
-}: {
-  errorMessage?: string;
-  onNavigate: (screen: ScreenId) => void;
-  onOpenResult: (resultId: string) => void;
-  onRefresh: () => void | Promise<void>;
-  results: PatrolResult[];
-  status: DataSourceStatus;
-}) {
-  const latestResults = useMemo(() => {
-    return buildLatestAssignmentResults(results).slice(0, 3);
-  }, [results]);
-  const isInitialLoading = status === "loading" && latestResults.length === 0;
-  const isRefreshing = status === "loading" && latestResults.length > 0;
-
-  return (
-    <div className="dashboard-am-latest">
-      <div className="dashboard-am-latest-head">
-        <h3>{"\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0442\u0447\u0451\u0442\u044b \u043f\u043e \u0437\u0430\u044f\u0432\u043a\u0430\u043c"}</h3>
-        <div className="dashboard-am-latest-head-actions">
-          <span>{isRefreshing ? "обновление" : `${latestResults.length} из 3`}</span>
-          <button className="dashboard-am-panel-head-link" onClick={() => onNavigate("results")} type="button">
-            Смотреть все
-          </button>
-        </div>
-      </div>
-
-      {isInitialLoading ? (
-        <CompactEmptyState title="Загружаем результаты" text="Получаем последние записи из журнала обходов." />
-      ) : status === "error" ? (
-        <div className="dashboard-am-error compact">
-          <strong>Результаты не загрузились</strong>
-          <span>{errorMessage ?? "Источник данных временно недоступен."}</span>
-          <button onClick={() => void onRefresh()} type="button">Повторить</button>
-        </div>
-      ) : latestResults.length === 0 ? (
-        <CompactEmptyState title="Обходов пока нет" text="Завершенные обходы появятся здесь после загрузки журнала." />
-      ) : (
-        <div className="dashboard-am-latest-list">
-          {latestResults.map((result) => (
-            <button
-              aria-label={`Открыть результат обхода: ${result.route || "Маршрут не указан"}`}
-              className="dashboard-am-latest-row"
-              key={result.id}
-              onClick={() => onOpenResult(result.id)}
-              type="button"
-            >
-              <span className={`dashboard-am-status-dot ${isIssueResult(result.status) ? "orange" : "green"}`} />
-              <div>
-                <strong>{result.route || "Маршрут не указан"}</strong>
-                <span>{formatShortName(result.employee)} · {formatResultStatus(result.status)}</span>
-              </div>
-              <time>{formatResultTime(result)}</time>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function QuickActions({ onNavigate }: { onNavigate: (screen: ScreenId) => void }) {
-  const actions: Array<{ icon: DashboardIconName; label: string; hint: string; onClick: () => void }> = [
-    { icon: "map", label: "Маршруты", hint: "точки и NFC", onClick: () => onNavigate("routes") },
-    { icon: "target", label: "Результаты", hint: "журнал обходов", onClick: () => onNavigate("results") },
-    { icon: "mobile", label: "Мобильные", hint: "аккаунты входа", onClick: () => onNavigate("accounts") },
-  ];
-
-  return (
-    <article className="dashboard-am-panel dashboard-am-actions">
-      <PanelHeader title="Быстрые действия" />
-      <div className="dashboard-am-action-grid">
-        {actions.map((action) => (
-          <button key={action.label} onClick={action.onClick} type="button">
-            <span className="dashboard-am-icon">
-              <DashboardIcon name={action.icon} />
-            </span>
-            <span>
-              <strong>{action.label}</strong>
-              <small>{action.hint}</small>
-            </span>
-          </button>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-function ActivePatrolsList({ activePatrols, onNavigate }: { activePatrols: ActivePatrol[]; onNavigate: (screen: ScreenId) => void }) {
-  return (
-    <ListPanel action="Смотреть все" onAction={() => onNavigate("assign")} title="Активные обходы">
-      {activePatrols.length === 0 ? (
-        <CompactEmptyState title="Активных обходов нет" text="Назначьте первый обход, чтобы видеть сотрудников на маршрутах." />
-      ) : (
-        activePatrols.slice(0, 4).map((patrol) => (
-          <button
-            aria-label={patrol.route || "-"}
-            className="dashboard-am-list-row active"
-            key={patrol.id}
-            onClick={() => onNavigate("assign")}
-            type="button"
-          >
-            <span className={`dashboard-am-dot ${isProblemPatrol(patrol) ? "orange" : "green"}`} />
-            <strong>{patrol.route}</strong>
-            <span>{patrol.startedAt ?? patrol.eta ?? "-"}</span>
-            <span>{patrol.zone}</span>
-            <span>{formatShortName(patrol.employee)}</span>
-            <DashboardIcon name="pin" />
-          </button>
-        ))
-      )}
-      <button className="dashboard-am-card-link" onClick={() => onNavigate("assign")} type="button">
-        Открыть назначения
-      </button>
-    </ListPanel>
-  );
-}
-
-function UpcomingAssignments({
-  activePatrols,
-  errorMessage,
-  onNavigate,
-  onOpenRequestById,
-  onRetry,
-  requests,
-  status,
-}: {
-  activePatrols: ActivePatrol[];
-  errorMessage?: string;
-  onNavigate: (screen: ScreenId) => void;
-  onOpenRequestById: (requestId: string) => void;
-  onRetry: () => void | Promise<void>;
-  requests: ServiceRequest[];
-  status: DataSourceStatus;
-}) {
-  const requestAssignmentIds = new Set(requests.map((request) => request.assignmentId).filter(Boolean));
-  const requestIds = new Set(requests.map((request) => request.id));
-  const fallbackPatrols = activePatrols
-    .filter(isDisplayedAssignment)
-    .filter((patrol) => !requestAssignmentIds.has(patrol.id) && !requestIds.has(patrol.patrolRequestId ?? ""))
-    .slice(0, 4);
-
-  return (
-    <ListPanel action="Смотреть все" onAction={() => onNavigate("schedule")} title="Ближайшие назначения">
-      {status === "error" ? (
-        <div className="dashboard-am-error">
-          <strong>Заявки не загрузились</strong>
-          <span>{errorMessage ?? "Источник данных временно недоступен."}</span>
-          <button onClick={() => void onRetry()} type="button">Повторить</button>
-        </div>
-      ) : requests.length === 0 && fallbackPatrols.length === 0 ? (
-        <CompactEmptyState title="Назначений нет" text="Плановые заявки появятся здесь после создания." />
-      ) : (
-        <>
-          {requests.slice(0, 4).map((request) => (
-            <button className="dashboard-am-list-row upcoming" key={request.id} onClick={() => onOpenRequestById(request.id)} type="button">
-              <DashboardIcon name="calendar" />
-              <span>{formatRequestDate(request)}</span>
-              <strong>{request.route}</strong>
-              <span>{formatShortName(request.responsible || request.employee || "-")}</span>
-            </button>
-          ))}
-          {fallbackPatrols.map((patrol) => (
-            <button className="dashboard-am-list-row upcoming" key={`active-${patrol.id}`} onClick={() => onNavigate("assign")} type="button">
-              <DashboardIcon name="calendar" />
-              <span>{patrol.plannedAt || patrol.eta || "-"}</span>
-              <strong>{patrol.route || "Маршрут не указан"}</strong>
-              <span>{formatShortName(patrol.employee || "-")} · {formatActiveStatus(patrol.status)}</span>
-            </button>
-          ))}
-        </>
-      )}
-      <button className="dashboard-am-card-link" onClick={() => onNavigate("schedule")} type="button">
-        Перейти к календарю
-      </button>
-    </ListPanel>
-  );
-}
-
-function IncidentsList({ incidents, onNavigate, onSelectResult }: { incidents: PatrolResult[]; onNavigate: (screen: ScreenId) => void; onSelectResult: (id: string) => void }) {
-  return (
-    <ListPanel action="Смотреть все" onAction={() => onNavigate("results")} title="Замечания и инциденты">
-    {incidents.length === 0 ? (
-      <CompactEmptyState title="Замечаний нет" text="Журнал заполнится после результатов обходов с проблемами." />
-    ) : (
-      [...incidents]
-        .sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left))
-        .slice(0, 4)
-        .map((incident) => (
-          <button
-            aria-label={`Открыть замечание: ${incident.route || "Маршрут не указан"}, ${incident.point || "точка не указана"}`}
-            className="dashboard-am-list-row incident"
-            key={incident.id}
-            onClick={() => {
-              onSelectResult(incident.id);
-              onNavigate("results");
-            }}
-            type="button"
-          >
-            <span className="dashboard-am-alert-icon">
-              <DashboardIcon name="alert" />
-            </span>
-            <span className="dashboard-am-incident-copy">
-              <strong>{incident.route || "Маршрут не указан"}</strong>
-              <span>{incident.point || incident.comment || "Есть замечание"}</span>
-            </span>
-            <time>{formatResultTime(incident)}</time>
-          </button>
-        ))
-    )}
-    <button className="dashboard-am-card-link" onClick={() => onNavigate("results")} type="button">
-      Открыть журнал
-    </button>
-  </ListPanel>
-  );
-}
-
-function ListPanel({
-  action,
-  children,
-  onAction,
-  title,
-}: {
-  action: string;
-  children: ReactNode;
-  onAction: () => void;
-  title: string;
-}) {
-  return (
-    <Panel className="dashboard-am-panel dashboard-am-list-panel">
-      <PanelHeader action={action} onAction={onAction} title={title} />
-      <div className="dashboard-am-list">{children}</div>
-    </Panel>
-  );
-}
-
-function PanelHeader({ action, onAction, title }: { action?: string; onAction?: () => void; title: string }) {
-  return (
-    <header className="dashboard-am-panel-head">
-      <h2>{title}</h2>
-      {action && onAction ? (
-        <Button variant="ghost" onClick={onAction}>
-          {action}
-        </Button>
-      ) : null}
-    </header>
-  );
-}
-
-function CompactEmptyState({ text, title }: { text: string; title: string }) {
-  return (
-    <div className="dashboard-am-empty">
-      <strong>{title}</strong>
-      <span>{text}</span>
-    </div>
-  );
-}
-
-function DashboardIcon({ name }: { name: DashboardIconName }) {
-  return (
-    <svg className="dashboard-am-svg" viewBox="0 0 24 24" aria-hidden="true">
-      {name === "check" ? (
-        <>
-          <circle cx="12" cy="12" r="8" />
-          <path d="m8.6 12.2 2.2 2.2 4.8-5" />
-        </>
-      ) : null}
-      {name === "walk" ? (
-        <>
-          <circle cx="12" cy="4.8" r="2" />
-          <path d="m10.6 8.2 3.4 1.7 1.1 3.5" />
-          <path d="m10.5 8.5-1.7 4.2 3.2 1.7" />
-          <path d="m12 14.4-2.2 5" />
-          <path d="m13.4 14.4 3.4 4.6" />
-        </>
-      ) : null}
-      {name === "document" ? (
-        <>
-          <path d="M6 4h9l3 3v13H6z" />
-          <path d="M15 4v4h4" />
-          <path d="M9 12h6" />
-          <path d="M9 16h4" />
-        </>
-      ) : null}
-      {name === "route" ? (
-        <>
-          <circle cx="6" cy="6" r="2.4" />
-          <circle cx="18" cy="8" r="2.4" />
-          <circle cx="10" cy="18" r="2.4" />
-          <path d="M8.2 7.2 15.8 7.8" />
-          <path d="M16.4 10.1 11.3 16" />
-        </>
-      ) : null}
-      {name === "alert" ? (
-        <>
-          <path d="M12 4 3.7 19h16.6z" />
-          <path d="M12 9v4" />
-          <path d="M12 17h.01" />
-        </>
-      ) : null}
-      {name === "map" ? (
-        <>
-          <path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2z" />
-          <path d="M9 4v14" />
-          <path d="M15 6v14" />
-        </>
-      ) : null}
-      {name === "target" ? (
-        <>
-          <circle cx="12" cy="12" r="8" />
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v3" />
-          <path d="M12 19v3" />
-          <path d="M2 12h3" />
-          <path d="M19 12h3" />
-        </>
-      ) : null}
-      {name === "mobile" ? (
-        <>
-          <rect x="7" y="3" width="10" height="18" rx="2" />
-          <path d="M10 6h4" />
-          <path d="M12 17h.01" />
-        </>
-      ) : null}
-      {name === "pin" ? (
-        <>
-          <path d="M12 21s6-5.2 6-11a6 6 0 0 0-12 0c0 5.8 6 11 6 11Z" />
-          <circle cx="12" cy="10" r="2" />
-        </>
-      ) : null}
-      {name === "calendar" ? (
-        <>
-          <rect x="4" y="5" width="16" height="15" rx="2" />
-          <path d="M8 3v4" />
-          <path d="M16 3v4" />
-          <path d="M4 10h16" />
-        </>
-      ) : null}
-    </svg>
-  );
-}
-
-function getMetricValue(metrics: Metric[], labels: string[]) {
-  const metric = metrics.find((item) => labels.some((label) => item.label.includes(label)));
-  return metric?.value ?? "0";
-}
-
-export function buildLatestAssignmentResults(results: PatrolResult[]) {
-  const grouped = new Map<string, PatrolResult[]>();
-
-  results.forEach((result) => {
-    const key = result.assignmentId || `${result.employeeId || result.employee}:${result.routeId || result.route}:${result.plannedAt}`;
-    grouped.set(key, [...(grouped.get(key) ?? []), result]);
-  });
-
-  return Array.from(grouped.values())
-    .map((group) => [...group].sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left))[0])
-    .filter((result): result is PatrolResult => Boolean(result))
-    .sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left));
-}
-
-function getResultTimestamp(result: PatrolResult) {
-  const candidates = [result.actualAt, result.finishedAt, result.startedAt, result.plannedAt];
-  for (const candidate of candidates) {
-    const timestamp = parsePatrolDate(candidate);
-    if (timestamp > 0) return timestamp;
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([onRefreshResults(), canViewSchedule ? Promise.resolve(onRetryRequests()) : Promise.resolve()]);
+    } catch { onNotify("Не удалось обновить план обходов. Повторите попытку."); }
+    finally { setRefreshing(false); }
   }
-  return 0;
+
+  return <div className="dashboard-ui">
+    <header className="dui-page-head">
+      <div><h1>Дашборд</h1><p>Краткая сводка по обходам.</p></div>
+      <div className="dui-actions">
+        {canViewResults ? <button type="button" className="dui-button" onClick={() => onNavigate("results")}><FileText size={20} aria-hidden="true" />Результаты</button> : null}
+        {canViewSchedule ? <button type="button" className="dui-button" onClick={() => onNavigate("schedule")}><CalendarDays size={21} aria-hidden="true" />Плановый обход</button> : null}
+        {canCreateRequest ? <button type="button" className="dui-button dui-primary" onClick={() => onQuickAssign ? onQuickAssign() : onCreateRequest("")}><UserRoundPlus size={21} aria-hidden="true" />Быстрое назначение</button> : null}
+      </div>
+    </header>
+    <div className="dui-period-row">
+      <div className="dui-period" role="group" aria-label="Период статистики">
+        {(["week", "month"] as const).map((item) => <button type="button" key={item} aria-pressed={period === item} onClick={() => onPeriodChange(item)}>{item === "week" ? "Неделя" : "Месяц"}</button>)}
+      </div>
+      <div className="dui-range"><CalendarDays size={20} aria-hidden="true" /><span>{range.label}</span></div>
+      <small className="dui-cutoff">Учтено с {range.from.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })} по {range.through.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}, {range.through.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}.</small>
+      <button className="dui-refresh" type="button" onClick={() => void refresh()} disabled={refreshing || resultsLoading || (!canViewResults && !canViewSchedule)} aria-label="Обновить дашборд" title="Обновить результаты и план обходов">
+        <RefreshCw size={20} aria-hidden="true" /><span>{refreshing || resultsLoading ? "Обновление…" : refreshedAt ? <>Обновлено <strong>{refreshedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</strong></> : "Обновить"}</span>
+      </button>
+    </div>
+    {resultsError ? <div className="dui-error" role="status"><TriangleAlert size={18} aria-hidden="true" /><span>{hasResults ? "Показаны ранее загруженные результаты. " : "Результаты не загружены. "}{resultsError}</span><button type="button" className="dui-button dui-small" onClick={() => void onRefreshResults()} disabled={resultsLoading}>Повторить</button></div> : null}
+    <section className="dui-metrics" aria-label="Сводка обходов" aria-busy={resultsLoading}>
+      <MetricTile icon={<CheckCircle2 />} tone="green" value={value(summary.completed)} label="Завершено обходов" note={metricNote} />
+      <MetricTile icon={<TriangleAlert />} tone="amber" value={value(summary.withIssues)} label="С замечаниями" note={issueNote} />
+      <MetricTile icon={<MapPin />} tone="red" value={value(summary.problemPoints.length)} label="Проблемных точек" note={metricNote} />
+      <MetricTile icon={<Clock3 />} tone="blue" value={["loading", "error"].includes(patrolDataStatus) && !activePatrols.length ? "—" : active} label="В работе" note={patrolDataStatus === "loading" ? "обновление…" : patrolDataStatus === "error" ? "не обновлено" : "сейчас"} />
+    </section>
+    <div className="dui-main-grid">
+      <section className="dui-panel dui-problems" aria-busy={resultsLoading}>
+        <header className="dui-panel-head"><div><h2>Самые проблемные точки</h2><p>По числу фиксаций с замечаниями · {periodText}{canViewResults && hasResults && summary.problemPoints.length > 5 ? ` · топ-5 из ${summary.problemPoints.length}` : ""}</p></div></header>
+        {canViewResults && hasResults && summary.problemPoints.length ? <div className="dui-table-scroll"><table className="dui-table dui-points-table" aria-label="Проблемные точки за выбранный период"><thead><tr><th scope="col">Точка / Маршрут</th><th scope="col">Замечаний</th><th scope="col">Последнее замечание</th><th scope="col">Действие</th></tr></thead><tbody>
+          {summary.problemPoints.slice(0, 5).map((item, index) => <tr key={item.key}>
+            <td><div className="dui-point-name"><span className="dui-rank">{index + 1}</span><div><strong>{item.point || "Точка не указана"}</strong><small>{item.route || "Маршрут не указан"}</small></div></div></td>
+            <td data-label="Замечаний"><div className="dui-count"><progress max={summary.problemPoints[0].count} value={item.count} aria-label={`Фиксаций с замечаниями: ${item.count}`} /><strong>{item.count}</strong></div></td>
+            <td className="dui-date" data-label="Последнее замечание">{formatDateTime(item.latest.actualAt)}</td>
+            <td><button type="button" className="dui-button dui-small" aria-label={`Результаты точки ${item.point}`} title="Открыть отчёт с последним замечанием по этой точке" onClick={() => onOpenResult(item.latest.id)}><FileText size={16} aria-hidden="true" />Результаты</button></td>
+          </tr>)}
+        </tbody></table></div> : <DashboardEmpty text={!canViewResults ? "Нет доступа к результатам обходов" : !hasResults ? resultsLoading ? "Загружаем результаты за выбранный период…" : "Не удалось загрузить результаты" : "За выбранный период замечаний нет"} />}
+      </section>
+      <section className="dui-panel dui-plan" aria-busy={requestListStatus === "loading"}>
+        <header className="dui-panel-head"><CalendarDays className="dui-plan-icon" size={32} aria-hidden="true" /><div><h2>Плановый обход</h2><p>Сегодня, {today.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}{canViewSchedule && plan.length > 0 ? ` · показаны ${Math.min(plan.length, 3)} из ${plan.length}` : ""}</p></div></header>
+        {canViewSchedule && requestListStatus === "error" ? <div className="dui-plan-error" role="status"><span>{requests.length ? "План не обновлён. " : "План не загружен. "}{requestListErrorMessage || "Нет связи с сервером"}</span><button type="button" className="dui-button dui-small" onClick={() => void Promise.resolve().then(onRetryRequests).catch(() => onNotify("Не удалось обновить план обходов"))}>Повторить</button></div> : null}
+        {canViewSchedule && plan.length ? <div className="dui-plan-list">{plan.slice(0, 3).map((item) => <DashboardPlanRow key={item.id} item={item} onOpen={() => item.requestId ? onOpenRequestById(item.requestId) : onNavigate("schedule")} />)}</div> : <DashboardEmpty text={!canViewSchedule ? "Нет доступа к плану обходов" : requestListStatus === "loading" ? "Загружаем план…" : requestListStatus === "error" ? "План недоступен" : "На сегодня обходы не запланированы"} />}
+        {canViewSchedule ? <button type="button" className="dui-button dui-plan-open" onClick={() => onNavigate("schedule")}><CalendarDays size={20} aria-hidden="true" />Открыть плановый обход</button> : null}
+      </section>
+    </div>
+    <section className="dui-panel dui-recent" aria-busy={resultsLoading}>
+      <header className="dui-panel-head"><h2>Последние результаты</h2>{canViewResults ? <button type="button" className="dui-button dui-small" onClick={() => onNavigate("results")}><FileText size={16} aria-hidden="true" />Все результаты</button> : null}</header>
+      {canViewResults && hasResults && summary.latestReports.length ? <div className="dui-table-scroll"><table className="dui-table dui-results-table" aria-label="Последние результаты обходов"><thead><tr><th scope="col">Дата и время</th><th scope="col">Маршрут</th><th scope="col">Сотрудник</th><th scope="col">Результат</th><th scope="col">Действие</th></tr></thead><tbody>{summary.latestReports.map((report) => <tr key={report.key}><td>{formatDateTime(report.latest.actualAt)}</td><td>{report.latest.route}</td><td title={report.latest.employee}>{dashboardShortName(report.latest.employee)}</td><td><span className={`dui-result-status ${report.hasIssue ? "dui-warning" : "dui-success"}`}>{report.hasIssue ? <TriangleAlert size={14} aria-hidden="true" /> : <CheckCircle2 size={14} aria-hidden="true" />}{report.hasIssue ? "Замечание" : "Подтверждено"}</span></td><td><button type="button" className="dui-button dui-small" aria-label={`Просмотр обхода ${report.latest.route}, ${formatDateTime(report.latest.actualAt)}`} onClick={() => onOpenResult(report.latest.id)}><FileText size={16} aria-hidden="true" />Просмотр</button></td></tr>)}</tbody></table></div> : <DashboardEmpty text={!canViewResults ? "Нет доступа к результатам обходов" : !hasResults ? resultsLoading ? "Загружаем результаты…" : "Результаты недоступны" : "За выбранный период завершённых обходов нет"} />}
+    </section>
+  </div>;
 }
 
-function parsePatrolDate(value?: string) {
-  const source = value?.trim();
-  if (!source) return 0;
-
-  const isoTimestamp = Date.parse(source);
-  if (!Number.isNaN(isoTimestamp)) return isoTimestamp;
-
-  const match = source.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:,?\s+(\d{1,2}):(\d{2}))?/);
-  if (!match) return 0;
-
-  const [, day, month, year, hour = "0", minute = "0"] = match;
-  const timestamp = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
-  return Number.isNaN(timestamp) ? 0 : timestamp;
+function MetricTile({ icon, tone, value, label, note }: { icon: ReactNode; tone: string; value: string | number; label: string; note: string }) {
+  return <div className="dui-metric"><span className={`dui-metric-icon dui-${tone}`} aria-hidden="true">{icon}</span><strong>{value}</strong><div><span>{label}</span><small>{note}</small></div></div>;
 }
-
-function formatShortName(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return name || "-";
-
-  const [lastName, firstName, middleName] = parts;
-  return [lastName, firstName ? `${firstName[0]}.` : "", middleName ? `${middleName[0]}.` : ""].filter(Boolean).join(" ");
+function DashboardPlanRow({ item, onOpen }: { item: DashboardPlanItem; onOpen: () => void }) {
+  const employee = item.employee === "Сотрудник не указан" ? item.employee : dashboardShortName(item.employee);
+  return <button type="button" className={`dui-plan-row${item.assigned ? "" : " dui-plan-unassigned"}`} onClick={onOpen} aria-label={`Открыть план: ${item.route}, ${item.time}`}>
+    <time>{item.time}</time>
+    <span>
+      <strong>{item.route || "Маршрут не указан"}</strong>
+      <small title={item.employee}>{item.assigned ? employee : <span className="dui-plan-attention"><UserRoundPlus size={12} aria-hidden="true" />Не назначен</span>}</small>
+      <span className="dui-plan-status">{item.requestId ? "Заявка" : "Обход"}: {item.status.toLocaleLowerCase("ru-RU")}</span>
+    </span>
+    <ChevronRight size={18} aria-hidden="true" />
+  </button>;
 }
-
-function formatResultTime(result: PatrolResult) {
-  return result.actualAt || result.plannedAt || "-";
-}
-
-function formatResultStatus(status: string) {
-  if (matchesAny(status, ["Подтверж", "confirmed"])) return "Подтверждено";
-  if (matchesAny(status, ["Замеч", "issue"])) return "Замечание";
-  if (matchesAny(status, ["Проср", "overdue"])) return "Просрочено";
-  if (matchesAny(status, ["Не подтверж", "rejected"])) return "Не подтверждено";
-  return status || "-";
-}
-
-function isIssueResult(status: string) {
-  return matchesAny(status, ["Замеч", "Проср", "issue", "overdue"]);
-}
-
-function isProblemPatrol(patrol: ActivePatrol) {
-  return matchesAny(patrol.status, ["Задерж", "Нет", "delay", "offline"]);
-}
-
-function isOpenRequest(request: ServiceRequest) {
-  return !isTerminalPatrolRequestStatus(request.status);
-}
-
-function isTodayOrFutureRequest(request: ServiceRequest) {
-  const timestamp = requestTimestamp(request);
-  if (!Number.isFinite(timestamp)) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return timestamp >= today.getTime();
-}
-
-function requestTimestamp(request: ServiceRequest) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(request.scheduledDate)) return Number.NaN;
-  return new Date(`${request.scheduledDate}T${request.scheduledTime || "00:00"}:00`).getTime();
-}
-
-function isArchivedRoute(status: string) {
-  return matchesAny(status, ["Архив", "archive"]);
-}
-
-function isDisplayedAssignment(patrol: ActivePatrol) {
-  return !matchesAny(patrol.status, ["Завершено", "Отменено", "completed", "cancelled"]);
-}
-
-function formatActiveStatus(status: ActivePatrol["status"]) {
-  if (matchesAny(status, ["Задержка", "Нет связи", "delay", "offline"])) return "требует внимания";
-  if (matchesAny(status, ["В пути", "Завершает", "started"])) return "в работе";
-  return "назначен";
-}
-
-function formatRequestDate(request: ServiceRequest) {
-  const date = request.scheduledDate || "Сегодня";
-  const time = request.scheduledTime || request.dueAt || "-";
-  return `${date}, ${time}`;
-}
-
-function matchesAny(value: string, needles: string[]) {
-  const source = value.toLocaleLowerCase("ru-RU");
-  return needles.some((needle) => source.includes(needle.toLocaleLowerCase("ru-RU")));
-}
+function DashboardEmpty({ text }: { text: string }) { return <div className="dui-empty" role="status">{text}</div>; }
+function formatDateTime(value: string) { const parts = resultDateTime(value); return `${parts.date}, ${parts.time}`; }

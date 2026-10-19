@@ -5,6 +5,7 @@ test("mobile accounts API mode shows reloadable error state", async ({ page }) =
     window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
     window.localStorage.setItem("patrol360.sessionToken", "test-token");
   });
+  await page.route("**/api/**", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
   await page.route("**/api/v1/auth/me", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -21,7 +22,7 @@ test("mobile accounts API mode shows reloadable error state", async ({ page }) =
 
   await page.goto("/#accounts");
 
-  const errorState = page.getByText("Мобильные аккаунты API не загружены");
+  const errorState = page.getByText("Не удалось загрузить мобильные аккаунты", { exact: true });
   await expect(errorState).toBeVisible();
 
   await page.getByRole("button", { name: "Повторить загрузку" }).click();

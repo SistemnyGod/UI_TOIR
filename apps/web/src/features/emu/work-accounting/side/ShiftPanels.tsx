@@ -2,9 +2,10 @@ import { useState } from "react";
 import type { EmuDecisionDto, EmuEmployeeShiftDto, EmuEmployeeShiftSummaryDto, EmuUpdateEmployeeShiftDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
+import { useWorkMutation } from "../useWorkMutation";
+import { WorkFormActions } from "../components/WorkFormActions";
 import { DecisionList } from "./DecisionPanels";
 import { addDays, buildShiftInsights, formatDate, formatMinutes, formatShiftSource, formatTime, toDateInput, toLocalIso, toTimeInput } from "../workAccountingUtils";
-import { Button } from "../../../../shared/ui";
 
 export function ShiftSummaryPanel({
   canAdjustShift,
@@ -134,7 +135,7 @@ export function ShiftAdjustModal({
   shiftSummary: EmuEmployeeShiftSummaryDto;
   workspace: EmuWorkspace;
 }) {
-  const shift = shiftSummary.shift;
+  const [shift] = useState(shiftSummary.shift);
   const [shiftType, setShiftType] = useState(shift.shiftType);
   const [actualStartDate, setActualStartDate] = useState(toDateInput(new Date(shift.actualStartAt)));
   const [actualStartTime, setActualStartTime] = useState(toTimeInput(new Date(shift.actualStartAt)));
@@ -145,6 +146,7 @@ export function ShiftAdjustModal({
   const [lunchEndTime, setLunchEndTime] = useState(toTimeInput(new Date(shift.lunchEndAt)));
   const [reason, setReason] = useState("");
   const [comment, setComment] = useState(shift.comment);
+  const mutation = useWorkMutation({ onClose, onNotify, work: shift, values: { shiftType, actualStartDate, actualStartTime, actualEndDate, actualEndTime, lunchTaken, lunchStartTime, lunchEndTime, reason, comment } });
 
   async function submit() {
     const lunchDate = shiftType === "night" ? addDays(shift.shiftDate, 1) : shift.shiftDate;
@@ -165,18 +167,11 @@ export function ShiftAdjustModal({
       templateId: shift.templateId,
     };
 
-    try {
-      const saved = await workspace.actions.updateEmployeeShift(shift.id, payload);
-      onSaved(saved);
-      onNotify("Смена сотрудника скорректирована");
-      onClose();
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось скорректировать смену");
-    }
+    await mutation.run(() => workspace.actions.updateEmployeeShift(shift.id, payload), "Смена сотрудника скорректирована", onSaved);
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Скорректировать смену">
+    <ModalFrame leaveDialog={mutation.leaveDialog} pending={mutation.pending} onClose={mutation.close} title="Скорректировать смену" actions={<WorkFormActions error={mutation.error} pending={mutation.pending} onClose={mutation.close} onSubmit={() => void submit()} label="Сохранить смену" disabled={!reason.trim() || !actualStartDate || !actualStartTime || !actualEndDate || !actualEndTime} />}>
       <div className="emu-form-grid">
         <label>Тип смены<select value={shiftType} onChange={(event) => setShiftType(event.target.value)}>
           <option value="day">Дневная</option>
@@ -191,10 +186,6 @@ export function ShiftAdjustModal({
       <label className="emu-checkbox"><input checked={lunchTaken} onChange={(event) => setLunchTaken(event.target.checked)} type="checkbox" /> Обед вычитался из смены</label>
       <label className="emu-textarea-label">Причина корректировки<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <label className="emu-textarea-label">Комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-      <div className="emu-modal-actions">
-        <button onClick={onClose} type="button">Отмена</button>
-        <Button disabled={!reason.trim()} onClick={() => void submit()} variant="primary">Сохранить смену</Button>
-      </div>
     </ModalFrame>
   );
 }

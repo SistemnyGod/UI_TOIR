@@ -1,0 +1,39 @@
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import path from "node:path";
+import { mkdir } from "node:fs/promises";
+import { installEmuDirectories, longEmuSection } from "./fixtures/emuDirectories.mjs";
+import { openEmuDialogBoard } from "./fixtures/emuDialogs.mjs";
+const evidence=path.resolve("../../output/playwright/ui-unification-2026-10-16");
+test.use({timezoneId:"Asia/Yekaterinburg"});
+async function fit(page:Page,dialog:Locator){
+  await dialog.evaluate(async el=>{await Promise.all(el.parentElement!.getAnimations({subtree:true}).filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+  expect(await dialog.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
+  const actions=(await dialog.locator('.modal-shell-actions').boundingBox())!,body=(await dialog.locator('.modal-shell-body').boundingBox())!;
+  expect(actions.y+actions.height).toBeLessThanOrEqual(page.viewportSize()!.height+1);expect(body.height).toBeGreaterThan(140);
+  expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+  const nested=await dialog.locator('.modal-shell-body').evaluate(el=>Array.from(el.querySelectorAll('*')).filter(node=>{const css=getComputedStyle(node);return !node.matches('textarea')&&['auto','scroll'].includes(css.overflowY)&&node.scrollHeight>node.clientHeight+1;}).length);
+  expect(nested).toBe(0);
+}
+for(const width of [360,390,768,1280,1366,1920]) {
+ test(`catalog drafts, keyboard tabs and long rows fit ${width}px`,async({page})=>{
+  await mkdir(evidence,{recursive:true});await page.setViewportSize({width,height:900});await installEmuDirectories(page);await openEmuDialogBoard(page);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.getByRole('button',{name:'Справочники',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Справочники ЭМУ',exact:true}),input=dialog.getByRole('textbox',{name:'Новая запись: Участки',exact:true});await input.fill('Несохранённый участок оператора');
+  await dialog.getByRole('tab',{name:/Причины ожидания/}).click();await expect(dialog.getByRole('textbox',{name:'Новая запись: Причины ожидания',exact:true})).toHaveValue('');await dialog.getByRole('tab',{name:/Типовые работы/}).click();await dialog.getByRole('textbox',{name:'Название работы',exact:true}).fill('Типовая работа для проверки');await dialog.getByRole('textbox',{name:'Описание и ожидаемый результат',exact:true}).fill('Подробное описание ожидаемого результата. '.repeat(12));await fit(page,dialog);await page.screenshot({path:path.join(evidence,`emu-template-${width}.png`),animations:'disabled'});
+  await dialog.getByRole('tab',{name:/Типовые работы/}).focus();await page.keyboard.press('Home');await expect(dialog.getByRole('tab',{name:/Участки/})).toBeFocused();await expect(input).toHaveValue('Несохранённый участок оператора');
+  const last=dialog.getByText(longEmuSection+' № 52',{exact:true});await last.scrollIntoViewIfNeeded();await expect(last).toBeVisible();await fit(page,dialog);await page.screenshot({path:path.join(evidence,`emu-catalog-${width}.png`),animations:'disabled'});
+  if(width===390){await page.setViewportSize({width,height:420});await input.focus();await fit(page,dialog);await page.screenshot({path:path.join(evidence,'emu-catalog-reduced-height.png'),animations:'disabled'});await page.setViewportSize({width,height:900});}
+  await page.keyboard.press('Escape');const guard=page.getByRole('dialog',{name:'Несохранённые изменения',exact:true});await expect(guard).toBeVisible();await guard.getByRole('button',{name:'Продолжить редактирование',exact:true}).click();await expect(input).toHaveValue('Несохранённый участок оператора');await dialog.getByRole('button',{name:'Готово',exact:true}).click();await guard.getByRole('button',{name:'Закрыть без сохранения',exact:true}).click();await expect(dialog).toHaveCount(0);expect(errors).toEqual([]);
+ });
+ test(`favorites use a focused confirmation and reachable employee search at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:900});await installEmuDirectories(page);await openEmuDialogBoard(page);await page.getByRole('button',{name:'Избранные',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Избранные сотрудники ЭМУ',exact:true});await fit(page,dialog);
+  await dialog.getByRole('button',{name:'Убрать',exact:true}).first().click();const confirm=page.getByRole('dialog',{name:'Убрать сотрудника из избранного?',exact:true});await fit(page,confirm);await page.screenshot({path:path.join(evidence,`emu-favorite-confirm-${width}.png`),animations:'disabled'});await page.keyboard.press('Escape');await expect(confirm).toHaveCount(0);await expect(dialog.getByRole('button',{name:'Убрать',exact:true}).first()).toBeFocused();
+  if(width<761)await dialog.getByRole('button',{name:'Добавить сотрудников',exact:true}).click();const search=dialog.getByRole('textbox',{name:'Поиск сотрудников',exact:true});await search.fill('Авдеев');await expect(dialog.getByText('Авдеев',{exact:false})).toBeVisible();await fit(page,dialog);await page.screenshot({path:path.join(evidence,`emu-favorite-${width}.png`),animations:'disabled'});
+  await search.fill('');await dialog.getByRole('button',{name:'Вперёд',exact:true}).click();await expect(dialog.getByText(/страница 2 из/)).toBeVisible();await search.fill('Авдеев');await expect(dialog.getByText(/страница 1 из/)).toBeVisible();
+  if(width===390){await page.setViewportSize({width,height:420});await search.focus();await fit(page,dialog);await page.screenshot({path:path.join(evidence,'emu-favorite-reduced-height.png'),animations:'disabled'});}
+ });
+}
+for(const width of [390,1366])test(`catalog and favorites retain failed API operations at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});const fixture=await installEmuDirectories(page,{api:true,delay:true,failOnce:true});await openEmuDialogBoard(page);await page.getByRole('button',{name:'Справочники',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Справочники ЭМУ',exact:true});await dialog.getByRole('textbox',{name:'Новая запись: Участки',exact:true}).fill('Новый проверенный участок');await dialog.getByRole('button',{name:'Добавить',exact:true}).click();await expect(dialog).toHaveAttribute('aria-busy','true');await expect(dialog.getByRole('button',{name:'Закрыть',exact:true})).toBeDisabled();await page.keyboard.press('Escape');expect(fixture.requests).toHaveLength(1);fixture.release();await expect(dialog.getByRole('alert')).toContainText('Ввод сохранён');await fit(page,dialog);await page.screenshot({path:path.join(evidence,`emu-catalog-error-${width}.png`),animations:'disabled'});await dialog.getByRole('button',{name:'Добавить',exact:true}).click();await expect(dialog.getByRole('textbox',{name:'Новая запись: Участки',exact:true})).toHaveValue('');await expect(dialog.getByText('Новый проверенный участок',{exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Готово',exact:true}).click();
+ await page.getByRole('button',{name:'Избранные',exact:true}).click();await page.getByRole('button',{name:'Убрать',exact:true}).first().click();const confirm=page.getByRole('dialog',{name:'Убрать сотрудника из избранного?',exact:true});await confirm.getByRole('button',{name:'Убрать из избранных',exact:true}).click();await expect(confirm.getByRole('alert')).toContainText('Ввод сохранён');await fit(page,confirm);await page.screenshot({path:path.join(evidence,`emu-favorite-error-${width}.png`),animations:'disabled'});await confirm.getByRole('button',{name:'Убрать из избранных',exact:true}).click();await expect(confirm).toHaveCount(0);expect(fixture.requests).toHaveLength(4);
+});

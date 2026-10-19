@@ -1,0 +1,32 @@
+.emu-reminder-stack { max-width: 1480px; margin: 0 auto 12px; }
+.emu-reminder-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--color-warning-600); border-radius: var(--radius-panel); background: var(--color-warning-soft); color: var(--color-text-default); }
+.emu-reminder-banner > div { display: grid; gap: 4px; min-width: 0; }
+.emu-reminder-banner strong { font-size: 14px; }
+.emu-reminder-banner span { font-size: 13px; line-height: 1.5; }
+.emu-reminder-banner > svg { color: var(--color-warning-600); }
+.emu-reminder-banner button { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text-default); cursor: pointer; }
+.emu-reminder-dialog { width: min(640px, calc(100vw - 32px)); }
+.emu-reminder-help, .emu-reminder-permission p { margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+.emu-reminder-dialog .modal-shell-body { display: grid; gap: 16px; align-content: start; }
+.emu-reminder-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.emu-reminder-time, .emu-reminder-check { display: flex; align-items: center; gap: 10px; padding: 12px; min-width: 0; min-height: 68px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-text-default); font-size: 14px; line-height: 1.4; }
+.emu-reminder-time { justify-content: space-between; flex-wrap: wrap; }
+.emu-reminder-time > span { display: inline-flex; align-items: center; gap: 6px; }
+.emu-reminder-time input { min-width: 0; max-width: 100%; width: 120px; min-height: 40px; padding: 6px 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text-default); font: inherit; }
+.emu-reminder-check { cursor: pointer; }
+.emu-reminder-check > input { flex: 0 0 auto; width: 20px; height: 20px; margin: 0; accent-color: var(--color-brand-500); }
+.emu-reminder-check > svg { flex: 0 0 auto; color: var(--color-text-muted); }
+.emu-reminder-check > span { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.emu-reminder-check small { font-size: 12px; color: var(--color-text-muted); }
+.emu-reminder-check.is-disabled { cursor: default; }
+.emu-reminder-check:focus-within { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+.emu-reminder-permission { padding: 12px; border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+.emu-reminder-permission .ui-button { max-width: 100%; height: auto; min-height: 40px; white-space: normal; }
+.emu-reminder-error { margin: 0; padding: 12px; border: 1px solid var(--color-danger-600); border-radius: var(--radius-control); color: var(--color-text-default); background: var(--color-danger-soft); font-size: 13px; line-height: 1.5; }
+.emu-reminder-status { margin: 0; font-size: 13px; color: var(--color-text-muted); }
+@media (max-width: 640px) {
+  .emu-reminder-settings { grid-template-columns: minmax(0, 1fr); }
+  .emu-reminder-check { min-height: 64px; }
+  .emu-reminder-time input, .emu-reminder-permission .ui-button, .emu-reminder-banner button { min-height: 44px; }
+  .emu-reminder-banner button { width: 44px; }
+}

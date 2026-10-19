@@ -87,6 +87,41 @@ describe("EmuShiftReportsScreen", () => {
     await user.click(screen.getByRole('button', { name: 'Да' }));
     expect(screen.getAllByPlaceholderText('Что выполнено')).toHaveLength(3);
   });
+
+  it('focuses the new work row and preserves the entered description', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await user.type(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' }), 'Осмотр насоса');
+    await user.click(screen.getByRole('button', { name: 'Добавить строку' }));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Выполненная работа, строка 6' })).toHaveFocus());
+    expect(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' })).toHaveValue('Осмотр насоса');
+  });
+
+  it('focuses employee selection when the report is submitted without an employee', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await user.click(screen.getByRole('button', { name: 'Отправить отчёт' }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Сотрудник/ })).toHaveFocus());
+    expect(screen.getByRole('combobox', { name: /Сотрудник/ })).toHaveAttribute('aria-invalid', 'true');
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('switches report categories with the keyboard while preserving their separate drafts', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await user.type(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' }), 'Работа слесаря');
+    screen.getByRole('tab', { name: 'Слесари' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: 'Электрики' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Электрики' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' })).toHaveValue('');
+    await user.keyboard('{Home}');
+    expect(screen.getByRole('tab', { name: 'Слесари' })).toHaveFocus();
+    expect(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' })).toHaveValue('Работа слесаря');
+  });
   it("keeps five base rows, validates partial rows, updates KPIs and sends minute durations", async () => {
     const user = userEvent.setup();
     let uuidSeed = 0;
@@ -120,6 +155,11 @@ describe("EmuShiftReportsScreen", () => {
       expect.objectContaining({ workDescription: "Осмотр насоса", durationMinutes: 60 }),
       expect.objectContaining({ workDescription: "Регулировка оборудования", durationMinutes: 30 }),
     ]);
+    const savedDraft = mocks.saveDraft.mock.calls.at(-1)![0];
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({
+      editorInstanceId: savedDraft.editorInstanceId,
+      expectedDraftVersion: (savedDraft.expectedVersion ?? 0) + 1,
+    });
     expect(await screen.findByText("Сменный отчёт отправлен и добавлен в историю.")).toBeInTheDocument();
   });
 
@@ -267,6 +307,7 @@ describe("EmuShiftReportsScreen", () => {
     await user.click(within(dialog).getByRole("option", { name: /Петров Пётр/ }));
 
     expect(document.querySelector("[data-selected-employee-id='employee-1']")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Закрыть" }));
     expect(screen.getByRole("tab", { name: "Слесари" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByPlaceholderText("Что выполнено")[0]).toHaveValue("Работа слесаря");
     expect(onNotify).toHaveBeenCalledWith(expect.stringContaining("Электрики"));
@@ -309,12 +350,12 @@ describe("EmuShiftReportsScreen", () => {
     await user.click(screen.getByRole("button", { name: /Период/ }));
     const calendar = screen.getByRole("dialog", { name: "Выбор периода отчётов" });
     await user.click(within(calendar).getByRole("button", { name: "Предыдущий месяц" }));
-    expect(within(calendar).getByText("Июнь")).toBeInTheDocument();
+    expect(within(calendar).getByRole("group", { name: /Даты: июнь 2026/ })).toBeInTheDocument();
     await user.click(within(calendar).getByRole("button", { name: "Следующий месяц" }));
 
-    await user.click(within(calendar).getByRole("gridcell", { name: "20.07.2026" }));
-    expect(within(calendar).getByText("Выберите окончание периода")).toBeInTheDocument();
-    await user.click(within(calendar).getByRole("gridcell", { name: "25.07.2026" }));
+    await user.click(within(calendar).getByRole("button", { name: "20.07.2026" }));
+    expect(within(calendar).getByText(/Выберите окончание периода/)).toBeInTheDocument();
+    await user.click(within(calendar).getByRole("button", { name: "25.07.2026" }));
 
     await waitFor(() => expect(mocks.getList).toHaveBeenLastCalledWith(expect.objectContaining({
       dateFrom: "2026-07-20",
@@ -407,6 +448,12 @@ describe("EmuShiftReportsScreen", () => {
     await user.click(submit);
     await user.click(submit);
     expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('tab', { name: 'Электрики' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Выполненная работа, строка 1' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Примечание, строка 1' })).toBeDisabled();
+    expect(screen.getByLabelText('Дата отчёта *')).toBeDisabled();
+    await user.click(screen.getByRole('tab', { name: 'Электрики' }));
+    expect(screen.getByRole('tab', { name: 'Слесари' })).toHaveAttribute('aria-selected', 'true');
     resolveCreate?.({ id: 'report-1' });
     expect(await screen.findByText('Сменный отчёт отправлен и добавлен в историю.')).toBeInTheDocument();
   });
@@ -549,6 +596,21 @@ describe("EmuShiftReportsScreen", () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Другой пользователь'));
     expect(screen.getByRole('button', { name: 'Отправить отчёт' })).toBeDisabled();
     expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic')).not.toBeNull();
+  });
+
+  it('keeps the local draft and blocks publication when server draft protection is unavailable', async () => {
+    const user = userEvent.setup();
+    mocks.saveDraft.mockRejectedValue(new ApiError('Нет соединения', 0));
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await chooseEmployee(user, 'employee-1');
+    await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Осмотр оборудования');
+    await user.type(screen.getAllByLabelText('Минуты')[0], '30');
+    await user.click(screen.getByRole('button', { name: 'Отправить отчёт' }));
+    await screen.findByText('Не удалось сохранить серверный черновик. Проверьте соединение и повторите отправку.');
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(screen.getAllByPlaceholderText('Что выполнено')[0]).toHaveValue('Осмотр оборудования');
+    await waitFor(() => expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic')).not.toBeNull());
   });
 
 });

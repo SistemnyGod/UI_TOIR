@@ -1,0 +1,32 @@
+.modal-shell.ppe-legacy-print-dialog { width: min(1440px, 100%); }
+.modal-shell.ppe-legacy-print-fields { width: min(900px, 100%); }
+.ppe-legacy-print-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.ppe-legacy-print-modes { display: flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+.ppe-legacy-print-tools label, .ppe-legacy-print-fields label { display: grid; min-width: 0; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ui-text); }
+.ppe-legacy-print-tools select, .ppe-legacy-print-fields input, .ppe-legacy-print-fields textarea { min-width: 0; width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+.ppe-legacy-print-fields textarea { resize: vertical; }
+.ppe-legacy-print-tools select:focus-visible, .ppe-legacy-print-fields :is(input, textarea):focus-visible, .ppe-legacy-print-canvas:focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.ppe-legacy-print-hint { margin: 12px 0; color: var(--ui-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-legacy-print-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); font-size: 13px; line-height: 1.5; }
+.ppe-legacy-print-canvas { min-width: 0; width: 100%; padding: 12px; overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); }
+.ppe-legacy-print-frame { position: relative; margin: 0 auto; overflow: hidden; }
+.ppe-legacy-print-stage { position: absolute; top: 0; left: 0; transform-origin: top left; }
+.ppe-legacy-print-dialog .ppe-legacy-print-stage .inventory-ppe-print-paper { box-sizing: border-box; width: 100%; min-width: 0; max-width: none; height: auto; aspect-ratio: auto; min-height: 1123px; overflow: visible; margin: 0; padding: 48px; border: 0; border-radius: 0; color: #111; background: #fff; font-family: "Times New Roman", Times, serif; }
+.ppe-legacy-print-stage .inventory-ppe-print-paper.ppe-print-sheet { width: 100%; min-width: 0; height: auto; min-height: 794px; padding: 40px; }
+.ppe-legacy-print-stage .inventory-ppe-print-paper table { display: table; width: 100%; min-width: 0; max-width: none; table-layout: fixed; }
+.ppe-legacy-print-stage .inventory-ppe-print-paper :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
+.ppe-legacy-print-edit-rows { display: grid; gap: 14px; margin-top: 16px; }
+.ppe-legacy-print-edit-rows section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+.ppe-legacy-print-edit-rows h3, .ppe-legacy-print-edit-rows label:has(textarea) { grid-column: 1 / -1; }
+.ppe-legacy-print-edit-rows h3 { margin: 0; color: var(--ui-text); font-size: 14px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-legacy-print-pages, .ppe-card-employee-pages { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 12px; color: var(--ui-muted); font-size: 12px; }
+.ppe-legacy-print-pages span { margin-right: auto; }
+.ppe-card-employee-pages { padding: 12px; border-top: 1px solid var(--ui-border); }
+@media (max-width: 767px) {
+  .ppe-v2-employee-pane.is-collapsed > .ppe-card-employee-pages { display: none; }
+  .ppe-legacy-print-tools { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ppe-legacy-print-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+  .ppe-legacy-print-tools select, .ppe-legacy-print-fields input, .ppe-legacy-print-fields textarea { min-height: 44px; font-size: 16px; }
+  .ppe-legacy-print-edit-rows section { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .ppe-legacy-print-dialog .ui-button, .ppe-legacy-print-fields .ui-button { min-height: 44px; white-space: normal; }
+}

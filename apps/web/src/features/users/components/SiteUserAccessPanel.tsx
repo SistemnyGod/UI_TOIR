@@ -1,5 +1,5 @@
 import { Activity, ArrowDown, ArrowUp, BookOpenCheck, BriefcaseBusiness, Building2, ChevronDown, ChevronRight, Download, Eye, FileClock, Gauge, Info, KeyRound, LockKeyhole, Pencil, RotateCcw, Search, ShieldCheck, UnlockKeyhole, UserCog, UsersRound, Wrench } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AccessModuleDto, PermissionOverrideDto, SiteUserAccessCatalogDto, SiteUserAccessDto, SiteUserAuditEventDto, SiteUserAuditPageDto, SiteUserSessionsDto } from "../../../api/contracts";
 import type { SiteUser } from "../../../types";
 
@@ -48,6 +48,11 @@ export function SiteUserAccessPanel({ canManage = true, catalog, emuSections = [
   const [loading, setLoading] = useState(false);
   const [scopeSaving, setScopeSaving] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState(false);
+  const userId = user?.id;
+  const selectionRef = useRef({ id: userId, version: 0 });
+  if (selectionRef.current.id !== userId) selectionRef.current = { id: userId, version: selectionRef.current.version + 1 };
+  const userRef = useRef(user);
+  userRef.current = user;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,26 +65,32 @@ export function SiteUserAccessPanel({ canManage = true, catalog, emuSections = [
     setAudit(null);
     setSessions(null);
     setExpandedAudit(null);
-    if (!user) {
-      setAccess(null); setOverrides([]); setSavedOverrides([]); setScopeIds([]); setSavedScopeIds([]); setSavedScopeMode("selected");
+    setPermissionSaving(false); setScopeSaving(false);
+    setAccess(null); setOverrides([]); setSavedOverrides([]); setScopeIds([]); setSavedScopeIds([]); setScopeMode("selected"); setSavedScopeMode("selected");
+    const selectedUser = userRef.current;
+    if (!selectedUser || !userId) {
+      setLoading(false);
       return;
     }
     setLoading(true);
-    void loadAccess(user.id).then((nextAccess) => {
+    void loadAccess(userId).then((nextAccess) => {
       if (cancelled) return;
-      const nextOverrides = nextAccess?.permissionOverrides ?? user.permissionOverrides ?? [];
+      const nextOverrides = nextAccess?.permissionOverrides ?? selectedUser.permissionOverrides ?? [];
       const nextScopeMode = nextAccess?.scopeMode ?? "selected";
       const nextScopeIds = (nextAccess?.scopes ?? []).slice().sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0)).map((item) => item.scopeId);
       setAccess(nextAccess); setOverrides(nextOverrides); setSavedOverrides(nextOverrides); setScopeMode(nextScopeMode); setSavedScopeMode(nextScopeMode); setScopeIds(nextScopeIds); setSavedScopeIds(nextScopeIds);
-    }).finally(() => { if (!cancelled) setLoading(false); });
+    }).catch(() => { if (!cancelled) onNotify("Не удалось загрузить права пользователя."); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [loadAccess, user]);
+  }, [loadAccess, userId]);
 
   useEffect(() => {
-    if (activeTab !== "audit" || !user) return;
-    void loadAudit?.(user.id).then((result) => setAudit(result ?? null));
-    void loadSessions?.(user.id).then((result) => setSessions(result ?? null));
-  }, [activeTab, loadAudit, loadSessions, user]);
+    if (activeTab !== "audit" || !userId) return;
+    let cancelled = false;
+    setAudit(null); setSessions(null);
+    void loadAudit?.(userId).then((result) => { if (!cancelled) setAudit(result ?? null); }).catch(() => { if (!cancelled) onNotify("Не удалось загрузить аудит."); });
+    void loadSessions?.(userId).then((result) => { if (!cancelled) setSessions(result ?? null); }).catch(() => { if (!cancelled) onNotify("Не удалось загрузить сессии."); });
+    return () => { cancelled = true; };
+  }, [activeTab, loadAudit, loadSessions, userId]);
 
   const modules = catalog?.modules ?? [];
   const rolePermissionCodes = useMemo(() => {
@@ -149,12 +160,18 @@ export function SiteUserAccessPanel({ canManage = true, catalog, emuSections = [
     });
   }
   async function savePermissions() {
+    const selection = selectionRef.current;
     setPermissionSaving(true);
-    try { await onSavePermissions(currentUser.id, [...effectivePermissions], overrides); setSavedOverrides(overrides); onNotify(copy.saved); } finally { setPermissionSaving(false); }
+    try { await onSavePermissions(currentUser.id, [...effectivePermissions], overrides); if (selection !== selectionRef.current) return; setSavedOverrides(overrides); onNotify(copy.saved); }
+    catch { if (selection === selectionRef.current) onNotify("Не удалось сохранить права."); }
+    finally { if (selection === selectionRef.current) setPermissionSaving(false); }
   }
   async function saveScopes() {
+    const selection = selectionRef.current;
     setScopeSaving(true);
-    try { await onSaveScopes(currentUser.id, scopeIds.map((scopeId, index) => ({ moduleKey: "emu", scopeType: "emu_section", scopeId, sortOrder: index })), scopeMode); setSavedScopeIds(scopeIds); setSavedScopeMode(scopeMode); onNotify(copy.saved); } finally { setScopeSaving(false); }
+    try { await onSaveScopes(currentUser.id, scopeIds.map((scopeId, index) => ({ moduleKey: "emu", scopeType: "emu_section", scopeId, sortOrder: index })), scopeMode); if (selection !== selectionRef.current) return; setSavedScopeIds(scopeIds); setSavedScopeMode(scopeMode); onNotify(copy.saved); }
+    catch { if (selection === selectionRef.current) onNotify("Не удалось сохранить участки ЭМУ."); }
+    finally { if (selection === selectionRef.current) setScopeSaving(false); }
   }
 
   const selectedSectionIds = scopeMode === "all" ? emuSections.filter((section) => section.isActive).sort((left, right) => left.sortOrder - right.sortOrder).map((section) => section.id) : scopeIds;
@@ -177,6 +194,7 @@ export function SiteUserAccessPanel({ canManage = true, catalog, emuSections = [
       </header>
       <AccessSummary modules={modules} effective={effectivePermissions} roleCount={roleCount} personal={personalCount} />
       <nav className="user-access-tabs">{(["permissions", "scopes", "audit"] as AccessTab[]).map((x) => <button className={activeTab === x ? "is-active" : ""} key={x} onClick={() => setActiveTab(x)} type="button">{x === "permissions" ? "Права" : x === "scopes" ? "Участки ЭМУ" : "Аудит"}</button>)}</nav>
+      <fieldset disabled={loading || !canManage} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       {activeTab === "permissions" ? <div className="user-access-content">
         <div className="user-access-section-heading"><div><h3>Быстрые наборы прав</h3><p>Примените профиль и скорректируйте отдельные права.</p></div></div>
         <div className="permission-presets">
@@ -190,6 +208,7 @@ export function SiteUserAccessPanel({ canManage = true, catalog, emuSections = [
         <div className="scope-main"><div className="scope-mode"><button className={scopeMode === "all" ? "is-active" : ""} onClick={() => setScopeMode("all")} type="button">Все участки</button><button className={scopeMode === "selected" ? "is-active" : ""} onClick={() => setScopeMode("selected")} type="button">Только выбранные</button></div><div className="scope-info"><Info /><span><strong>{scopeMode === "all" ? "Доступ ко всем участкам ЭМУ" : `Выбрано ${scopeIds.length} из ${emuSections.filter((x) => x.isActive).length} участков`}</strong>Настройка ограничивает данные и действия пользователя в модуле ЭМУ.</span></div><div className="scope-toolbar"><label><Search /><input value={scopeQuery} onChange={(e) => setScopeQuery(e.target.value)} placeholder="Поиск участка..." /></label><button onClick={() => { setScopeMode("selected"); setScopeIds(visibleSections.map((x) => x.id)); }} type="button">Выбрать все</button><button onClick={() => { setScopeMode("selected"); setScopeIds([]); }} type="button">Очистить</button></div><div className="scope-check-grid">{visibleSections.map((section) => <label className={scopeMode === "all" || scopeIds.includes(section.id) ? "is-selected" : ""} key={section.id}><input checked={scopeMode === "all" || scopeIds.includes(section.id)} disabled={scopeMode === "all"} onChange={(e) => setScopeIds((current) => e.target.checked ? [...current, section.id] : current.filter((id) => id !== section.id))} type="checkbox" /><span>{section.name}</span></label>)}</div></div>
         <aside className="scope-summary"><header><h3>Назначенные участки</h3><span>{selectedSectionIds.length}</span></header><div>{selectedSectionIds.map((id, i) => { const section = sectionById.get(id); return section ? <div key={id}><span>{section.name}</span>{scopeMode === "selected" ? <span className="scope-order"><button disabled={i === 0} onClick={() => moveScope(id, -1)} title="Выше" type="button"><ArrowUp /></button><button disabled={i === selectedSectionIds.length - 1} onClick={() => moveScope(id, 1)} title="Ниже" type="button"><ArrowDown /></button></span> : null}</div> : null; })}</div><p><Info />Проверьте, что пользователю доступны все необходимые производственные участки.</p><button className="button primary" disabled={!canManage || !scopesDirty || scopeSaving} onClick={() => void saveScopes()} type="button">Сохранить участки</button></aside>
       </div> : null}
+      </fieldset>
       {activeTab === "audit" ? <AuditPanel audit={audit} sessions={sessions} onExport={() => void onExportAudit?.(currentUser.id)} /> : null}
     </div>
   </section>;

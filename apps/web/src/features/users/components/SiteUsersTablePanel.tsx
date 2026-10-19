@@ -100,14 +100,14 @@ export function SiteUsersTablePanel({
         </div>
       ) : null}
       <div className="site-users-directory-list">
-        {status === "loading" ? <div className="site-users-loading">Загрузка пользователей...</div> : null}
-        {status === "error" ? (
+        {status === "loading" && users.length === 0 ? <div className="site-users-loading">Загрузка пользователей...</div> : null}
+        {status === "error" && users.length === 0 ? (
           <EmptyState title="Пользователи не загрузились" description={errorMessage} action={onRetry ? <button className="button ghost" onClick={onRetry} type="button">Повторить</button> : undefined} />
         ) : null}
         {status !== "loading" && status !== "error" && filteredUsers.length === 0 ? (
           <EmptyState title="Пользователи не найдены" description="Измените параметры поиска или создайте новую учетную запись." />
         ) : null}
-        {status !== "loading" && status !== "error" && visibleUsers.map((user) => (
+        {visibleUsers.map((user) => (
           <button
             aria-pressed={selectedUserId === user.id}
             className={`site-user-directory-row ${selectedUserId === user.id ? "is-selected" : ""}`}

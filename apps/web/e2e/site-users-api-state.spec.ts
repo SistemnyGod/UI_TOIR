@@ -25,6 +25,7 @@ test("site users API mode renders users and creates temporary password panel", a
     window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
     window.localStorage.setItem("patrol360.sessionToken", "test-token");
   });
+  await page.route("**/api/**", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
   await page.route("**/api/v1/auth/me", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -61,11 +62,11 @@ test("site users API mode renders users and creates temporary password panel", a
   await page.goto("/#users");
 
   await expect(page.getByRole("heading", { name: "Управление пользователями" })).toBeVisible();
-  await expect(page.getByRole("article").getByText("admin", { exact: true })).toBeVisible();
+  await expect(page.locator(".site-user-directory-row").getByText("admin", { exact: true })).toBeVisible();
 
-  await page.locator(".workspace-head").getByRole("button", { name: "Создать пользователя" }).click();
-  await page.getByPlaceholder("login").fill("operator1");
-  await page.getByPlaceholder("Фамилия Имя Отчество").fill("Иванов Иван");
+  await page.getByRole("button", { name: /Создать пользователя/ }).first().click();
+  await page.getByPlaceholder("Введите логин").fill("operator1");
+  await page.getByPlaceholder("Введите ФИО полностью").fill("Иванов Иван");
   await page.getByPlaceholder("Минимум 8 символов").fill("Patrol-123456!");
   await page.getByPlaceholder("Повторите пароль").fill("Patrol-123456!");
   await page.getByRole("button", { name: "Создать пользователя" }).last().click();

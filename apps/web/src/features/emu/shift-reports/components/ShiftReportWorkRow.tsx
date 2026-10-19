@@ -20,6 +20,19 @@ function AutoResizeTextarea({ value, onChange, className = "", ...props }: AutoR
     if (textareaRef.current) resizeTextarea(textareaRef.current);
   }, [value]);
 
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || typeof ResizeObserver === 'undefined') return;
+    let width = textarea.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth === width) return;
+      width = textarea.clientWidth;
+      resizeTextarea(textarea);
+    });
+    observer.observe(textarea);
+    return () => observer.disconnect();
+  }, []);
+
   function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
     resizeTextarea(event.currentTarget);
     onChange?.(event);
@@ -60,6 +73,7 @@ export function ShiftReportWorkRow({
       <td data-label="Выполненная работа">
         <AutoResizeTextarea
           id={`description-${row.id}`}
+          aria-label={`Выполненная работа, строка ${index + 1}`}
           value={row.description}
           onChange={(event) => onChange({ description: event.target.value })}
           placeholder="Что выполнено"

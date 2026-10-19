@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
+import { WorkCommandMenu, type WorkCommand } from "./WorkCommandMenu";
 import type { EmuWorkSessionDto } from "../../../../api/contracts";
 import { calculateLiveWorkSessionMinutes } from "../../../../domain/emuWorkTime";
 import type { EmployeeWorkState, WorkDensity } from "../types";
@@ -31,6 +31,7 @@ export function WorkCard({
   onResume,
   onSelect,
   requiresDecision,
+  selected = false,
   work,
 }: {
   canComplete: boolean;
@@ -48,6 +49,7 @@ export function WorkCard({
   onResume: () => void;
   onSelect: () => void;
   requiresDecision: boolean;
+  selected?: boolean;
   work: EmuWorkSessionDto;
 }) {
   const cardState = resolveWorkCardState(work);
@@ -56,80 +58,76 @@ export function WorkCard({
   const hasWorking = hasWorkingEmployees(work);
   const showAttention = cardState === "attention" && !hasWorking;
   const isCompleted = Boolean(work.completedAt);
-  const createdByLabel = work.createdByName?.trim() || (work.createdByUserId ? "пользователь" : "");
   const [quickMenu, setQuickMenu] = useState<{ x: number; y: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const taskLines = work.taskDescription.split(/\r?\n/).filter(line => line.trim());
+  const visibleEmployees = work.employees.slice(0, density === "compact" ? 2 : 3);
+  const remainingEmployees = work.employees.length - visibleEmployees.length;
+  const commands: WorkCommand[] = [
+    { label: "Просмотр", action: onDetails },
+    ...(canUpdate ? [{ label: "Изменить", action: onEdit }] : []),
+    ...(!isCompleted && hasPaused && canPause ? [{ label: "Продолжить", action: onResume }] : []),
+    ...(!isCompleted && hasWorking && canPause ? [{ label: "Пауза", action: onPause }] : []),
+    ...(!isCompleted && canUpdate ? [{ label: "Перенести", action: onCarryOver }] : []),
+    ...(!isCompleted && canComplete ? [{ label: "Завершить работу", action: onComplete }] : []),
+    ...(canDelete ? [{ label: "Удалить", action: onDelete, danger: true }] : []),
+  ];
 
   function openQuickMenu(event: { clientX: number; clientY: number; preventDefault?: () => void }) {
     event.preventDefault?.();
-    setQuickMenu({ x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 260) });
-  }
-
-  function runQuickAction(action: () => void) {
-    setQuickMenu(null);
-    action();
+    setQuickMenu({ x: event.clientX, y: event.clientY });
   }
 
   return (
     <>
-    <article className={`emu-work-card status-${cardState} density-${density} ${work.isCarriedOver ? "is-warning" : ""}`} onClick={onSelect} onContextMenu={openQuickMenu}>
+    <article aria-label={`Работа ${work.workNumber}`} className={`emu-work-card status-${cardState} density-${density} ${work.isCarriedOver ? "is-warning" : ""} ${selected ? "is-selected" : ""}`} onClick={onSelect} onContextMenu={openQuickMenu}>
       <div className="emu-work-card-top">
         <span className={`emu-status-pill status-${cardState}`}>{workStateLabel(cardState)}</span>
-        <small>{formatTime(work.arrivedAt)}</small>
+        <small>С {formatTime(work.arrivedAt)}</small>
       </div>
+      <div className="emu-work-card-copy">
       {requiresDecision ? <span className="emu-decision-badge">Требует решения</span> : null}
       {work.source === "mobile" ? <span className="emu-decision-badge">Мобильное приложение</span> : null}
-      <h4>{work.sectionName || "Прочее"}</h4>
-      <p>{work.taskDescription || "Задача не указана"}</p>
+      <h4><button type="button" aria-label={`Открыть карточку ${work.workNumber}`} onClick={event => { event.stopPropagation(); onDetails(); }}>{taskLines[0] || "Задача не указана"}</button></h4>
+      {density === "comfortable" && taskLines.length > 1 ? <p>{taskLines.slice(1).join(" ")}</p> : null}
       <div className="emu-work-meta">
         <span>{work.workNumber}</span>
-        {createdByLabel ? <span>Автор: {createdByLabel}</span> : null}
-        <span>👤 сотрудников: {work.employees.length}</span>
-        <span>◷ работа {formatMinutes(liveMinutes.workMinutes)} · пауза {formatMinutes(liveMinutes.waitingMinutes + liveMinutes.otherWorkMinutes)}</span>
+        <span>{work.sectionName || "Прочее"}</span>
+      </div>
       </div>
       <div className={`emu-employee-chips density-${density}`}>
-        {work.employees.map((employee) => {
-          const employeeMinutes = liveMinutes.employeesById.get(employee.employeeId);
+        {visibleEmployees.map((employee) => {
           const status = activeEmployeeStatus(employee);
           return (
-            <span className={`emu-employee-status ${statusClass(status as EmployeeWorkState)}`} key={employee.employeeId}>
-              {formatEmployeeShortName(employee.fullNameSnapshot)}: {employeeStatusLabel(status)} · {formatMinutes(employeeMinutes?.personalWorkMinutes ?? employee.workMinutes)}/{formatMinutes(employeeMinutes?.personalPauseMinutes ?? employee.waitingMinutes + employee.otherWorkMinutes)}
+            <span className={`emu-employee-status ${statusClass(status as EmployeeWorkState)}`} key={employee.employeeId} title={employee.fullNameSnapshot}>
+              {formatEmployeeShortName(employee.fullNameSnapshot)} · {employeeStatusLabel(status)}
             </span>
           );
         })}
+        {work.employees.length > 1 ? <button className={`emu-work-more-people${remainingEmployees === 0 ? " is-small-only" : ""}`} type="button" aria-label={`Показать всех участников работы ${work.workNumber}`} onClick={event => { event.stopPropagation(); onDetails(); }}>Все участники: {work.employees.length} →</button> : null}
       </div>
-      {showAttention ? <div className="emu-card-warning compact">В карточке нет активных сотрудников. Продолжите работу, завершите или удалите карточку.</div> : null}
+      <div className="emu-work-card-footer">
+      <dl className="emu-work-card-time"><div><dt>Работа</dt><dd>{formatMinutes(liveMinutes.workMinutes)}</dd></div><div><dt>Пауза</dt><dd>{formatMinutes(liveMinutes.waitingMinutes + liveMinutes.otherWorkMinutes)}</dd></div></dl>
       <div className="emu-card-actions">
         <button
           aria-expanded={Boolean(quickMenu)}
           aria-haspopup="menu"
           className="emu-command-button"
+          ref={triggerRef}
           onClick={(event) => {
             event.stopPropagation();
-            openQuickMenu(event);
+            const rect = event.currentTarget.getBoundingClientRect();
+            setQuickMenu({ x: rect.right - 220, y: rect.bottom + 6 });
           }}
           type="button"
         >
           Команды
         </button>
       </div>
+      </div>
+      {showAttention ? <div className="emu-card-warning compact">Нет активных сотрудников</div> : null}
     </article>
-    {quickMenu
-      ? createPortal(
-          <div className="emu-quick-menu-layer" onClick={() => setQuickMenu(null)} role="presentation">
-            <div className="emu-quick-menu" onClick={(event) => event.stopPropagation()} style={{ left: quickMenu.x, top: quickMenu.y }}>
-              <strong>Быстрые команды</strong>
-              <button onClick={() => runQuickAction(onDetails)} role="menuitem" type="button">Просмотр</button>
-              {canUpdate ? <button onClick={() => runQuickAction(onEdit)} role="menuitem" type="button">Изменить</button> : null}
-              {!isCompleted && hasPaused && canPause ? <button onClick={() => runQuickAction(onResume)} role="menuitem" type="button">Продолжить</button> : null}
-              {!isCompleted && hasWorking && canPause ? <button onClick={() => runQuickAction(onPause)} role="menuitem" type="button">Пауза</button> : null}
-              {!isCompleted && canUpdate ? <button onClick={() => runQuickAction(onCarryOver)} role="menuitem" type="button">Перенести</button> : null}
-              {!isCompleted && canComplete ? <button onClick={() => runQuickAction(onComplete)} role="menuitem" type="button">Завершить работу</button> : null}
-              {canDelete ? <button className="danger" onClick={() => runQuickAction(onDelete)} role="menuitem" type="button">Удалить</button> : null}
-            </div>
-          </div>,
-          document.body,
-        )
-      : null}
+    {quickMenu ? <WorkCommandMenu commands={commands} point={quickMenu} triggerRef={triggerRef} onClose={() => setQuickMenu(null)} /> : null}
     </>
   );
 }

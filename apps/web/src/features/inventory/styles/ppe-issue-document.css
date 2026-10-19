@@ -51,7 +51,7 @@ button.ppe-document-product:hover { border-color:#0759c7; background:#eff6ff; }
 .ppe-document-review h2 { font-size:18px; font-weight:600; margin:0 0 12px; }
 .ppe-document-review .is-ready { display:flex; gap:8px; color:#166534; }
 .ppe-document-actions { flex-wrap:wrap; justify-content:flex-end; }
-.ppe-document-preview { width:100%; min-width:0; height:680px; border:1px solid #cbd5e1; border-radius:8px; margin-top:16px; }
+
 .ppe-document-batch { flex-wrap:wrap; margin-bottom:12px; }
 .ppe-document-batch label { grid-template-columns:auto 160px; align-items:center; }
 .ppe-document-table-scroll { max-width:100%; overflow-x:auto; }
@@ -76,7 +76,7 @@ button.ppe-document-product:hover { border-color:#0759c7; background:#eff6ff; }
  .ppe-document-lines article { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .ppe-document-head { align-items:flex-start; flex-direction:column; }
  .ppe-document-head-actions { justify-content:flex-start; }
- .ppe-document-preview { height:480px; }
+
  .ppe-document-batch label { width:100%; grid-template-columns:minmax(0,1fr); }
 }
 @media(max-width:479px) {

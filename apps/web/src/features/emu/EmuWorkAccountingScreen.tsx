@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   EmuDecisionDto,
-  EmuShiftRemarkDto,
   SessionUserDto,
 } from "../../api/contracts";
 import type { EmuWorkspace } from "../../hooks/useEmuWorkspace";
@@ -28,7 +27,6 @@ import {
   type WorkSideSelection,
 } from "./work-accounting/types";
 import {
-  CatalogSummary,
   DensitySwitch,
   SectionQuickFilter,
   WorkAttentionSummary,
@@ -37,6 +35,10 @@ import {
   WorkFilterTabs,
   WorkSearchFilter,
 } from "./work-accounting/WorkAccountingBoard";
+import { MobileShiftRemarksPanel } from "./work-accounting/board/MobileShiftRemarksPanel";
+import { initialWorkloadView, type EmployeeWorkloadView } from "./work-accounting/side/EmployeeWorkloadPanel";
+import { buildCreateWorkEmployeeOptions } from "./work-accounting/createWorkOptions";
+import "./work-accounting/workAccountingWorkspace.css";
 import { ResolveDecisionModal, WorkSidePanel } from "./work-accounting/WorkSidePanel";
 import {
   AddEmployeeToWorkModal,
@@ -51,7 +53,8 @@ import {
   ResumeWorkModal,
   WorkDetailsModal,
 } from "./work-accounting/modals/WorkSessionModals";
-import { CatalogsModal, FavoritesModal } from "./work-accounting/modals/DirectoryModals";
+import { CatalogsModal } from "./work-accounting/modals/CatalogsModal";
+import { FavoritesModal } from "./work-accounting/modals/FavoritesModal";
 import { PlanBoardModal } from "./work-accounting/modals/PlanBoardModal";
 import {
   activeSections,
@@ -78,6 +81,8 @@ export function EmuWorkAccountingScreen({
   const [selectedWorkId, setSelectedWorkId] = useState<string>("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [sideSelection, setSideSelection] = useState<WorkSideSelection>(null);
+  const [workloadView, setWorkloadView] = useState<EmployeeWorkloadView>(initialWorkloadView);
+  const returnToDetails = useRef("");
   const [preferences, setPreferences] = useStoredState<EmuWorkAccountingPreferences>(
     emuWorkAccountingPreferencesKey,
     { collapsedSections: [], density: "compact", sectionFilter: "", workFilter: "all" },
@@ -91,6 +96,18 @@ export function EmuWorkAccountingScreen({
   const [createPresetEmployeeId, setCreatePresetEmployeeId] = useState("");
   const [decisionModal, setDecisionModal] = useState<EmuDecisionDto | null>(null);
   const [liveClock, setLiveClock] = useState<Date>(() => new Date());
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  async function refreshBoard() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try { await workspace.refreshWorkBoard(); }
+    catch (error) { if (alive.current) onNotify(error instanceof Error ? error.message : "Не удалось обновить доску работ"); }
+    finally { refreshingRef.current = false; if (alive.current) setRefreshing(false); }
+  }
   const boardWork = useMemo(
     () =>
       [...workspace.workSessions.rows]
@@ -149,34 +166,13 @@ export function EmuWorkAccountingScreen({
   const canViewPlan = hasPermission(currentUser, "emu.plan.view");
   const canManagePlan = hasPermission(currentUser, "emu.plan.manage");
   const canApprovePlan = hasPermission(currentUser, "emu.plan.approve");
-  const employeeOptions = useMemo<EmuEmployeeOption[]>(() => {
-    const activeFavoriteIds = new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId));
-    const source =
-      employeeDirectory.length > 0
-        ? employeeDirectory
-        : workspace.settings.favoriteEmployees.map((employee) => ({
-            department: employee.department,
-            fullName: employee.fullName,
-            id: employee.employeeId,
-            personnelNo: employee.personnelNo,
-            position: employee.position,
-            status: employee.status as EmployeeDirectoryItem["status"],
-          }));
-
-    return [...source]
-      .sort((a, b) => Number(activeFavoriteIds.has(b.id)) - Number(activeFavoriteIds.has(a.id)) || a.fullName.localeCompare(b.fullName, "ru"))
-      .map((employee) => ({
-        department: employee.department,
-        fullName: employee.fullName,
-        id: employee.id,
-        personnelNo: employee.personnelNo,
-        position: employee.position,
-        status: employee.status,
-      }));
-  }, [employeeDirectory, workspace.settings.favoriteEmployees]);
+  const employeeOptions = useMemo<EmuEmployeeOption[]>(
+    () => buildCreateWorkEmployeeOptions(employeeDirectory, workspace.settings.favoriteEmployees).employees,
+    [employeeDirectory, workspace.settings.favoriteEmployees],
+  );
   const employeeWorkload = useMemo(
-    () => buildEmuEmployeeWorkload(workspace.settings.favoriteEmployees, workspace.workSessions.rows, employeeDirectory, sectionFilter),
-    [employeeDirectory, sectionFilter, workspace.settings.favoriteEmployees, workspace.workSessions.rows],
+    () => buildEmuEmployeeWorkload(workspace.settings.favoriteEmployees, workspace.workSessions.rows, employeeDirectory),
+    [employeeDirectory, workspace.settings.favoriteEmployees, workspace.workSessions.rows],
   );
 
   useEffect(() => {
@@ -201,8 +197,24 @@ export function EmuWorkAccountingScreen({
       return;
     }
 
+    returnToDetails.current = "";
     if (id) setSelectedWorkId(id);
     setModal(kind);
+  }
+
+  function openDetailsAction(kind: ModalKind, employeeId = "") {
+    if (!selectedWork || !canOpenModal(kind)) return;
+    openModal(kind, selectedWork.id);
+    setSelectedEmployeeId(employeeId);
+    returnToDetails.current = selectedWork.id;
+  }
+
+  function closeWorkDialog() {
+    const workId = returnToDetails.current;
+    returnToDetails.current = "";
+    setSelectedEmployeeId("");
+    if (workId) setSelectedWorkId(workId);
+    setModal(workId ? "details" : null);
   }
 
   function canOpenModal(kind: ModalKind) {
@@ -326,14 +338,15 @@ export function EmuWorkAccountingScreen({
   }, []);
 
   return (
-    <section className="emu-page">
+    <section className="emu-page emu-work-accounting-workspace">
       <PageHeader
         className="emu-page-heading emu-work-accounting-heading"
-        description="Суточная доска активных работ, пауз, переносов и решений диспетчера."
+        description="Задачи, исполнители и состояние работ на участках."
         eyebrow="ЭМУ"
         title="Учет работ ЭМУ"
         actions={(
           <div className="emu-heading-actions">
+          <Button variant="ghost" disabled={refreshing} isLoading={refreshing} onClick={() => void refreshBoard()}>Обновить доску</Button>
           {canViewPlan ? (
             <Button variant="secondary" onClick={() => openModal("plan")}>
               Доска задач
@@ -354,7 +367,7 @@ export function EmuWorkAccountingScreen({
       <div className="emu-work-layout">
         <Panel
           className="emu-work-main"
-          note="Доска показывает незавершенные карточки; завершенные доступны в истории"
+          note={`Незавершённых работ: ${boardWork.length}. Завершённые работы доступны в истории.`}
           title="Карточки работ"
           actions={(
             <>
@@ -366,7 +379,6 @@ export function EmuWorkAccountingScreen({
 
           <FilterBar ariaLabel="Фильтры карточек работ" className="emu-work-board-toolbar">
             <div className="emu-work-board-toolbar-main">
-              <span className="emu-work-board-toolbar-label">Фильтры доски</span>
               <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
               <WorkSearchFilter onChange={setWorkSearch} onClear={() => setWorkSearch("")} value={workSearch} />
             </div>
@@ -388,6 +400,7 @@ export function EmuWorkAccountingScreen({
                 <div className="emu-card-grid">
                   {carriedOverWork.map((work) => (
                     <WorkCard
+                      selected={selectedSideWork?.id === work.id}
                       canComplete={canComplete}
                       canDelete={canDelete}
                       canPause={canPause}
@@ -413,6 +426,7 @@ export function EmuWorkAccountingScreen({
             {boardSections.length > 0 ? (
               boardSections.map((section) => (
                 <WorkBoardSection
+                  selectedWorkId={selectedSideWork?.id}
                   canComplete={canComplete}
                   canDelete={canDelete}
                   canPause={canPause}
@@ -458,6 +472,11 @@ export function EmuWorkAccountingScreen({
         </Panel>
 
         <WorkSidePanel
+          workloadView={workloadView}
+          onWorkloadViewChange={setWorkloadView}
+          key={selectedSideWork?.id ?? selectedSideEmployee?.employeeId ?? "overview"}
+          onClearSelection={() => setSideSelection(null)}
+          onOpenWorkDetails={id => openModal("details", id)}
           canAdjustShift={canAdjustShift}
           canCreate={canCreate}
           canComplete={canComplete}
@@ -487,6 +506,7 @@ export function EmuWorkAccountingScreen({
 
       {modal === "create" && canCreate ? (
         <CreateWorkModal
+          draftStorageKey={`${emuCreateWorkDraftKey}:${currentUser?.id ?? "mock"}`}
           employeeOptions={employeeOptions}
           initialSectionId={sectionFilter}
           initialEmployeeId={createPresetEmployeeId}
@@ -499,34 +519,34 @@ export function EmuWorkAccountingScreen({
         />
       ) : null}
       {modal === "edit" && selectedWork && canUpdate ? (
-        <EditWorkModal employeeOptions={employeeOptions} onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <EditWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} employeeOptions={employeeOptions} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "pause" && selectedWork && canPause ? (
-        <PauseWorkModal initialEmployeeId={selectedEmployeeId} onClose={() => { setSelectedEmployeeId(""); setModal(null); }} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <PauseWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} initialEmployeeId={selectedEmployeeId} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "resume" && selectedWork && canPause ? (
-        <ResumeWorkModal initialEmployeeId={selectedEmployeeId} onClose={() => { setSelectedEmployeeId(""); setModal(null); }} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <ResumeWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} initialEmployeeId={selectedEmployeeId} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "complete" && selectedWork && canComplete ? (
-        <CompleteWorkModal onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <CompleteWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "carryOver" && selectedWork && canUpdate ? (
-        <CarryOverWorkModal onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <CarryOverWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "addEmployee" && selectedWork && canUpdate ? (
-        <AddEmployeeToWorkModal employeeOptions={employeeOptions} onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <AddEmployeeToWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} employeeOptions={employeeOptions} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "finishEmployee" && selectedWork && selectedWorkEmployee && canComplete ? (
-        <FinishEmployeeParticipationModal employee={selectedWorkEmployee} onClose={() => { setSelectedEmployeeId(""); setModal(null); }} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <FinishEmployeeParticipationModal key={`${selectedWork.id}:${selectedEmployeeId}`} employee={selectedWorkEmployee} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "mistakenEmployee" && selectedWork && selectedWorkEmployee && canUpdate ? (
-        <MarkMistakenEmployeeModal employee={selectedWorkEmployee} onClose={() => { setSelectedEmployeeId(""); setModal(null); }} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <MarkMistakenEmployeeModal key={`${selectedWork.id}:${selectedEmployeeId}`} employee={selectedWorkEmployee} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "delete" && selectedWork && canDelete ? (
-        <DeleteWorkModal onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} work={selectedWork} />
+        <DeleteWorkModal key={`${selectedWork.id}:${selectedEmployeeId}`} onClose={closeWorkDialog} onNotify={onNotify} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "details" && selectedWork ? (
-        <WorkDetailsModal now={liveClock} onClose={() => setModal(null)} workspace={workspace} work={selectedWork} />
+        <WorkDetailsModal key={`${selectedWork.id}:${selectedEmployeeId}`} controls={{ canUpdate, canPause, canComplete, onEdit: () => openDetailsAction("edit"), onAddEmployee: () => openDetailsAction("addEmployee"), onComplete: () => openDetailsAction("complete"), onEmployeeAction: openDetailsAction }} canViewAudit={workspace.sourceMode !== "api" || hasPermission(currentUser, "emu.audit.view")} now={liveClock} onClose={() => setModal(null)} workspace={workspace} work={selectedWork} />
       ) : null}
       {modal === "catalogs" && canManageDirectories ? (
         <CatalogsModal onClose={() => setModal(null)} onNotify={onNotify} workspace={workspace} />
@@ -547,6 +567,7 @@ export function EmuWorkAccountingScreen({
       ) : null}
       {decisionModal && canResolveDecision ? (
         <ResolveDecisionModal
+          key={decisionModal.id}
           decision={decisionModal}
           onClose={() => setDecisionModal(null)}
           onNotify={onNotify}
@@ -555,89 +576,4 @@ export function EmuWorkAccountingScreen({
       ) : null}
     </section>
   );
-}
-
-function MobileShiftRemarksPanel({ remarks, total }: { remarks: EmuShiftRemarkDto[]; total: number }) {
-  return (
-    <Panel
-      className="emu-shift-remarks-panel"
-      note="Сотрудники фиксируют замечания на телефоне; после синхронизации они появляются здесь."
-      title="Замечания из мобильного приложения"
-      actions={<span className="emu-decision-badge">Всего: {total}</span>}
-    >
-      {remarks.length === 0 ? (
-        <div className="emu-empty-state">Замечаний по выбранному участку пока нет.</div>
-      ) : (
-        <div className="emu-shift-remark-grid">
-          {remarks.map((remark) => (
-            <article className="emu-shift-remark-card" key={remark.id}>
-              <header>
-                <div>
-                  <strong>{remark.sectionName}</strong>
-                  <span>{remark.employeeName}</span>
-                </div>
-                <span className="emu-status-pill">{remarkStatusText(remark.status)}</span>
-              </header>
-              <p>{remark.comment}</p>
-              <dl>
-                <div>
-                  <dt>Создано</dt>
-                  <dd>{formatRemarkDate(remark.createdAtLocal)}</dd>
-                </div>
-                <div>
-                  <dt>Доставлено</dt>
-                  <dd>{formatRemarkDate(remark.createdAtServer)}</dd>
-                </div>
-                <div>
-                  <dt>Источник</dt>
-                  <dd>Мобильное приложение</dd>
-                </div>
-              </dl>
-              <div className="emu-shift-remark-attachments">
-                {remark.attachments.length === 0 ? (
-                  <span>Вложений нет</span>
-                ) : (
-                  remark.attachments.map((file) => (
-                    <a href={file.downloadUrl} key={file.fileId} rel="noreferrer" target="_blank">
-                      {isVideoAttachment(file.contentType) ? "Видео" : "Фото"} · {formatFileSize(file.sizeBytes)}
-                    </a>
-                  ))
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function remarkStatusText(status: string) {
-  if (status === "accepted") return "Принято";
-  if (status === "pending") return "Ожидает отправки";
-  if (status === "rejected") return "Отклонено";
-  if (status === "conflict") return "Конфликт";
-  return status || "-";
-}
-
-function formatRemarkDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("ru-RU", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function isVideoAttachment(contentType: string) {
-  return contentType.toLowerCase().startsWith("video/");
-}
-
-function formatFileSize(sizeBytes: number) {
-  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return "0 МБ";
-  if (sizeBytes < 1024 * 1024) return `${Math.max(1, Math.round(sizeBytes / 1024))} КБ`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} МБ`;
 }

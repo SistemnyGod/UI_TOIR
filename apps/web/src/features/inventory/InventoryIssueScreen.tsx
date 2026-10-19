@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -15,7 +15,6 @@ import {
   Search,
   Send,
   Trash2,
-  X,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
@@ -29,7 +28,7 @@ import type {
   InventoryStockBalanceDto,
 } from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
-import { PpeMovementHistoryPanel } from "./PpeMovementHistoryPanel";
+import { EmployeePpeHistoryDialog } from "./employees/EmployeePpeHistoryDialog";
 import "./inventoryWeb.css";
 
 type InventoryIssueScreenProps = {
@@ -235,7 +234,11 @@ export function InventoryIssueScreen({
     setDraft((current) => current.filter((line) => line.itemId !== itemId));
   }
 
+  const operationIdsRef = useRef(new Map<string, string>());
+  const submitLockRef = useRef(false);
+
   async function submitIssue() {
+    if (submitLockRef.current) return;
     if (!employeeId) {
       onNotify("Выберите сотрудника для выдачи");
       return;
@@ -252,6 +255,7 @@ export function InventoryIssueScreen({
     }
 
     try {
+      submitLockRef.current = true;
       setSubmitting(true);
       await Promise.all(
         draft.map((line) => {
@@ -275,9 +279,13 @@ export function InventoryIssueScreen({
             type: "issue",
             warehouseId: null,
           };
-          return inventoryRepository.createOperation(payload);
+          const key = JSON.stringify(payload);
+          const clientOperationId = operationIdsRef.current.get(key) ?? crypto.randomUUID();
+          operationIdsRef.current.set(key, clientOperationId);
+          return inventoryRepository.createOperation({ ...payload, clientOperationId });
         }),
       );
+      operationIdsRef.current.clear();
       setDraft([]);
       setComment("");
       setEmployeeId("");
@@ -288,6 +296,7 @@ export function InventoryIssueScreen({
     } catch (submitError) {
       onNotify(submitError instanceof Error ? submitError.message : "Не удалось провести выдачу");
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   }
@@ -558,7 +567,7 @@ export function InventoryIssueScreen({
       ) : null}
 
       {movementEmployee ? (
-        <EmployeePpeMovementDialog employee={movementEmployee} onClose={() => setMovementEmployee(null)} />
+        <EmployeePpeHistoryDialog employee={movementEmployee} onClose={() => setMovementEmployee(null)} />
       ) : null}
     </section>
   );
@@ -687,37 +696,6 @@ function DraftsTab({
         </table>
       </div>
     </section>
-  );
-}
-
-function EmployeePpeMovementDialog({ employee, onClose }: { employee: InventoryEmployeeDto; onClose: () => void }) {
-  return (
-    <div className="inventory-issue-dialog-backdrop" onMouseDown={onClose} role="presentation">
-      <section
-        aria-label="История СИЗ сотрудника"
-        aria-modal="true"
-        className="inventory-issue-dialog inventory-issue-movements-dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <header>
-          <div>
-            <p>История движения СИЗ</p>
-            <h2>{employee.fullName}</h2>
-          </div>
-          <button className="button ghost icon-only" onClick={onClose} type="button" aria-label="Закрыть">
-            <X size={18} />
-          </button>
-        </header>
-        <PpeMovementHistoryPanel
-          employeeId={employee.id}
-          emptyText="По этому сотруднику пока нет выдач, возвратов или списаний СИЗ."
-          hideEmployee
-          pageSize={12}
-          title="Что выдавали, возвращали и списывали"
-        />
-      </section>
-    </div>
   );
 }
 

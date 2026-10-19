@@ -346,71 +346,6 @@
   width: 16px;
   min-height: 16px;
 }
-
-.emu-plan-create {
-  display: grid;
-  grid-template-columns: minmax(230px, 1fr) 150px 190px 140px auto;
-  margin-bottom: 12px;
-}
-
-.emu-plan-options {
-  flex-wrap: wrap;
-  margin: 12px 0;
-}
-
-.emu-kanban {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(190px, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.emu-kanban section {
-  border: 1px solid #e4edf8;
-  border-radius: 8px;
-  background: #f8fbff;
-  min-height: 220px;
-  padding: 12px;
-}
-
-.emu-kanban h4 {
-  margin: 0 0 10px;
-}
-
-.emu-kanban article {
-  display: grid;
-  gap: 7px;
-  margin-bottom: 8px;
-  border-left: 4px solid #d8e3f2;
-}
-
-.emu-plan-card.priority-высокий {
-  border-left-color: #f97316;
-}
-
-.emu-plan-card.priority-срочно {
-  border-left-color: #ef4444;
-}
-
-.emu-plan-card.priority-низкий {
-  border-left-color: #22c55e;
-}
-
-.emu-plan-card-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.emu-kanban button {
-  border: 1px solid #bdd3f4;
-  border-radius: 8px;
-  background: #fff;
-  color: #1d4ed8;
-  min-height: 30px;
-}
-
-.emu-kanban button:disabled,
 .emu-reference-row button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -443,20 +378,6 @@
   margin: 2px 0 0;
   padding: 7px 8px;
   text-align: left;
-}
-
-.emu-nested-confirm {
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fff7f7;
-  margin-top: 14px;
-  padding: 12px;
-}
-
-.emu-nested-confirm p {
-  color: #52627d;
-  font-size: 13px;
-  margin: 8px 0 0;
 }
 
 .emu-attention-list {

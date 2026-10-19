@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createApiPatrolRequestsRepository } from "../repositories/patrolRequestsRepository";
 import type {
   CancelAssignmentPayload,
   CompleteAssignmentPayload,
@@ -8,6 +9,7 @@ import type {
   RouteMode,
   ScheduleMode,
   ScreenId,
+  ServiceRequest,
 } from "../types";
 import { RequestModals } from "../features/patrol/components/requests/RequestModals";
 import { ScreenRouter } from "./routing/ScreenRouter";
@@ -24,6 +26,7 @@ import { patrolResultsFallback } from "../repositories/resultsRepository";
 import { routesFallback } from "../repositories/routesRepository";
 import { screenRegistry } from "../repositories/navigationRepository";
 import { useHashScreen } from "../hooks/useHashScreen";
+import { NavigationGuardContext } from "../shared/navigation/NavigationGuardContext";
 import { getConfiguredDataSourceMode, getDefaultDataSourceMode, isDataSourceMode } from "../api/dataSource";
 import { useMobileAccountsWorkspace, type TemporaryPasswordNotice } from "../hooks/useMobileAccountsWorkspace";
 import { usePatrolDataSource } from "../hooks/usePatrolDataSource";
@@ -38,7 +41,7 @@ import { getPermissionDeniedMessage, getPrimaryActionPermission, hasPermission }
 
 
 export function App() {
-  const [screen, navigate] = useHashScreen();
+  const [screen, navigate, navigation] = useHashScreen();
   const [resultMode, setResultMode] = useState<ResultMode>("all");
   const [selectedResultId, setSelectedResultId] = useState(patrolResultsFallback[0]?.id ?? "");
   const [resultOpenIntentId, setResultOpenIntentId] = useState("");
@@ -55,7 +58,8 @@ export function App() {
   const [selectedRouteDirectoryId, setSelectedRouteDirectoryId] = useState(routesFallback[0]?.id ?? "");
   const [selectedPointId, setSelectedPointId] = useState(routesFallback[0]?.points[0]?.id ?? "");
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [requestModal, setRequestModal] = useState<RequestModalState>(null);
+  const [ownedRequestModal, setOwnedRequestModal] = useState<{ owner: string; value: RequestModalState; revision: number } | null>(null);
+  const requestModalRevision = useRef(0);
   const { toast, showToast } = useToast();
   const configuredDataSourceMode = getConfiguredDataSourceMode();
   const [storedDataSourceMode, setStoredDataSourceMode] = useStoredState<DataSourceMode>("patrol360.dataSourceMode", getDefaultDataSourceMode(), {
@@ -70,7 +74,18 @@ export function App() {
     session.user !== null &&
     session.user.id !== "mock-session-user";
   const dataAccessMode = dataSourceMode === "api" && !hasApiSession ? "mock" : dataSourceMode;
-  const requestsEnabled = requestModal !== null || screen === "dashboard" || screen === "assign" || screen === "schedule" || screen === "results";
+  const patrolDataCacheScope = useMemo(
+    () => [dataAccessMode, session.sessionVersion, session.user?.id ?? "anonymous", ...(session.user?.permissions ?? []).slice().sort()].join(":"),
+    [dataAccessMode, session.sessionVersion, session.user?.id, session.user?.permissions],
+  );
+  const requestModal = ownedRequestModal?.owner === patrolDataCacheScope ? ownedRequestModal.value : null;
+  const currentRequestModal = useRef(requestModal);
+  currentRequestModal.current = requestModal;
+  function setRequestModal(value: RequestModalState) {
+    setOwnedRequestModal({ owner: patrolDataCacheScope, value, revision: ++requestModalRevision.current });
+  }
+  const requestsEnabled = requestModal?.kind === "create" || screen === "dashboard" || screen === "assign" || screen === "schedule";
+  const [requestPreview, setRequestPreview] = useState<{ owner: string; request: ServiceRequest } | null>(null);
   const scheduleResultsEnabled = screen === "schedule";
   const mobileAccountsEnabled = screen === "accounts";
   const patrolDataAccess = useMemo(() => ({
@@ -80,25 +95,31 @@ export function App() {
   }), [dataAccessMode, session.user]);
   const patrolDataDemand = useMemo(() => ({
     dashboard: screen === "dashboard" || screen === "assign" || screen === "schedule",
-    employees: screen === "employees" || screen === "accounts" || screen === "perco-integration" || screen.startsWith("emu") || requestModal !== null,
-    routes: screen === "dashboard" || screen === "results" || screen === "routes" || requestModal !== null,
+    employees: screen === "schedule" || screen === "employees" || screen === "accounts" || screen === "perco-integration" || screen.startsWith("emu") || requestModal !== null,
+    routes: screen === "schedule" || screen === "dashboard" || screen === "results" || screen === "routes" || requestModal !== null,
   }), [requestModal, screen]);
-  const patrolDataCacheScope = useMemo(
-    () => [dataAccessMode, session.user?.id ?? "anonymous", ...(session.user?.permissions ?? []).slice().sort()].join(":"),
-    [dataAccessMode, session.user?.id, session.user?.permissions],
-  );
   const patrolData = usePatrolDataSource(dataAccessMode, patrolDataAccess, patrolDataDemand, patrolDataCacheScope);
+  const requestDetailsApi = useMemo(() => createApiPatrolRequestsRepository(), []);
+  const requestDetailsVersion = useRef(0);
+  const requestOwnerRef = useRef(patrolDataCacheScope);
+  requestOwnerRef.current = patrolDataCacheScope;
   const scheduleResultHistory = useResultsWorkspace({
     dataSourceMode: dataAccessMode,
+    sessionKey: patrolDataCacheScope,
     enabled: scheduleResultsEnabled,
     selectedResultId,
     onSelectResult: setSelectedResultId,
     showToast,
   });
   const scheduleAssignmentsApi = useMemo(() => createApiAssignmentsRepository(), []);
-  const [temporaryPasswordNotice, setTemporaryPasswordNotice] = useState<TemporaryPasswordNotice | null>(null);
+  const [ownedPasswordNotice, setOwnedPasswordNotice] = useState<{ owner: string; notice: TemporaryPasswordNotice } | null>(null);
+  const passwordOwnerRef = useRef(patrolDataCacheScope);
+  passwordOwnerRef.current = patrolDataCacheScope;
+  const temporaryPasswordNotice = ownedPasswordNotice?.owner === patrolDataCacheScope ? ownedPasswordNotice.notice : null;
+  useEffect(() => { setOwnedPasswordNotice(null); }, [patrolDataCacheScope]);
   const mobileAccounts = useMobileAccountsWorkspace({
     dataSourceMode: dataAccessMode,
+    sessionKey: patrolDataCacheScope,
     enabled: mobileAccountsEnabled,
     showTemporaryPassword,
     showToast,
@@ -146,8 +167,8 @@ export function App() {
     updateRoute,
     updateRoutePoint,
   } = usePatrolWorkspaceData({
+    sessionKey: patrolDataCacheScope,
     dataSourceMode: dataAccessMode,
-    includeRequestHistory: screen === "results",
     patrolSnapshot: patrolData.snapshot,
     requestsEnabled,
     requestModal,
@@ -166,9 +187,10 @@ export function App() {
   const selectedRequest = useMemo(
     () =>
       requestModal?.kind === "view"
-        ? requests.find((request) => request.id === requestModal.requestId)
+        ? (requestPreview?.owner === patrolDataCacheScope && requestPreview.request.id === requestModal.requestId ? requestPreview.request : undefined) ??
+          requests.find((request) => request.id === requestModal.requestId)
         : undefined,
-    [requestModal, requests],
+    [requestModal, requests, requestPreview, patrolDataCacheScope],
   );
   const requestSourceResult = useMemo(
     () =>
@@ -283,9 +305,16 @@ export function App() {
   }, [dataAccessMode, patrolData.errorMessage, patrolData.status, showToast]);
 
   function openPatrolResult(resultId: string) {
-    setSelectedResultId(resultId);
-    setResultOpenIntentId(resultId);
-    navigate("results");
+    leaveWorkspace(() => {
+      setSelectedResultId(resultId);
+      setResultOpenIntentId(resultId);
+      navigate("results");
+    });
+  }
+
+  function leaveWorkspace(action: () => void) {
+    if (navigation) navigation.requestLeave(action);
+    else action();
   }
 
   function openRequestForResult(resultId = selectedResultId) {
@@ -308,13 +337,25 @@ export function App() {
     setRequestModal({ kind: "view", requestId: request.id });
   }
 
-  function openRequestById(requestId: string) {
-    if (!requests.some((request) => request.id === requestId)) {
+  async function openRequestById(requestId: string, request?: ServiceRequest) {
+    if (request?.id === requestId) setRequestPreview({ owner: patrolDataCacheScope, request });
+    if (request?.id !== requestId && !requests.some((request) => request.id === requestId)) {
       showToast("Заявка не найдена в текущем списке");
       return;
     }
 
     setRequestModal({ kind: "view", requestId });
+    const version = ++requestDetailsVersion.current;
+    if (dataAccessMode !== "api") return;
+    const owner = patrolDataCacheScope;
+    try {
+      const current = await requestDetailsApi.getPatrolRequest(requestId);
+      if (requestOwnerRef.current === owner && requestDetailsVersion.current === version)
+        setRequestPreview({ owner, request: current });
+    } catch (error) {
+      if (requestOwnerRef.current === owner && requestDetailsVersion.current === version)
+        showToast(error instanceof Error ? error.message : "Не удалось обновить заявку");
+    }
   }
 
   function openCreateRequest(sourceResultId = selectedResultId) {
@@ -322,8 +363,11 @@ export function App() {
   }
 
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
+    const owner = patrolDataCacheScope;
+    const context = requestModal;
     const nextRequest = await submitWorkspaceRequestDraft(payload);
-    setRequestModal({ kind: "view", requestId: nextRequest.id });
+    if (requestOwnerRef.current === owner && currentRequestModal.current === context)
+      setRequestModal({ kind: "view", requestId: nextRequest.id });
   }
 
   async function createPatrolRequestFromScreen(payload: CreateServiceRequestPayload) {
@@ -423,7 +467,8 @@ export function App() {
   }
 
   function showTemporaryPassword(nextNotice: TemporaryPasswordNotice) {
-    setTemporaryPasswordNotice(nextNotice);
+    if (passwordOwnerRef.current !== patrolDataCacheScope) return;
+    setOwnedPasswordNotice({ owner: patrolDataCacheScope, notice: nextNotice });
   }
 
   async function handleLogout() {
@@ -465,7 +510,7 @@ export function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-navigation-open" : ""}`}>
+    <NavigationGuardContext.Provider value={navigation}><div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-navigation-open" : ""}`}>
       <Sidebar
         currentUser={session.user}
         screen={screen}
@@ -482,16 +527,22 @@ export function App() {
 
       <main className="workspace" inert={phoneLayout && mobileNavigationOpen}>
         <Topbar
+          key={patrolDataCacheScope}
           currentUser={session.user}
+          mockMode={dataAccessMode !== "api"}
+          onChangePassword={session.changePassword}
+          passwordError={session.errorMessage}
+          onOpenUserSettings={hasPermission(session.user, "site_users.write") ? () => navigate("users") : undefined}
           notifications={topbarNotifications}
           searchQuery={searchQuery}
-          onLogout={() => void handleLogout()}
+          onLogout={() => leaveWorkspace(() => void handleLogout())}
           onOpenNavigation={() => setMobileNavigationOpen(true)}
           onRunSearch={runSearch}
           onSearchQueryChange={setSearchQuery}
           onNotify={showToast}
         />
 
+        {dataAccessMode !== "api" ? <p className="mock-mode-notice" role="status">Демонстрационный режим · тестовые данные</p> : null}
         <WorkspaceHeader
           canUsePrimaryAction={canUsePrimaryAction}
           currentScreen={currentScreen}
@@ -501,8 +552,10 @@ export function App() {
         />
 
         <ScreenRouter
+          key={`workspace:${patrolDataCacheScope}`}
           accountCreateIntent={mobileAccounts.accountCreateIntent}
           assignmentCreateIntent={assignmentCreateIntent}
+          onAssignmentCreateIntentHandled={() => setAssignmentCreateIntent(0)}
           siteUserCreateIntent={siteUserCreateIntent}
           accountMode={mobileAccounts.accountMode}
           accountListErrorMessage={mobileAccounts.accountListErrorMessage}
@@ -524,6 +577,10 @@ export function App() {
           onCreateAccount={mobileAccounts.createMobileAccount}
           onCreateEmployee={createEmployee}
           onCreateRequest={openCreateRequest}
+          onQuickAssign={() => {
+            if (!hasPermission(session.user, "assignments.write") || !hasPermission(session.user, "requests.write")) return;
+            leaveWorkspace(() => { setAssignmentCreateIntent((value) => value + 1); navigate("assign"); });
+          }}
           onCreateScheduledRequest={createPatrolRequestFromScreen}
           onCreateRoute={createRoute}
           onCreateRouteWithPoints={createRouteWithPoints}
@@ -589,6 +646,7 @@ export function App() {
       </main>
 
       <RequestModals
+        key={`${patrolDataCacheScope}:${ownedRequestModal?.revision ?? 0}`}
         employeeOptions={employeeDirectory.length > 0 ? employeeDirectory : employeesFallback}
         modal={requestModal}
         request={selectedRequest}
@@ -605,13 +663,13 @@ export function App() {
           accountLogin={temporaryPasswordNotice.accountLogin}
           password={temporaryPasswordNotice.password}
           title={temporaryPasswordNotice.title}
-          onDismiss={() => setTemporaryPasswordNotice(null)}
+          onDismiss={() => setOwnedPasswordNotice(null)}
           onNotify={showToast}
         />
       ) : null}
 
       {toast ? <div className="toast">{toast}</div> : null}
-    </div>
+    </div></NavigationGuardContext.Provider>
   );
 }
 

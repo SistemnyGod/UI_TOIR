@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { PatrolDataSnapshot } from "../repositories/patrolDataRepository";
 import {
   createLocalRoute,
@@ -45,7 +45,6 @@ import type {
   ActivePatrol,
   CreateServiceRequestPayload,
   DataSourceMode,
-  DataSourceStatus,
   EmployeeDirectoryItem,
   EmployeeFormPayload,
   RouteDirectoryItem,
@@ -55,9 +54,10 @@ import type {
   ServiceRequest,
 } from "../types";
 import { useStoredState } from "./useStoredState";
-import { subscribeAssignmentAutoRefresh } from "../features/patrol/assignments/assignmentAutoRefresh";
+import { usePatrolRequestFeed } from "./usePatrolRequestFeed";
 
 interface UsePatrolWorkspaceDataOptions {
+  sessionKey?: string;
   dataSourceMode: DataSourceMode;
   /** Requests are fetched only by screens that render or edit them. */
   requestsEnabled?: boolean;
@@ -75,6 +75,7 @@ interface UsePatrolWorkspaceDataOptions {
 }
 
 export function usePatrolWorkspaceData({
+  sessionKey,
   dataSourceMode,
   includeRequestHistory = false,
   requestsEnabled = true,
@@ -88,6 +89,11 @@ export function usePatrolWorkspaceData({
   setSelectedRouteDirectoryId,
   showToast,
 }: UsePatrolWorkspaceDataOptions) {
+  const owner = `${dataSourceMode}:${sessionKey ?? ""}`;
+  const activeOwner = useRef(owner);
+  activeOwner.current = owner;
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [localRoutes, setLocalRoutes] = useStoredState<RouteDirectoryItem[]>(routesStorageKey, routesFallback, {
     validate: isRouteDirectoryList,
     version: 2,
@@ -100,9 +106,9 @@ export function usePatrolWorkspaceData({
     validate: isServiceRequestList,
     version: 2,
   });
-  const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
-  const [requestListStatus, setRequestListStatus] = useState<DataSourceStatus>("idle");
-  const [requestListErrorMessage, setRequestListErrorMessage] = useState<string | undefined>();
+  const requestFilters = useMemo(() => includeRequestHistory ? {} : buildOperationalPatrolDateRange(), [includeRequestHistory]);
+  const requestFeed = usePatrolRequestFeed({ dataSourceMode, sessionKey, enabled: requestsEnabled, filters: requestFilters });
+  const { rows: apiRequests, status: requestListStatus, error: requestListErrorMessage, refresh: refreshRequests } = requestFeed;
   const [localEmployees, setLocalEmployees] = useStoredState<EmployeeDirectoryItem[]>(
     employeesStorageKey,
     employeesFallback,
@@ -154,41 +160,6 @@ export function usePatrolWorkspaceData({
     [dataSourceMode, localEmployees, patrolSnapshot.employees],
   );
 
-  const refreshRequests = useCallback(
-    async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
-      if (dataSourceMode !== "api") {
-        setRequestListStatus("idle");
-        setRequestListErrorMessage(undefined);
-        return;
-      }
-
-      if (!silent) setRequestListStatus("loading");
-      setRequestListErrorMessage(undefined);
-
-      try {
-        const nextRequests = await apiRequestsRepository.getPatrolRequests(
-          includeRequestHistory ? {} : buildOperationalPatrolDateRange(),
-          { signal },
-        );
-        setApiRequests(nextRequests);
-        setRequestListStatus("ready");
-      } catch (error) {
-        if (signal?.aborted) return;
-
-        const message = error instanceof Error ? error.message : "Не удалось загрузить заявки API";
-        if (!silent) {
-          setApiRequests([]);
-          setRequestListStatus("error");
-        }
-        setRequestListErrorMessage(message);
-        if (!silent) {
-          showToast(`Не удалось загрузить заявки API: ${message}`);
-        }
-      }
-    },
-    [apiRequestsRepository, dataSourceMode, includeRequestHistory, showToast],
-  );
-
   useEffect(() => {
     const routes = routeDirectory;
     if (routes.length === 0) {
@@ -209,32 +180,14 @@ export function usePatrolWorkspaceData({
     }
   }, [routeDirectory, selectedPointId, selectedRouteDirectoryId, setSelectedPointId, setSelectedRouteDirectoryId]);
 
-  useEffect(() => {
-    if (dataSourceMode !== "api" || !requestsEnabled) {
-      setRequestListStatus("idle");
-      setRequestListErrorMessage(undefined);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    void refreshRequests({ signal: controller.signal });
-
-    return () => controller.abort();
-  }, [dataSourceMode, refreshRequests, requestsEnabled]);
-
-  useEffect(() => {
-    if (dataSourceMode !== "api" || !requestsEnabled) return;
-    return subscribeAssignmentAutoRefresh(() => refreshRequests({ silent: true }));
-  }, [dataSourceMode, refreshRequests, requestsEnabled]);
-
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
     if (dataSourceMode === "api") {
       const nextRequest = await apiRequestsRepository.createPatrolRequest(payload);
-      setApiRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
-      setRequestListStatus("ready");
-      setRequestListErrorMessage(undefined);
-      await refreshPatrolData();
+      if (!alive.current || activeOwner.current !== owner) throw new Error("Сеанс изменился. Обновите список заявок.");
+      requestFeed.upsert(nextRequest);
+      // The POST already succeeded; a failed background refresh must not turn it into a failed create.
+      await refreshPatrolData().catch(() => undefined);
+      if (!alive.current || activeOwner.current !== owner) throw new Error("Сеанс изменился. Обновите список заявок.");
       showToast(
         nextRequest.notifyEmployee
           ? "Заявка на обход создана через API, уведомление подготовлено"
@@ -352,7 +305,7 @@ export function usePatrolWorkspaceData({
     setLocalRoutes(nextRoutes);
     setSelectedRouteDirectoryId(nextRoutes[0]?.id ?? "");
     setSelectedPointId(nextRoutes[0]?.points[0]?.id ?? "");
-    showToast(route ? `Маршрут "${route.name}" удален` : "Маршрут удален");
+    showToast(route ? `Маршрут "${route.name}" перенесён в архив` : "Маршрут перенесён в архив");
   }
 
   async function createRoutePoint(routeId: string, payload: RoutePointFormPayload) {

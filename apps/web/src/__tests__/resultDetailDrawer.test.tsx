@@ -1,6 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ResultDetailDrawer } from "../features/patrol/components/results/ResultDetailDrawer";
+import { ResultPointMedia } from "../features/patrol/results/ResultPointMedia";
 import type { PatrolResult } from "../types";
 
 const mocks = vi.hoisted(() => ({
@@ -20,7 +20,7 @@ afterEach(() => {
   restoreUrlApi("revokeObjectURL", originalRevokeObjectURL);
 });
 
-describe("ResultDetailDrawer attachment previews", () => {
+describe("ResultPointMedia attachment previews", () => {
   it("revokes preview object URLs on unmount", async () => {
     const createObjectURL = vi.fn(() => "blob:preview");
     const revokeObjectURL = vi.fn();
@@ -67,13 +67,7 @@ describe("ResultDetailDrawer attachment previews", () => {
 
 function renderDrawer(result = createResult()) {
   return render(
-    <ResultDetailDrawer
-      onCreateRequest={vi.fn()}
-      onNavigate={vi.fn()}
-      onNotify={vi.fn()}
-      onOpenRequest={vi.fn()}
-      result={result}
-    />,
+    <ResultPointMedia attachments={result.attachments} expectedCount={result.photos} pointName={result.point} onEnlarge={() => undefined} />,
   );
 }
 

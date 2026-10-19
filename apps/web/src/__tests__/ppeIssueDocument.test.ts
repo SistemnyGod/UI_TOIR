@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -66,6 +66,7 @@ describe("PPE issue document confirmation", () => {
     const chooseEmployee = async (name: string) => {
       await user.click(employeeSelect);
       await user.click(await screen.findByRole("option", { name: new RegExp(name) }));
+      if (screen.queryByRole("dialog", { name: "Сменить сотрудника?" })) await user.click(screen.getByRole("button", { name: "Сменить сотрудника" }));
     };
     await chooseEmployee("Первый Сотрудник");
     await chooseEmployee("Второй Сотрудник");
@@ -116,7 +117,7 @@ describe("PPE issue document confirmation", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("ignores a stale PDF preview response after another form is requested", async () => {
+  it("serializes PDF preparation and keeps the prepared form labelled when the selection changes", async () => {
     const storage = new Map<string, string>([["patrol360.inventory.ppe.issue-document.preview-user", "document"]]);
     Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
     const repository = createMockInventoryRepository();
@@ -138,12 +139,15 @@ describe("PPE issue document confirmation", () => {
     await screen.findByText("Выдача подтверждена");
     await userEvent.click(screen.getByRole("button", { name: "Подготовить выбранную форму" }));
     await userEvent.click(screen.getByRole("button", { name: /02 · Выдача и подписи/ }));
+    expect(screen.getByRole("button", { name: "Подготовить выбранную форму" })).toBeDisabled();
+    await act(async () => releaseNorms({ blob: new Blob(["norms"]), downloadName: "norms.pdf" }));
+    await waitFor(() => expect(screen.getByTitle("Печатный PDF")).toHaveAttribute("src", "blob:norms"));
+    expect(screen.getByRole("region", { name: "Подготовленный PDF" })).toHaveTextContent("Личная карточка · PDF");
     await userEvent.click(screen.getByRole("button", { name: "Подготовить выбранную форму" }));
-    releaseSignature({ blob: new Blob(["s"]), downloadName: "signature.pdf" });
+    await act(async () => releaseSignature({ blob: new Blob(["s"]), downloadName: "signature.pdf" }));
     await waitFor(() => expect(screen.getByTitle("Печатный PDF")).toHaveAttribute("src", "blob:signature"));
-    releaseNorms({ blob: new Blob(["norms"]), downloadName: "norms.pdf" });
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("region", { name: "Подготовленный PDF" })).toHaveTextContent("Выдача и подписи · PDF");
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it("formats norm quantities, statuses, dates, and commits prices without rewriting partial input", () => {

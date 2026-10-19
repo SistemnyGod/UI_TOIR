@@ -25,7 +25,8 @@ export function AssignmentSelectionBar({
   routeName,
 }: AssignmentSelectionBarProps) {
   const ready = Boolean(employeeName && routeName && plannedDate && plannedStart);
-  const disabled = !canCreate || !ready || hasConflict || isCreating;
+  // The form must remain reachable so a conflicting date can be corrected.
+  const disabled = !canCreate || !ready || isCreating;
 
   return (
     <section aria-label="Текущее назначение обхода" className={`assign-am-selection-bar ${hasConflict ? "has-conflict" : ""}`}>

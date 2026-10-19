@@ -1,0 +1,52 @@
+.modal-shell.inventory-employee-dialog { width: min(740px, 100%); }
+.modal-shell.inventory-employee-import, .modal-shell.inventory-employee-history { width: min(1180px, 100%); }
+.modal-shell.inventory-employee-confirm { width: min(520px, 100%); }
+.inventory-employee-dialog .modal-shell-body { display: flex; flex-direction: column; gap: 14px; }
+.inventory-employee-dialog .modal-shell-body > * { flex-shrink: 0; }
+.inventory-employee-dialog fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.inventory-employee-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.inventory-employee-fields .is-wide { grid-column: 1 / -1; }
+.inventory-employee-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.inventory-employee-fields input, .inventory-employee-fields select { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+.inventory-employee-fields :is(input, select):focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.inventory-employee-dialog .inventory-employee-hint { margin: 0; color: var(--ui-muted); font-size: 13px; line-height: 1.5; }
+.inventory-employee-dialog .field-error { margin: 0; }
+.inventory-employee-import-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; }
+.inventory-employee-import-counts > div { padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); }
+.inventory-employee-import-counts dt { font-size: 12px; color: var(--ui-muted); }
+.inventory-employee-import-counts dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; color: var(--ui-text); }
+.inventory-employee-import-references, .inventory-employee-import-errors { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); padding: 10px 12px; font-size: 13px; overflow-wrap: anywhere; }
+.inventory-employee-import-errors { color: var(--ui-danger); }
+.inventory-employee-dialog summary { cursor: pointer; }
+.inventory-employee-import-references dl { display: grid; gap: 8px; margin-bottom: 0; }
+.inventory-employee-import-references dt { font-weight: 600; }
+.inventory-employee-import-references dd { margin: 3px 0 0; color: var(--ui-muted); }
+.inventory-employee-import-table-wrap { min-width: 0; overflow-x: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+.inventory-employee-import-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.inventory-employee-import-table :is(th, td) { padding: 7px 10px; border-bottom: 1px solid var(--ui-border); overflow-wrap: anywhere; line-height: 1.4; }
+.inventory-employee-import-table th { background: var(--ui-surface-muted); color: var(--ui-muted); font-size: 12px; }
+.inventory-employee-import-table .is-error { background: var(--ui-danger-soft); }
+.inventory-employee-import-pager, .inventory-employee-import-pager > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.inventory-employee-import-pager { justify-content: space-between; font-size: 13px; color: var(--ui-muted); }
+.inventory-employee-import-table .inventory-employees-change { justify-self: start; }
+.inventory-employees-refresh { min-height: 18px; font-size: 12px; color: var(--ui-muted); }
+.inventory-employee-history .inventory-ppe-movements-panel { padding: 0; border: 0; box-shadow: none; min-width: 0; }
+.inventory-employee-history .inventory-ppe-movements-table-wrap { max-height: none; overflow-y: visible; }
+
+@media (max-width: 767px) {
+  .inventory-employee-fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .inventory-employee-fields :is(input, select) { min-height: 44px; font-size: 16px; }
+  .inventory-employee-import-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-employee-import-pager .ui-button { min-height: 44px; }
+  .inventory-employee-import-table :is(thead), .inventory-employees-screen .inventory-employees-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .inventory-employee-import-table, .inventory-employee-import-table tbody, .inventory-employee-import-table tr,
+  .inventory-employees-screen .inventory-employees-table, .inventory-employees-screen .inventory-employees-table tbody, .inventory-employees-screen .inventory-employees-table tr { display: block; min-width: 0; width: 100%; }
+  .inventory-employee-import-table tr, .inventory-employees-screen .inventory-employees-table tr { padding: 10px; border-bottom: 1px solid var(--ui-border); }
+  .inventory-employee-import-table td, .inventory-employees-screen .inventory-employees-table td { display: grid; grid-template-columns: minmax(85px, 30%) minmax(0, 1fr); gap: 8px; border: 0; padding: 5px 0; width: auto; overflow-wrap: anywhere; }
+  .inventory-employee-import-table td::before, .inventory-employees-screen .inventory-employees-table td::before { content: attr(data-label); font-size: 12px; font-weight: 500; color: var(--ui-muted); }
+  .inventory-employees-screen .inventory-employees-row-actions { flex-wrap: wrap; }
+  .inventory-employees-screen .inventory-employees-row-actions .button, .inventory-employees-screen .inventory-employees-pager .button { min-height: 44px; }
+  .inventory-employees-screen .inventory-employees-table td:first-child { display: block; }
+  .inventory-employees-screen .inventory-employees-table td:first-child::before { display: none; }
+  .inventory-employees-screen .inventory-employees-status { justify-self: start; white-space: normal; }
+}

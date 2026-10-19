@@ -37,8 +37,7 @@
 
 .emu-heading-actions,
 .emu-input-action,
-.emu-inline-form,
-.emu-plan-options {
+.emu-inline-form{
   display: flex;
   align-items: center;
   gap: 10px;

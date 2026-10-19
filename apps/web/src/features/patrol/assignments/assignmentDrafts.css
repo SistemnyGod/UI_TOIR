@@ -1,0 +1,42 @@
+.assignment-drafts-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.assignment-drafts-tools > label { flex: 1 1 240px; min-width: 0; }
+.assignment-drafts-tools input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 8px 12px; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); font: inherit; color: var(--ui-text); background: var(--ui-surface); }
+.assignment-drafts-error, .assignment-recovery-note { padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface-muted); line-height: 1.5; overflow-wrap: anywhere; }
+.assignment-drafts-error { color: var(--ui-danger); border-color: var(--ui-danger); }
+.assignment-recovery-modal { width: min(920px, calc(100vw - 24px)); }
+.assignment-recovery-list { display: grid; gap: 8px; padding: 0; margin: 12px 0; list-style: none; }
+.assignment-recovery-list > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--radius-control); }
+.assignment-recovery-list > li > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.assignment-recovery-list small { color: var(--ui-muted); }
+.assignment-recovery-editor { width: min(720px, calc(100vw - 24px)); }
+.assignment-recovery-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.assignment-recovery-form > label { display: grid; min-width: 0; gap: 6px; color: var(--ui-muted); font-size: 13px; }
+.assignment-recovery-form :is(input, select, textarea) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; }
+.assignment-recovery-form textarea { min-height: 120px; resize: vertical; }
+.assignment-recovery-full { grid-column: 1 / -1; }
+.assignment-recovery-original { margin: 0 0 12px; color: var(--ui-muted); line-height: 1.5; overflow-wrap: anywhere; }
+.assignment-recovery-label { font-weight: 650; color: var(--ui-text); }
+.assignment-recovery-selection { color: var(--ui-text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.assignment-draft-preview { display: grid; gap: 12px; margin: 0; }
+.assignment-draft-preview > div { min-width: 0; }
+.assignment-draft-preview dt { color: var(--ui-muted); font-size: 13px; }
+.assignment-draft-preview dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.assignment-draft-comment { white-space: pre-wrap; }
+.assignment-drafts-list { display: grid; }
+.assignment-drafts-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--ui-border); }
+.assignment-draft-open { display: grid; gap: 4px; min-width: 0; padding: 8px 4px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; }
+.assignment-draft-open:hover { background: var(--ui-blue-soft); }
+.assignment-draft-open strong { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.assignment-draft-open span { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.assignment-draft-open small { color: var(--ui-muted); font-size: 12px; line-height: 1.4; }
+.assignment-draft-delete { min-height: 36px; padding: 8px 10px; border: 1px solid var(--ui-danger); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-danger); font: inherit; font-size: 13px; cursor: pointer; }
+@media (min-width: 1100px) { .assignment-draft-open { grid-template-columns: minmax(130px, .9fr) minmax(140px, 1fr) minmax(180px, 1.2fr) auto; align-items: center; column-gap: 12px; } }
+@media (max-width: 760px) {
+  .assignment-drafts-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assignment-drafts-tools > label, .assignment-drafts-tools .assignment-drafts-recover { grid-column: 1 / -1; }
+  .assignment-drafts-tools input, .assignment-drafts-tools .ui-button { min-height: 44px; }
+  .assignment-recovery-list > li { flex-direction: column; align-items: stretch; }
+  .assignment-recovery-form { grid-template-columns: 1fr; }
+  .assignment-recovery-form :is(input, select, textarea) { min-height: 44px; font-size: 16px; }
+  .assignment-draft-delete { min-height: 44px; }
+}

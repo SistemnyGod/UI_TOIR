@@ -183,11 +183,11 @@
 .modal-shell {
   background: var(--ui-surface, #ffffff);
   border: 1px solid var(--ui-border, #dbe5f1);
-  border-radius: var(--ui-radius-card, 14px);
+  border-radius: var(--radius-dialog, 14px);
   box-shadow: var(--ui-shadow-modal, 0 28px 80px rgba(15, 36, 71, 0.24));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: calc(100dvh - 40px);
+  max-height: calc(var(--modal-viewport-height, 100dvh) - 40px);
   overflow: hidden;
   width: min(760px, calc(100vw - 40px));
 }
@@ -210,7 +210,14 @@
   color: var(--color-text-strong, #152e56);
   font-size: 20px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
+
+.modal-shell-header > div:first-child { min-width: 0; }
+.modal-shell-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.modal-shell-body { scroll-padding-block: 16px; }
+.compact-table-update { padding: 6px 12px; color: var(--ui-muted); background: var(--ui-surface-muted); font-size: 12px; }
+.compact-table-update.is-error { color: var(--ui-danger); background: var(--ui-danger-soft); }
 
 .modal-shell-header p {
   color: var(--ui-muted, #5d718f);
@@ -237,7 +244,7 @@
 
 /* Portaled dialogs live outside .workspace, so shared controls must not rely on
    the workspace ancestor to receive their production styles. */
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button, .button) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button, .button) {
   align-items: center;
   appearance: none;
   background: var(--ui-control-bg, #ffffff);
@@ -258,35 +265,35 @@
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 180ms ease, color 160ms ease, transform 160ms ease;
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-primary, .button.primary, .button.is-primary) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button.is-primary, .button.primary, .button.is-primary) {
   background: var(--ui-blue, #1769ff);
   border-color: var(--ui-blue, #1769ff);
   box-shadow: none;
   color: #ffffff;
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-ghost, .ui-button.is-secondary, .button.ghost, .button.secondary) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button.is-ghost, .ui-button.is-secondary, .button.ghost, .button.secondary) {
   background: var(--ui-control-bg, #ffffff);
   border-color: var(--ui-control-border, #bfd3ee);
   color: var(--ui-control-text, #10213f);
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-ghost, .button.ghost) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button.is-ghost, .button.ghost) {
   background: transparent;
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-danger, .button.danger) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button.is-danger, .button.danger) {
   background: var(--ui-danger-soft, #fff1f0);
   border-color: #ffc7c2;
   color: #b42318;
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-sm, .button.small) {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button.is-sm, .button.small) {
   min-height: var(--ui-control-height-sm, 32px);
   padding: 6px 10px;
 }
 
-:is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button, .button):disabled {
+:is(.modal-backdrop, .site-user-modal-backdrop, .anchored-popover, .secure-password-panel) :where(.ui-button, .button):disabled {
   box-shadow: none;
   cursor: not-allowed;
   opacity: 0.56;
@@ -342,11 +349,6 @@
   width: min(1120px, calc(100vw - 32px));
 }
 
-.modal-shell.results-photo-preview {
-  max-height: min(92vh, 960px);
-  width: min(1280px, calc(100vw - 32px));
-}
-
 .modal-shell.route-create-modal .modal-shell-body,
 .modal-shell.route-edit-modal .modal-shell-body,
 .modal-shell.route-point-modal .modal-shell-body,
@@ -364,8 +366,7 @@
 
 .modal-shell.route-create-modal .route-create-body,
 .modal-shell.route-point-modal .route-point-editor-body,
-.modal-shell.results-review-modal .results-review-modal-body,
-.modal-shell.results-photo-preview .results-photo-preview-body {
+.modal-shell.results-review-modal .results-review-modal-body {
   min-width: 0;
 }
 
@@ -382,16 +383,15 @@
   .modal-shell.route-edit-modal,
   .modal-shell.route-point-modal,
   .modal-shell.schedule-plan-modal,
-  .modal-shell.results-review-modal,
-  .modal-shell.results-photo-preview {
-    max-height: 100dvh;
+  .modal-shell.results-review-modal {
+    max-height: calc(var(--modal-viewport-height, 100dvh) - 16px);
     width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .modal-shell {
-    max-height: 100dvh;
+    max-height: calc(var(--modal-viewport-height, 100dvh) - 16px);
     width: 100%;
   }
 

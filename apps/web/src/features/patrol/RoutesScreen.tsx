@@ -5,7 +5,8 @@ import { RoutePointDrawer } from "./components/routes/RoutePointDrawer";
 import { RouteWorkspacePanel } from "./components/routes/RouteWorkspacePanel";
 import { useRoutesEditor } from "../../hooks/useRoutesEditor";
 import { routesFallback } from "../../repositories/routesRepository";
-import { Panel, SkeletonList, SkeletonPreview } from "../../shared/ui";
+import { Button, PageHeader, Panel, SkeletonList, SkeletonPreview } from "../../shared/ui";
+import "./routes/routesWorkspace.css";
 import type { DataSourceStatus, RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePointFormPayload, ScreenId } from "../../types";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -57,13 +58,16 @@ export function RoutesScreen({
 }) {
   const {
     actions,
+    editorRoute,
+    editorPoint,
+    isSaving,
+    error,
     pointDraft,
     pointEditorOpen,
     pointEditorMode,
     routeDraft,
     routeEditorMode,
     routePoints,
-    selectedPoint,
     selectedRoute,
   } = useRoutesEditor({
     canManage,
@@ -86,7 +90,10 @@ export function RoutesScreen({
   const isInitialLoading = dataStatus === "loading" && routeDirectory.length === 0;
 
   return (
-    <div className={`routes-screen ${isInitialLoading ? "is-loading" : ""}`} aria-busy={isInitialLoading}>
+    <div className="routes-workspace-screen screen-stack">
+      <PageHeader title="Маршруты и точки" description="Контрольные точки, метки и порядок обхода территории." actions={<Button disabled={!canManage || isSaving} onClick={actions.startRouteCreate} variant="primary">Создать маршрут</Button>} />
+      {dataStatus === "error" ? <p role="status" className="route-form-error">Не удалось обновить маршруты. На экране остаются ранее загруженные данные.</p> : null}
+      <div className={`routes-screen ${isInitialLoading ? "is-loading" : ""}`} aria-busy={isInitialLoading}>
       {isInitialLoading ? (
         <>
           <Panel className="route-directory-loading" title="Маршруты" note="Загружаем справочник маршрутов">
@@ -110,7 +117,7 @@ export function RoutesScreen({
         onSelectRoute={onSelectRoute}
           />
 
-          <div className="route-workspace-transition" key={selectedRoute?.id ?? "route-empty"} aria-live="polite">
+          <div className="route-workspace-transition" key={selectedRoute?.id ?? "route-empty"}>
             <RouteWorkspacePanel
         canAssign={canAssign}
         canManage={canManage}
@@ -142,8 +149,11 @@ export function RoutesScreen({
           </div>
         </>
       )}
+      </div>
 
       <RouteCreateModal
+        isSaving={isSaving}
+        serverError={error}
         draft={routeDraft}
         isOpen={routeEditorMode === "create"}
         onCancel={actions.cancelRouteEdit}
@@ -152,6 +162,8 @@ export function RoutesScreen({
       />
 
       <RouteEditModal
+        isSaving={isSaving}
+        error={error}
         draft={routeDraft}
         isOpen={routeEditorMode === "edit"}
         onCancel={actions.cancelRouteEdit}
@@ -161,12 +173,14 @@ export function RoutesScreen({
       />
 
       <RoutePointDrawer
+        isSaving={isSaving}
+        error={error}
         canManage={canManage}
         draft={pointDraft}
         editorMode={pointEditorMode}
         isOpen={pointEditorOpen}
-        point={selectedPoint}
-        route={selectedRoute}
+        point={editorPoint}
+        route={editorRoute}
         onCancel={actions.cancelPointEdit}
         onChange={actions.setPointDraft}
         onCreate={actions.startPointCreate}

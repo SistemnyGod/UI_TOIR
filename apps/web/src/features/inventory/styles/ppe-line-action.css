@@ -1,0 +1,23 @@
+.modal-shell.ppe-line-action-dialog { width: min(720px, 100%); }
+.ppe-line-action-dialog .modal-shell-body { display: grid; align-content: start; gap: 16px; }
+.ppe-line-action-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .35fr); gap: 12px; margin: 0; }
+.ppe-line-action-summary > div { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); overflow-wrap: anywhere; }
+.ppe-line-action-summary dt, .ppe-line-action-summary .ppe-line-action-detail { font-size: 12px; color: var(--ui-muted); font-weight: 400; }
+.ppe-line-action-summary dd { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5; }
+.ppe-line-action-hint { margin: 0; padding: 10px 12px; border-left: 3px solid var(--ui-blue); background: var(--ui-surface-muted); color: var(--ui-text); font-size: 13px; line-height: 1.5; }
+.ppe-line-action-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.ppe-line-action-fields legend { padding: 0 0 12px; color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.ppe-line-action-fields label { display: flex; flex-wrap: wrap; align-content: start; gap: 6px 4px; min-width: 0; color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.ppe-line-action-fields :is(input, textarea) { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; line-height: 1.5; }
+.ppe-line-action-fields textarea { resize: vertical; min-height: 90px; }
+.ppe-line-action-fields :is(input, textarea):focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.ppe-line-action-fields em, .ppe-line-action-dialog .field-error { color: var(--ui-danger); font-style: normal; }
+.ppe-line-action-fields small { color: var(--ui-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.ppe-line-action-wide { grid-column: 1 / -1; }
+.ppe-line-action-dialog .field-error { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ppe-workspace-refresh-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-danger-soft); color: var(--ui-danger); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-workspace-refresh-error > span { flex: 1 1 240px; min-width: 0; }
+@media (max-width: 767px) {
+  .ppe-line-action-summary, .ppe-line-action-fields { grid-template-columns: minmax(0, 1fr); }
+  .ppe-line-action-fields :is(input, textarea) { font-size: 16px; min-height: 44px; }
+}

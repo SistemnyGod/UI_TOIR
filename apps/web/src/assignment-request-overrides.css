@@ -627,62 +627,10 @@
   white-space: nowrap;
 }
 
-.screen-area .account-edit-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid #b9d4ff;
-  border-radius: 12px;
-  background: #eef6ff;
-  padding: 12px 14px;
-  color: #183d73;
-}
-
-.screen-area .account-edit-confirm > div:first-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.screen-area .account-edit-confirm strong {
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.screen-area .account-edit-confirm > div:first-child span {
-  color: #5a7295;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.screen-area .account-edit-confirm-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
-}
-
 .screen-area .account-edit-change-hint {
   color: #1b6b42;
   font-size: 11px;
   font-weight: 800;
-}
-
-@media (max-width: 760px) {
-  .screen-area .account-edit-confirm {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .screen-area .account-edit-confirm-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .screen-area .account-edit-confirm-actions .button {
-    width: 100%;
-  }
 }
 
 /* Employee binding picker usability pass. */

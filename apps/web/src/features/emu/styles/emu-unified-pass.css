@@ -74,8 +74,6 @@
 .emu-employee-shift-list button,
 .emu-employee-period-row,
 .emu-reference-block,
-.emu-plan-card,
-.emu-plan-column,
 .emu-catalog-editor,
 .emu-modal {
   background: var(--emu-surface);
@@ -590,8 +588,6 @@
   min-width: 0;
 }
 
-.emu-plan-board,
-.emu-kanban,
 .emu-reference-grid,
 .emu-favorite-grid {
   gap: 12px;
@@ -883,55 +879,6 @@
   color: #0d2a52;
   font-weight: 800;
   margin: 0;
-}
-
-.emu-history-employee-modal {
-  background: #fff;
-  border: 1px solid #cfe0f5;
-  border-radius: 10px;
-  box-shadow: 0 24px 70px rgba(12, 34, 66, 0.24);
-  max-height: min(760px, calc(100vh - 48px));
-  max-width: 1180px;
-  width: min(1180px, 100%);
-}
-
-.emu-history-employee-modal .modal-shell-body > nav {
-  display: flex;
-  gap: 6px;
-  padding: 12px 0;
-}
-
-.emu-history-employee-modal .modal-shell-body > nav button {
-  background: #f4f8fd;
-  border: 1px solid #d7e5f7;
-  border-radius: 8px;
-  color: #0d2a52;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 8px 12px;
-}
-
-.emu-history-employee-modal .modal-shell-body > nav button.active {
-  background: #206bff;
-  border-color: #206bff;
-  color: #fff;
-}
-
-.emu-history-modal-kpis,
-.emu-history-employee-section-report {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-}
-
-.emu-history-modal-kpis article,
-.emu-history-employee-section-report article {
-  background: #f8fbff;
-  border: 1px solid #d7e5f7;
-  border-radius: 8px;
-  display: grid;
-  gap: 4px;
-  padding: 10px;
 }
 
 .emu-history-modal-note {
@@ -2423,96 +2370,8 @@
 }
 
 .emu-shell .emu-history-filter-card select,
-.emu-shell .emu-history-search-box,
-.emu-shell .emu-history-period-picker {
+.emu-shell .emu-history-search-box {
   min-height: 36px;
-}
-
-.emu-shell .emu-history-period-picker {
-  align-items: center;
-  background: #f8fbff;
-  border: 1px solid #cbdbee;
-  border-radius: 9px;
-  color: #1769d6;
-  display: flex;
-  gap: 7px;
-  padding: 0 9px;
-  position: relative;
-}
-
-.emu-shell .emu-history-period-trigger {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: #17385e;
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  gap: 8px;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 0;
-  text-align: left;
-  width: 100%;
-}
-
-.emu-shell .emu-history-period-trigger strong {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.emu-shell .emu-history-period-trigger small {
-  color: #6f85a0;
-  flex: 0 0 auto;
-  font-size: 10px;
-}
-
-.emu-shell .emu-history-period-popover {
-  background: #fff;
-  border: 1px solid #bfd2eb;
-  border-radius: 12px;
-  box-shadow: 0 18px 45px rgba(21, 57, 99, 0.2);
-  left: 0;
-  padding: 12px;
-  position: absolute;
-  top: calc(100% + 8px);
-  width: min(360px, calc(100vw - 28px));
-  z-index: 30;
-}
-
-.emu-shell .emu-history-period-popover .date-range-calendar-grid {
-  gap: 3px;
-}
-
-.emu-shell .emu-history-period-popover .date-range-calendar-day {
-  border-radius: 7px;
-  min-height: 30px;
-}
-
-.emu-shell .emu-history-period-popover .date-range-summary {
-  background: #f5f9ff;
-  border: 1px solid #e0ebf8;
-  border-radius: 8px;
-  margin-top: 9px;
-  padding: 8px 9px;
-}
-
-.emu-shell .emu-history-period-popover .date-range-summary strong,
-.emu-shell .emu-history-period-popover .date-range-summary small {
-  display: block;
-}
-
-.emu-shell .emu-history-period-popover .date-range-summary strong {
-  color: #17385e;
-  font-size: 12px;
-}
-
-.emu-shell .emu-history-period-popover .date-range-summary small {
-  color: #6d829d;
-  font-size: 10px;
-  margin-top: 3px;
 }
 
 .emu-shell .emu-history-filter-settings {
@@ -2703,7 +2562,23 @@
   }
 
   .emu-shell .emu-history-view-actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .emu-shell .emu-history-view-actions .ui-button {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 8px;
+  }
+
+  .emu-shell .emu-history-view-actions .ui-button-label {
+    margin: 0;
+    white-space: normal;
+    color: inherit;
+    font-size: inherit;
   }
 }
 

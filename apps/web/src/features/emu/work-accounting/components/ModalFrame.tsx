@@ -8,6 +8,9 @@ export function ModalFrame({
   subtitle,
   title,
   wide = false,
+  actions,
+  pending = false,
+  leaveDialog,
 }: {
   children: ReactNode;
   className?: string;
@@ -15,15 +18,20 @@ export function ModalFrame({
   subtitle?: string;
   title: string;
   wide?: boolean;
+  actions?: ReactNode;
+  pending?: boolean;
+  leaveDialog?: ReactNode;
 }) {
   return (
-    <ModalShell
-      className={`emu-modal ${wide ? "emu-modal-wide" : ""} ${className}`.trim()}
-      onClose={onClose}
+    <><ModalShell
+      className={`emu-modal emu-accounting-dialog ${wide ? "emu-modal-wide" : ""} ${className}`.trim()}
+      onClose={() => { if (!pending) onClose(); }}
+      actions={actions}
       subtitle={subtitle}
       title={title}
+      pending={pending}
     >
-      {children}
-    </ModalShell>
+      {actions ? <fieldset className="emu-work-dialog-fields" disabled={pending} aria-busy={pending}>{children}</fieldset> : children}
+    </ModalShell>{leaveDialog}</>
   );
 }

@@ -20,6 +20,7 @@ export function WorkBoardSection({
   onSelect,
   onToggle,
   openDecisionWorkIds,
+  selectedWorkId = "",
   section,
 }: {
   canComplete: boolean;
@@ -39,6 +40,7 @@ export function WorkBoardSection({
   onSelect: (id: string) => void;
   onToggle: () => void;
   openDecisionWorkIds: Set<string>;
+  selectedWorkId?: string;
   section: EmuSectionWorkGroup;
 }) {
   return (
@@ -48,11 +50,12 @@ export function WorkBoardSection({
           <strong>{section.sectionName}</strong>
           <span>{section.items.length} карточек на участке</span>
         </div>
-        <button className="emu-group-toggle" onClick={onToggle} type="button">{collapsed ? "Развернуть" : "Свернуть"} <em>{section.items.length}</em></button>
+        <button aria-expanded={!collapsed} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} участок ${section.sectionName}`} className="emu-group-toggle" onClick={onToggle} type="button">{collapsed ? "Развернуть" : "Свернуть"} <em>{section.items.length}</em></button>
       </header>
       {!collapsed ? <div className="emu-card-grid">
         {section.items.map((work) => (
           <WorkCard
+            selected={selectedWorkId === work.id}
             canComplete={canComplete}
             canDelete={canDelete}
             canPause={canPause}

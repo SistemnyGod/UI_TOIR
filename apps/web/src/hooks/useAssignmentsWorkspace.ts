@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
 import { createClientUuid } from "../shared/clientUuid";
@@ -21,6 +21,7 @@ import type {
 
 interface UseAssignmentsWorkspaceOptions {
   dataSourceMode: DataSourceMode;
+  sessionKey?: string;
   refreshPatrolData: () => Promise<void>;
   showToast: (message: string) => void;
 }
@@ -32,6 +33,7 @@ interface AssignmentCommandResult {
 
 export function useAssignmentsWorkspace({
   dataSourceMode,
+  sessionKey = "",
   refreshPatrolData,
   showToast,
 }: UseAssignmentsWorkspaceOptions) {
@@ -48,8 +50,33 @@ export function useAssignmentsWorkspace({
   const [referenceStatus, setReferenceStatus] = useState<DataSourceStatus>("loading");
   const [referenceErrorMessage, setReferenceErrorMessage] = useState<string | undefined>();
 
+  const owner = `${dataSourceMode}:${sessionKey}`;
+  const ownerRef = useRef({ key: owner, revision: 0 });
+  if (ownerRef.current.key !== owner) ownerRef.current = { key: owner, revision: ownerRef.current.revision + 1 };
+  const ownerGeneration = ownerRef.current;
+  const mounted = useRef(true);
+  const [dataOwner, setDataOwner] = useState(owner);
+  const isCurrentOwner = useCallback(() => mounted.current && ownerRef.current === ownerGeneration, [ownerGeneration]);
+  const toastRef = useRef(showToast);
+  toastRef.current = showToast;
+  const listGeneration = useRef(0), referenceGeneration = useRef(0);
+  const listRequest = useRef<{ controller: AbortController; promise: Promise<void>; owner: string } | null>(null);
+  const locks = useRef(new Set<string>());
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; listRequest.current?.controller.abort(); listRequest.current = null; };
+  }, []);
+  useEffect(() => {
+    setAssignments([]); setAssignableEmployees([]); setAssignableRoutes([]); setAssignmentSettings(null);
+    setErrorMessage(undefined); setReferenceErrorMessage(undefined); setFieldErrors({});
+    setIsCreating(false); setSavingAssignmentId(undefined);
+    setDataOwner(owner);
+  }, [owner]);
+
   const refreshReferenceData = useCallback(
     async ({ signal }: { signal?: AbortSignal } = {}) => {
+      if (!isCurrentOwner() || signal?.aborted) return;
+      const generation = ++referenceGeneration.current;
       setReferenceStatus("loading");
       setReferenceErrorMessage(undefined);
 
@@ -66,14 +93,14 @@ export function useAssignmentsWorkspace({
           apiAssignments.getRoutes({ signal }),
           apiAssignments.getSettings({ signal }),
         ]);
-        if (signal?.aborted) return;
+        if (!isCurrentOwner() || signal?.aborted || generation !== referenceGeneration.current) return;
 
+        setDataOwner(owner);
         const messages: string[] = [];
 
         if (employeesResult.status === "fulfilled") {
           setAssignableEmployees(employeesResult.value);
         } else {
-          setAssignableEmployees([]);
           messages.push(
             employeesResult.reason instanceof Error
               ? employeesResult.reason.message
@@ -84,7 +111,6 @@ export function useAssignmentsWorkspace({
         if (routesResult.status === "fulfilled") {
           setAssignableRoutes(routesResult.value);
         } else {
-          setAssignableRoutes([]);
           messages.push(
             routesResult.reason instanceof Error
               ? routesResult.reason.message
@@ -105,57 +131,54 @@ export function useAssignmentsWorkspace({
         setReferenceStatus(messages.length > 0 ? "error" : "ready");
         setReferenceErrorMessage(messages.join(" "));
         if (messages.length > 0 && dataSourceMode === "api") {
-          showToast(`Не все справочники назначений API загружены: ${messages.join(" ")}`);
+          toastRef.current(`Не все справочники назначений API загружены: ${messages.join(" ")}`);
         }
       } catch (error) {
-        if (signal?.aborted) return;
+        if (!isCurrentOwner() || signal?.aborted || generation !== referenceGeneration.current) return;
 
         const message = error instanceof Error ? error.message : "Не удалось загрузить сотрудников и маршруты API";
-        setAssignableEmployees([]);
-        setAssignableRoutes([]);
         setReferenceStatus("error");
         setReferenceErrorMessage(message);
         if (dataSourceMode === "api") {
-          showToast(`Не удалось загрузить справочники назначений API: ${message}`);
+          toastRef.current(`Не удалось загрузить справочники назначений API: ${message}`);
         }
       }
     },
-    [apiAssignments, dataSourceMode, showToast],
+    [apiAssignments, dataSourceMode, owner, isCurrentOwner],
   );
 
-  const refreshAssignments = useCallback(
-    async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
-      if (dataSourceMode !== "api") {
-        setAssignments([]);
-        setListStatus("idle");
-        setErrorMessage(undefined);
-        setFieldErrors({});
-        return;
-      }
-
-      if (!silent) setListStatus("loading");
-      setErrorMessage(undefined);
-
+  const refreshAssignments = useCallback(({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}): Promise<void> => {
+    if (!isCurrentOwner() || signal?.aborted) return Promise.resolve();
+    if (dataSourceMode !== "api") {
+      setDataOwner(owner); setAssignments([]); setListStatus("idle"); setErrorMessage(undefined); setFieldErrors({});
+      return Promise.resolve();
+    }
+    if (silent && listRequest.current?.owner === owner && !listRequest.current.controller.signal.aborted) return listRequest.current.promise;
+    listRequest.current?.controller.abort();
+    const controller = new AbortController();
+    const generation = ++listGeneration.current;
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const current = () => isCurrentOwner() && !controller.signal.aborted && generation === listGeneration.current;
+    if (!silent) setListStatus("loading");
+    setErrorMessage(undefined);
+    const promise = (async () => {
       try {
-        const nextAssignments = await apiAssignments.getAssignments(buildOperationalPatrolDateRange(), { signal });
-        if (signal?.aborted) return;
-        setAssignments(nextAssignments);
-        setListStatus("ready");
-      } catch (error) {
-        if (signal?.aborted) return;
-        const message = error instanceof Error ? error.message : "Не удалось загрузить назначения API";
-        if (!silent) {
-          setAssignments([]);
-          setListStatus("error");
-        }
-        setErrorMessage(message);
-        if (!silent) {
-          showToast(`Не удалось загрузить назначения API: ${message}`);
-        }
+        const rows = await apiAssignments.getAssignments(buildOperationalPatrolDateRange(), { signal: controller.signal });
+        if (current()) { setDataOwner(owner); setAssignments(rows); setListStatus("ready"); }
+      } catch (failure) {
+        if (!current()) return;
+        const message = failure instanceof Error ? failure.message : "Не удалось загрузить назначения";
+        setErrorMessage(message); setListStatus("error");
+        if (!silent) toastRef.current(message);
+      } finally {
+        signal?.removeEventListener("abort", abort);
+        if (listRequest.current?.controller === controller) listRequest.current = null;
       }
-    },
-    [apiAssignments, dataSourceMode, showToast],
-  );
+    })();
+    listRequest.current = { owner, controller, promise };
+    return promise;
+  }, [apiAssignments, dataSourceMode, owner, isCurrentOwner]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,6 +195,8 @@ export function useAssignmentsWorkspace({
   }, [refreshReferenceData]);
 
   async function createAssignment(payload: CreateAssignmentPayload) {
+    const lock = `create:${ownerGeneration.revision}`;
+    if (!isCurrentOwner() || locks.current.has(lock)) return { succeeded: false };
     if (dataSourceMode !== "api") {
       const assignment = createLocalAssignment(payload);
       setAssignments((current) => [assignment, ...current.filter((item) => item.id !== assignment.id)]);
@@ -180,26 +205,31 @@ export function useAssignmentsWorkspace({
           ? "Назначение создано, уведомление отправлено сотруднику"
           : "Назначение создано",
       );
-      return;
+      return { succeeded: true };
     }
 
+    locks.current.add(lock);
     setIsCreating(true);
     setFieldErrors({});
 
     try {
       const assignment = await apiAssignments.createAssignment(payload);
+      if (!isCurrentOwner()) return { succeeded: false };
       setAssignments((current) => [assignment, ...current.filter((item) => item.id !== assignment.id)]);
-      await refreshPatrolData();
-      await refreshAssignments();
+      await Promise.allSettled([refreshPatrolData(), refreshAssignments()]);
+      if (!isCurrentOwner()) return { succeeded: false };
       showToast(
         payload.notifyEmployee
           ? "Назначение создано через API, уведомление отправлено сотруднику"
           : "Назначение создано через API",
       );
+      return { succeeded: true };
     } catch (error) {
-      handleMutationError(error);
+      if (isCurrentOwner()) handleMutationError(error);
+      return { succeeded: false };
     } finally {
-      setIsCreating(false);
+      locks.current.delete(lock);
+      if (isCurrentOwner()) setIsCreating(false);
     }
   }
 
@@ -209,6 +239,8 @@ export function useAssignmentsWorkspace({
     completePayload?: CompleteAssignmentPayload,
     cancelPayload?: CancelAssignmentPayload,
   ): Promise<AssignmentCommandResult> {
+    const lock = `command:${ownerGeneration.revision}:${id}`;
+    if (!isCurrentOwner() || locks.current.has(lock)) return { succeeded: false };
     if (dataSourceMode !== "api") {
       setAssignments((current) =>
         current.map((assignment) =>
@@ -221,6 +253,7 @@ export function useAssignmentsWorkspace({
       return { succeeded: true };
     }
 
+    locks.current.add(lock);
     setSavingAssignmentId(id);
     setFieldErrors({});
 
@@ -232,35 +265,39 @@ export function useAssignmentsWorkspace({
             ? await apiAssignments.cancelAssignment(id, cancelPayload ?? { reasonCode: "legacy_unknown" })
             : await apiAssignments.completeAssignment(id, completePayload);
 
+      if (!isCurrentOwner()) return { succeeded: false };
       setAssignments((current) => current.map((item) => (item.id === result.assignment.id ? result.assignment : item)));
-      await refreshPatrolData();
-      await refreshAssignments();
+      await Promise.allSettled([refreshPatrolData(), refreshAssignments()]);
+      if (!isCurrentOwner()) return { succeeded: false };
       showToast(result.message || (result.changed ? "Назначение обновлено" : "Назначение уже в актуальном состоянии"));
       return { succeeded: true };
     } catch (error) {
+      if (!isCurrentOwner()) return { succeeded: false };
       if (error instanceof ApiError && error.status === 404) {
         showToast("Назначение не найдено, список обновлен");
         await refreshAssignments();
-        return { errors: error.errors, succeeded: false };
+        return { errors: { ...error.errors, form: ["Назначение не найдено. Список обновлён; введённые данные сохранены в форме."] }, succeeded: false };
       }
 
       if (error instanceof ApiError && error.status === 409) {
         showToast("Данные устарели, список обновлен");
         await refreshAssignments();
-        return { errors: error.errors, succeeded: false };
+        return { errors: { ...error.errors, form: ["Назначение изменилось. Проверьте актуальные данные перед повторной отправкой."] }, succeeded: false };
       }
 
       handleMutationError(error);
       return {
-        errors: error instanceof ApiError ? error.errors : undefined,
+        errors: { ...(error instanceof ApiError ? error.errors : {}), form: [error instanceof Error ? error.message : "Не удалось сохранить назначение. Повторите попытку."] },
         succeeded: false,
       };
     } finally {
-      setSavingAssignmentId(undefined);
+      locks.current.delete(lock);
+      if (isCurrentOwner()) setSavingAssignmentId(undefined);
     }
   }
 
   async function updateAssignmentSettings(payload: UpdateAssignmentSettingsDto) {
+    if (!isCurrentOwner()) return false;
     if (dataSourceMode !== "api") {
       setAssignmentSettings((current) => ({
         favoriteEmployeeIds: payload.favoriteEmployeeIds ?? current?.favoriteEmployeeIds ?? [],
@@ -271,20 +308,23 @@ export function useAssignmentsWorkspace({
           nightStart: "20:00",
         },
       }));
-      return;
+      return true;
     }
 
     try {
       const next = await apiAssignments.updateSettings(payload);
+      if (!isCurrentOwner()) return false;
       setAssignmentSettings(next);
+      return true;
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Не удалось сохранить настройки назначений");
+      if (isCurrentOwner()) toastRef.current(error instanceof Error ? error.message : "Не удалось сохранить настройки назначений");
+      return false;
     }
   }
 
   function handleMutationError(error: unknown) {
     if (error instanceof ApiError) {
-      setFieldErrors(error.errors ?? {});
+      setFieldErrors({ ...(error.errors ?? {}), form: [error.message || "Не удалось сохранить назначение"] });
       if (error.status === 401 || error.status === 403) {
         showToast("Недостаточно прав для изменения назначения");
         return;
@@ -294,16 +334,17 @@ export function useAssignmentsWorkspace({
       return;
     }
 
-    showToast(error instanceof Error ? error.message : "Не удалось сохранить назначение");
+    setFieldErrors({ form: [error instanceof Error ? error.message : "Не удалось сохранить назначение"] });
+    toastRef.current(error instanceof Error ? error.message : "Не удалось сохранить назначение");
   }
 
   return {
-    activePatrols: dataSourceMode === "api" ? assignments : assignments.length > 0 ? assignments : undefined,
-    assignableEmployees,
+    activePatrols: dataOwner !== owner ? dataSourceMode === "api" ? [] : undefined : dataSourceMode === "api" ? assignments : assignments.length > 0 ? assignments : undefined,
+    assignableEmployees: dataOwner === owner ? assignableEmployees : [],
     assignableEmployeesFallback: assignableEmployeesFallback as Employee[],
-    assignableRoutes,
+    assignableRoutes: dataOwner === owner ? assignableRoutes : [],
     assignableRoutesFallback: assignableRoutesFallback as RouteOption[],
-    assignmentSettings,
+    assignmentSettings: dataOwner === owner ? assignmentSettings : null,
     createAssignment,
     errorMessage,
     fieldErrors,

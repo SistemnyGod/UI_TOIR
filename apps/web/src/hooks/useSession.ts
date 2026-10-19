@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import type { DataSourceMode } from "../types";
 import type { ChangePasswordDto, SessionUserDto } from "../api/contracts";
@@ -46,6 +46,9 @@ const mockSessionUser: SessionUserDto = {
     "emu.plan.override-approval",
     "emu.plan.recurrence.manage",
     "emu.reports.view",
+    "emu.shift-reports.create",
+    "emu.shift-reports.view",
+    "emu.shift-reports.view-all",
     "emu.time.override",
     "emu.audit.view",
     "inventory.view",
@@ -73,8 +76,17 @@ export function useSession(dataSourceMode: DataSourceMode) {
   const [status, setStatus] = useState<SessionStatus>(dataSourceMode === "api" ? "loading" : "authenticated");
   const [user, setUser] = useState<SessionUserDto | null>(dataSourceMode === "api" ? null : mockSessionUser);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const generation = useRef(0);
+  const [sessionVersion, setSessionVersion] = useState(0);
+  function beginSessionOperation() {
+    const version = ++generation.current;
+    setSessionVersion(version);
+    return version;
+  }
 
   const refresh = useCallback(async () => {
+    const version = ++generation.current;
+    setSessionVersion(version);
     if (dataSourceMode !== "api") {
       setUser(mockSessionUser);
       setStatus("authenticated");
@@ -94,9 +106,11 @@ export function useSession(dataSourceMode: DataSourceMode) {
 
     try {
       const nextUser = await repository.me();
+      if (generation.current !== version) return;
       setUser(nextUser);
       setStatus("authenticated");
     } catch (error) {
+      if (generation.current !== version) return;
       clearStoredSessionToken();
       setUser(null);
       setStatus(error instanceof ApiError && error.status === 401 ? "anonymous" : "error");
@@ -106,20 +120,24 @@ export function useSession(dataSourceMode: DataSourceMode) {
 
   useEffect(() => {
     void refresh();
+    return () => { ++generation.current; };
   }, [refresh]);
 
   async function login(loginValue: string, password: string, rememberMe = false) {
+    const version = beginSessionOperation();
     setStatus("loading");
     setErrorMessage(undefined);
 
     try {
       const session = await repository.login({ login: loginValue.trim(), password, rememberMe });
+      if (generation.current !== version) return false;
       setStoredSessionToken(session.accessToken, rememberMe, session.expiresAt);
       setStoredLastLogin(loginValue);
       setUser(session.user);
       setStatus("authenticated");
       return true;
     } catch (error) {
+      if (generation.current !== version) return false;
       clearStoredSessionToken();
       setUser(null);
       setStatus("anonymous");
@@ -130,31 +148,31 @@ export function useSession(dataSourceMode: DataSourceMode) {
 
   async function changePassword(payload: ChangePasswordDto) {
     if (dataSourceMode !== "api") return false;
+    const version = generation.current;
     setErrorMessage(undefined);
     try {
       const nextSession = await repository.changePassword(payload);
+      if (generation.current !== version) return false;
       setStoredSessionToken(nextSession.accessToken, getStoredRememberMe(), nextSession.expiresAt);
       setUser(nextSession.user);
       setStatus("authenticated");
       return true;
     } catch (error) {
+      if (generation.current !== version) return false;
       setErrorMessage(getSessionErrorMessage(error));
       return false;
     }
   }
   async function logout() {
-    if (dataSourceMode === "api" && getStoredSessionToken()) {
-      try {
-        await repository.logout();
-      } catch {
-        // Local token cleanup is still the source of truth for the UI state.
-      }
-    }
-
+    beginSessionOperation();
+    const pendingLogout = dataSourceMode === "api" && getStoredSessionToken()
+      ? repository.logout().catch(() => undefined)
+      : Promise.resolve();
     clearStoredSessionToken();
     setUser(dataSourceMode === "api" ? null : mockSessionUser);
     setStatus(dataSourceMode === "api" ? "anonymous" : "authenticated");
     setErrorMessage(undefined);
+    await pendingLogout;
   }
 
   return {
@@ -165,6 +183,7 @@ export function useSession(dataSourceMode: DataSourceMode) {
     logout,
     refresh,
     status,
+    sessionVersion,
     user,
   };
 }

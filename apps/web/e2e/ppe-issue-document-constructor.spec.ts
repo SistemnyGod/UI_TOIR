@@ -128,8 +128,8 @@ test("PPE issue document constructor persists, reopens, confirms, and fits deskt
   await expect(page.locator(".ppe-document-lines article").first().getByLabel("Цена, руб.")).toHaveValue("1250.50");
   await page.getByRole("button", { name: "Предпросмотр документов" }).click();
   await expect(page.getByRole("heading", { name: "Предпросмотр и печать" })).toBeVisible();
-  page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Подтвердить выдачу" }).click();
+  await page.getByRole("dialog", { name: "Подтвердить выдачу СИЗ?", exact: true }).getByRole("button", { name: "Подтвердить выдачу", exact: true }).click();
   await expect(page.locator('.ppe-document-saved[data-status="confirmed"]')).toBeVisible();
 
   const updatePayloads = requests.filter((entry) => entry.method === "PUT" && entry.url.endsWith(documentId));

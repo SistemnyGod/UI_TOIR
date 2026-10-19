@@ -1,4 +1,4 @@
-﻿import type { ServiceRequest } from "../../../../types";
+import type { ServiceRequest } from "../../../../types";
 import { Button, Chip, Field, ModalShell } from "../../../../shared/ui";
 import { cancellationReasonLabel } from "../../../../domain/patrolCancellation";
 

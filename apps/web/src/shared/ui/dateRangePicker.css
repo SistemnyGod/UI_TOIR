@@ -1,0 +1,39 @@
+.date-range-field { min-width: 0; }
+.date-range-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: 13px; cursor: pointer; }
+.date-range-trigger > svg { flex-shrink: 0; color: var(--ui-blue); }
+.date-range-trigger > span { min-width: 0; overflow-wrap: anywhere; }
+.anchored-popover { position: fixed; z-index: 90; top: 8px; left: 8px; visibility: hidden; box-sizing: border-box; }
+.date-range-surface { display: flex; flex-direction: column; width: 360px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; border: 1px solid var(--ui-border-strong); border-radius: var(--radius-panel); background: var(--ui-surface); color: var(--ui-text); box-shadow: var(--shadow-modal); font-size: 13px; }
+.date-range-surface-wide { width: 680px; }
+.date-range-surface-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ui-border); flex-shrink: 0; }
+.date-range-surface-header strong { overflow-wrap: anywhere; font-size: 14px; }
+.date-range-surface button:focus-visible, .date-range-trigger:focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.date-range-surface-header > button, .date-range-month-navigation > button { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; padding: 0; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-text); cursor: pointer; }
+.date-range-surface-body { min-height: 0; padding: 8px 12px; overflow-y: auto; overscroll-behavior: contain; }
+.date-range-month-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.date-range-month-navigation > span { text-align: center; font-weight: 650; }
+.date-range-months { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.date-range-month:only-child { grid-column: 1 / -1; }
+.date-range-month { min-width: 0; }
+.date-range-month h3 { font-size: 13px; margin: 10px 0 4px; text-align: center; }
+.date-range-weekdays, .date-range-dates { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.date-range-weekdays { padding: 8px 0 4px; color: var(--ui-muted); font-size: 12px; text-align: center; }
+.date-range-dates > button { min-width: 0; min-height: 36px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--ui-text); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.date-range-dates > button:hover { background: var(--ui-blue-soft); }
+.date-range-dates > button.is-in-range { border-radius: 0; background: var(--ui-blue-soft); }
+.date-range-dates > button.is-selected { background: var(--ui-blue); color: white; font-weight: 750; }
+.date-range-dates > button[aria-current=date] { border-color: var(--ui-blue); }
+.date-range-dates > button.is-outside { visibility: hidden; pointer-events: none; }
+.date-range-instruction { min-height: 2.7em; margin: 8px 0 0; color: var(--ui-muted); line-height: 1.4; overflow-wrap: anywhere; }
+.date-range-surface-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--ui-border); background: var(--ui-surface-muted); }
+.date-range-surface-actions .ui-button { min-height: 36px; font-size: 12px; }
+@media (max-width: 760px) {
+  .date-range-surface { width: 360px; }
+  .date-range-months { grid-template-columns: 1fr; }
+  .date-range-month + .date-range-month { display: none; }
+  .date-range-month h3 { display: none; }
+  .date-range-dates > button, .date-range-month-navigation > button, .date-range-surface-header > button, .date-range-surface-actions .ui-button, .date-range-trigger { min-height: 44px; }
+  .date-range-month-navigation > button, .date-range-surface-header > button { width: 44px; }
+  .date-range-surface-actions { padding: 8px; gap: 4px; }
+  .date-range-surface-actions .ui-button { padding-inline: 8px; }
+}

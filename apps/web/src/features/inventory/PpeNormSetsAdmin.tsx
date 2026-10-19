@@ -1,8 +1,14 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, RefreshCw, Search, ShieldCheck, Upload } from "lucide-react";
-import type { InventoryItemDto, InventoryPpeNormRowDto, InventoryPpeNormSetDetailDto, InventoryPpeNormSetDto } from "../../api/contracts";
+import type { InventoryPpeNormSetDto } from "../../api/contracts";
+import { LegacyTemplatesAdmin } from "./ppe/LegacyTemplatesAdmin";
+import { NormSetDetails } from "./ppe/norms/NormSetDetails";
+import { NormScopeEditor } from "./ppe/norms/NormEditors";
+import { usePpeNormWorkspace } from "./ppe/norms/usePpeNormWorkspace";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
-import { matchesPpeSearchText, rankPpeCatalogItemsForNorm } from "./ppe/ppeNormSearch";
+import { NormEditorDialog } from "./ppe/norms/NormEditorDialog";
+import { editorNormId, type NormEditorSelection } from "./ppe/norms/normEditorModel";
+import "./styles/ppeNormRecovery.css";
 
 type Props = {
   canManage?: boolean;
@@ -15,174 +21,30 @@ const statusLabel: Record<InventoryPpeNormSetDto["status"], string> = {
   archived: "Архив",
   draft: "Черновик",
 };
-
-export function PpeNormSetsAdmin({ canManage = false, initialSearch = "", onNotify }: Props) {
-  const repository = useInventoryRepository();
+export function PpeNormSetsAdmin(props: Props) {
+  const repository = useInventoryRepository(), owner = useRef({ repository, revision: 0 });
+  if (owner.current.repository !== repository) owner.current = { repository, revision: owner.current.revision + 1 };
+  return <NormAdminWorkspace key={owner.current.revision} {...props} />;
+}
+function NormAdminWorkspace({ canManage = false, initialSearch = "", onNotify: notify }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [rows, setRows] = useState<InventoryPpeNormSetDto[]>([]);
-  const [reviewedIds, setReviewedIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [importing, setImporting] = useState(false);
-  const [publishingId, setPublishingId] = useState("");
-  const [expandedId, setExpandedId] = useState("");
-  const [details, setDetails] = useState<Record<string, InventoryPpeNormSetDetailDto>>({});
-  const [detailLoadingId, setDetailLoadingId] = useState("");
-  const [catalogItems, setCatalogItems] = useState<InventoryItemDto[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [mappingRowId, setMappingRowId] = useState("");
-  const [search, setSearch] = useState(initialSearch);
-  const [error, setError] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const response = await repository.getPpeNormSets({ page: 1, pageSize: 100, query: search.trim() || undefined });
-      setRows(response.rows);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить нормативные наборы");
-    } finally {
-      setLoading(false);
-    }
-  }, [repository, search]);
-
-  const refreshNormSet = useCallback(async (normSetId: string) => {
-    const [detail, response] = await Promise.all([
-      repository.getPpeNormSet(normSetId),
-      repository.getPpeNormSets({ page: 1, pageSize: 100, query: search.trim() || undefined }),
-    ]);
-    setDetails((current) => ({ ...current, [normSetId]: detail }));
-    setRows(response.rows);
-  }, [repository, search]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => void load(), 250);
-    return () => window.clearTimeout(timeout);
-  }, [load]);
-
-  async function importWorkbook(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      setError("Для импорта выберите файл Excel в формате .xlsx");
-      return;
-    }
-    try {
-      setImporting(true);
-      setError("");
-      const result = await repository.importPpeNormSetsDraft(file);
-      onNotify(`Импорт завершен: ${result.normSetsCreated} наборов, ${result.itemsCreated} позиций`);
-      await load();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось импортировать нормы СИЗ");
-    } finally {
-      setImporting(false);
-    }
-  }
-
-  async function publish(row: InventoryPpeNormSetDto) {
-    if (!reviewedIds.includes(row.id)) {
-      setError("Перед публикацией подтвердите, что набор проверен");
-      return;
-    }
-    try {
-      setPublishingId(row.id);
-      setError("");
-      await repository.publishPpeNormSet(row.id, { confirmReviewed: true, expectedVersion: row.version });
-      onNotify(`Нормативный набор «${row.positionName}» опубликован`);
-      await load();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось опубликовать нормативный набор");
-    } finally {
-      setPublishingId("");
-    }
-  }
-
-  async function loadCatalog() {
-    if (catalogItems.length > 0 || catalogLoading) return;
-    setCatalogLoading(true);
-    try {
-      const first = await repository.getPpeItems({ page: 1, pageSize: 100 });
-      const rest = await Promise.all(Array.from({ length: Math.max(0, first.pageCount - 1) }, (_, index) =>
-        repository.getPpeItems({ page: index + 2, pageSize: 100 })));
-      setCatalogItems([first, ...rest].flatMap((page) => page.rows));
-    } finally {
-      setCatalogLoading(false);
-    }
-  }
-
-  async function toggleDetails(row: InventoryPpeNormSetDto) {
-    if (expandedId === row.id) {
-      setExpandedId("");
-      return;
-    }
-    setExpandedId(row.id);
-    setCategoryFilter("all");
-    if (details[row.id]) {
-      void loadCatalog();
-      return;
-    }
-    try {
-      setDetailLoadingId(row.id);
-      setError("");
-      const detail = await repository.getPpeNormSet(row.id);
-      setDetails((current) => ({ ...current, [row.id]: detail }));
-      await loadCatalog();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить строки нормы");
-    } finally {
-      setDetailLoadingId("");
-    }
-  }
-
-  async function saveMapping(normSetId: string, normRow: InventoryPpeNormRowDto, itemId: string, isDefault = false) {
-    if (!itemId) return;
-    const item = catalogItems.find((candidate) => candidate.id === itemId);
-    if (!item) return;
-    try {
-      setMappingRowId(normRow.id);
-      setError("");
-      const mapping = await repository.upsertPpeNormRowMapping(normRow.id, {
-        itemId,
-        isDefault,
-        defaultUnitPriceMinor: item.defaultUnitPriceMinor,
-      });
-      setDetails((current) => {
-        const detail = current[normSetId];
-        if (!detail) return current;
-        const nextRows = detail.rows.map((candidate) => candidate.id !== normRow.id ? candidate : {
-          ...candidate,
-          mappings: [mapping, ...candidate.mappings.filter((existing) => existing.itemId !== mapping.itemId).map((existing) => ({ ...existing, isDefault: mapping.isDefault ? false : existing.isDefault }))],
-        });
-        return {
-          ...current,
-          [normSetId]: {
-            ...detail,
-            rows: nextRows,
-            mappedItemRowsCount: nextRows.filter((candidate) => candidate.rowType === "item" && candidate.mappings.length > 0).length,
-            unmappedItemRowsCount: nextRows.filter((candidate) => candidate.rowType === "item" && candidate.mappings.length === 0).length,
-          },
-        };
-      });
-      onNotify("Сопоставление нормы сохранено");
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось сохранить сопоставление");
-    } finally {
-      setMappingRowId("");
-    }
-  }
-
-  const activeCount = rows.filter((row) => row.status === "active").length;
-  const draftCount = rows.filter((row) => row.status === "draft").length;
-  const reviewCount = rows.filter((row) => row.requiresReview).length;
+  const [readinessFilter, setReadinessFilter] = useState("all");
+  const [editor, setEditor] = useState<NormEditorSelection | null>(null);
+  const openEditor = (value: NormEditorSelection) => setEditor(structuredClone(value));
+  const { allRows, rows, reviewedIds, setReviewedIds, loading, importing, publishingId, expandedId, details, detailLoadingId, catalogItems, catalogLoading, categoryFilter, setCategoryFilter, mappingRowId, search, setSearch, error, load, importWorkbook, publish, toggleDetails, saveMapping, refreshNormSet, onNotify, staleIds, markStale, reloadNormSet } = usePpeNormWorkspace(initialSearch, notify);
+  const activeCount = allRows.filter((row) => row.status === "active").length;
+  const draftCount = allRows.filter((row) => row.status === "draft").length;
+  const reviewCount = allRows.filter(row => row.status !== "archived" && (row.status !== "active" || row.requiresReview || !row.readiness?.isReady)).length;
+  const readyCount = allRows.filter(row => row.status === "active" && !row.requiresReview && row.readiness?.isReady).length;
+  const visibleRows = rows.filter(row => readinessFilter === "all" || (readinessFilter === "ready" ? isReady(row) : row.status !== "archived" && !isReady(row)));
+  const totalCount = allRows.filter(row => row.status !== "archived").length;
 
   return (
     <section className="inventory-ppe-norm-admin">
       <header className="inventory-ppe-norm-admin-head">
         <div>
-          <span className="inventory-ppe-section-kicker"><ShieldCheck size={15} /> Нормы выдачи</span>
+          <span className="inventory-ppe-section-kicker">
+            <ShieldCheck size={15} /> Нормы выдачи</span>
           <h2>Нормативные наборы СИЗ</h2>
           <p>Импортируйте Excel как черновик, проверьте состав и только затем опубликуйте.</p>
         </div>
@@ -198,12 +60,28 @@ export function PpeNormSetsAdmin({ canManage = false, initialSearch = "", onNoti
       </header>
 
       <div className="inventory-ppe-norm-kpis">
-        <span><small>Всего наборов</small><strong>{rows.length}</strong></span>
-        <span className="is-active"><small>Действуют</small><strong>{activeCount}</strong></span>
-        <span className="is-draft"><small>Черновики</small><strong>{draftCount}</strong></span>
-        <span className="is-review"><small>Требуют проверки</small><strong>{reviewCount}</strong></span>
+        <span>
+          <small>Всего наборов</small>
+          <strong>{allRows.filter(row => row.status !== "archived").length}</strong>
+        </span>
+        <span className="is-active">
+          <small>Действуют</small>
+          <strong>{activeCount}</strong>
+        </span>
+        <span className="is-draft">
+          <small>Черновики</small>
+          <strong>{draftCount}</strong>
+        </span>
+        <span className="is-review">
+          <small>Требуют проверки</small>
+          <strong>{reviewCount}</strong>
+        </span>
       </div>
 
+      <div className="inventory-ppe-norm-progress">
+        <p>Готовы к запуску: <strong>{readyCount} из {totalCount}</strong>. Незавершённые наборы блокируют включение новых выдач.</p>
+        <progress aria-label="Готовность наборов норм" value={readyCount} max={totalCount || 1} />
+      </div>
       <div className="inventory-ppe-norm-search">
         <Search aria-hidden="true" size={17} />
         <input
@@ -215,26 +93,32 @@ export function PpeNormSetsAdmin({ canManage = false, initialSearch = "", onNoti
         />
         {search ? <button className="button ghost" onClick={() => setSearch("")} type="button">Сбросить</button> : null}
       </div>
+      <div className="inventory-ppe-norm-filters" role="group" aria-label="Готовность норм">
+        {[["all", "Все наборы"], ["review", "Требуют проверки"], ["ready", "Готовы к запуску"]].map(([value, label]) => <button className={`button ${readinessFilter === value ? "primary" : "secondary"}`} aria-pressed={readinessFilter === value} key={value} onClick={() => setReadinessFilter(value)} type="button">{label}</button>)}
+      </div>
 
-      {error ? <div className="inventory-ppe-norm-message is-error">{error}</div> : null}
-      {loading ? <div className="inventory-ppe-norm-message">Загружаем нормативные наборы...</div> : null}
-      {!loading && !rows.length ? (
+      {error ? <div className="inventory-ppe-norm-message is-error" role="alert">{error}</div> : null}
+      <div className="inventory-ppe-norm-loading" role="status" aria-live="polite">{loading ? allRows.length ? "Обновляем список… Можно продолжать проверку норм." : "Загружаем нормативные наборы…" : `Показано наборов: ${visibleRows.length}`}</div>
+      {!loading && !visibleRows.length && !error ? (
         <div className="inventory-ppe-norm-empty">
           <ShieldCheck size={26} />
-          <strong>Нормативные наборы пока не загружены</strong>
-          <span>Импортируйте подготовленный XLSX. Данные сначала будут сохранены как черновики.</span>
+          <strong>{search || readinessFilter !== "all" ? "По заданным фильтрам наборы не найдены" : "Нормативные наборы пока не загружены"}</strong>
+          <span>{search || readinessFilter !== "all" ? "Измените поисковый запрос или выберите все наборы." : "Импортируйте подготовленный XLSX. Данные сначала будут сохранены как черновики."}</span>
         </div>
       ) : null}
 
+      {canManage ? <LegacyTemplatesAdmin norms={allRows} onNotify={onNotify} /> : null}
       <div className="inventory-ppe-norm-set-list">
-        {rows.map((row) => {
+        {visibleRows.map((row) => {
           const reviewed = reviewedIds.includes(row.id);
           const detail = details[row.id];
           const detailItemRows = detail?.rows.filter((candidate) => candidate.rowType === "item") ?? [];
           const mappedRows = detailItemRows.filter((candidate) => candidate.mappings.length > 0).length;
-          const unmappedRows = detailItemRows.length - mappedRows;
+          const approvedRows = detailItemRows.filter(candidate => candidate.mappings.some(mapping => mapping.isApproved)).length;
+          const needsReload = staleIds.includes(row.id);
+          const publishing = publishingId === row.id;
           return (
-            <article className={`inventory-ppe-norm-set is-${row.status}`} key={row.id}>
+            <article className={`inventory-ppe-norm-set is-${row.status}`} aria-busy={publishing || undefined} key={row.id}>
               <div className="inventory-ppe-norm-set-main">
                 <span className={`inventory-ppe-norm-status is-${row.status}`}>{statusLabel[row.status]}</span>
                 <h3>{row.positionName}</h3>
@@ -242,309 +126,55 @@ export function PpeNormSetsAdmin({ canManage = false, initialSearch = "", onNoti
                 <small>Источник: {row.sourceName || "не указан"}</small>
               </div>
               <div className="inventory-ppe-norm-set-meta">
-                <span>Действует с <b>{formatDate(row.effectiveFrom)}</b></span>
-                <span>Версия <b>{row.version}</b></span>
+                <span>Действует с <b>{formatDate(row.effectiveFrom)}</b>
+                </span>
+                <span>Версия <b>{row.version}</b>
+                </span>
               </div>
               <div className="inventory-ppe-norm-publish">
                 <button className="button ghost" onClick={() => void toggleDetails(row)} type="button">
                   {expandedId === row.id ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                   {detailLoadingId === row.id ? "Загрузка строк..." : expandedId === row.id ? "Скрыть категории" : "Открыть категории и сопоставление"}
                 </button>
+                <div className="inventory-ppe-norm-readiness">
+                  <strong>{row.readiness?.isReady ? row.status === "active" && !row.requiresReview ? "Готов к запуску" : "Готов к публикации" : "Запуск заблокирован"} · утверждено {row.readiness?.approvedCount ?? 0} из {row.readiness?.requiredCount ?? 0} требований</strong>{Boolean(row.readiness?.blockers.length) && <details>
+                    <summary>Причины блокировки ({row.readiness?.blockers.length})</summary>
+                    <ul>{row.readiness?.blockers.map((blocker, index) => <li key={`${blocker.rowId}-${blocker.code}-${index}`}>{blocker.message}</li>)}</ul>
+                  </details>}</div>
                 {row.status === "draft" ? (
                   <div className="inventory-ppe-norm-publish-actions">
-                    <div className={`inventory-ppe-norm-readiness ${detail ? "is-loaded" : ""}`}>
-                      {detail ? <><strong>{mappedRows} из {detailItemRows.length} строк сопоставлены</strong><span>{unmappedRows ? `${unmappedRows} строк потребуют ручного выбора номенклатуры при выдаче.` : "Все нормативные строки имеют хотя бы одно соответствие."}</span></> : <><strong>Сначала проверьте состав набора</strong><span>Откройте категории и сопоставления перед публикацией.</span></>}
-                    </div>
+                    <span className="ppe-norm-publish-context">{detail ? `${mappedRows} строк сопоставлены · ${approvedRows} утверждены` : "Перед публикацией откройте и проверьте состав набора"}</span>
                     <label>
                       <input
                         checked={reviewed}
-                        disabled={!detail}
+                        disabled={!canManage || !detail || needsReload || publishing}
                         onChange={(event) => setReviewedIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
                         type="checkbox"
                       />
                       Проверил нормативный состав и периодичность
                     </label>
-                    <button className="button primary" disabled={!canManage || !detail || !reviewed || publishingId === row.id} onClick={() => void publish(row)} type="button">
+                    <button className="button primary" disabled={!canManage || !detail || !reviewed || !row.readiness?.isReady || Boolean(publishingId) || needsReload} onClick={() => void publish(row)} type="button">
                       <CheckCircle2 size={15} /> {publishingId === row.id ? "Публикация..." : "Опубликовать"}
                     </button>
                   </div>
                 ) : null}
               </div>
-              {expandedId === row.id && details[row.id] ? <><NormScopeEditor canManage={canManage} normSet={row} onNotify={onNotify} onSaved={() => refreshNormSet(row.id)} /><NormSetDetails canManage={canManage} detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId, isDefault) => void saveMapping(row.id, normRow, itemId, isDefault)} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={() => refreshNormSet(row.id)} /></> : null}
+              {needsReload ? <div className="ppe-norm-reload-required" role="alert"><span>Перед следующим действием загрузите актуальную версию набора. Обновление данных не повторяет запись.</span><button className="button secondary" type="button" onClick={() => void reloadNormSet(row.id)}>Обновить набор</button></div> : null}
+              {expandedId === row.id && details[row.id] ? <>
+                <NormScopeEditor canManage={canManage && !needsReload && !publishing} normSet={row} onEdit={openEditor} />
+                <NormSetDetails canManage={canManage && !needsReload && !publishing} detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId, isDefault) => saveMapping(row.id, normRow, itemId, isDefault)} mappingRowId={mappingRowId} onEdit={openEditor} />
+              </> : null}
             </article>
           );
         })}
       </div>
+      {editor ? <NormEditorDialog selection={editor} canManage={canManage && !staleIds.includes(editorNormId(editor)) && publishingId !== editorNormId(editor)} onClose={() => setEditor(null)} onNotify={onNotify} onSaved={async () => { const id = editorNormId(editor); markStale(id); await refreshNormSet(id); }} /> : null}
     </section>
   );
 }
-
-function NormSetDetails({
-  canManage,
-  detail,
-  catalogItems,
-  catalogLoading,
-  categoryFilter,
-  onCategoryChange,
-  onSaveMapping,
-  mappingRowId,
-  onNotify,
-  onSaved,
-}: {
-  canManage: boolean;
-  detail: InventoryPpeNormSetDetailDto;
-  catalogItems: InventoryItemDto[];
-  catalogLoading: boolean;
-  categoryFilter: string;
-  onCategoryChange: (value: string) => void;
-  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
-  mappingRowId: string;
-  onNotify: (message: string) => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [normSearch, setNormSearch] = useState("");
-  const [catalogSearch, setCatalogSearch] = useState("");
-  const normalizedCatalogSearch = catalogSearch.trim().toLocaleLowerCase("ru");
-  const groups = detail.rows.filter((row) => row.rowType === "group");
-  const matchesNorm = (row: InventoryPpeNormRowDto) => matchesPpeSearchText([row.normItemName, row.normPoint, row.issuePeriodText], normSearch);
-  const visibleGroups = groups.filter((group) => {
-    if (categoryFilter !== "all" && group.id !== categoryFilter) return false;
-    return !normSearch.trim() || matchesNorm(group) || detail.rows.some((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row));
-  });
-  const ungrouped = detail.rows.filter((row) => row.rowType === "item" && !row.parentRowId && categoryFilter === "all" && matchesNorm(row));
-  const filteredCatalogItems = useMemo(() => {
-    if (!normalizedCatalogSearch) return catalogItems;
-    return catalogItems.filter((item) => [item.name, item.sku, item.article, item.modelName, item.brandName]
-      .filter(Boolean).join(" ").toLocaleLowerCase("ru").includes(normalizedCatalogSearch));
-  }, [catalogItems, normalizedCatalogSearch]);
-
-  return (
-    <div className="inventory-ppe-norm-details">
-      <div className="inventory-ppe-norm-detail-summary">
-        <span><b>{detail.itemRowsCount}</b> строк СИЗ</span>
-        <span className="is-ready"><b>{detail.mappedItemRowsCount}</b> сопоставлено</span>
-        <span className={detail.unmappedItemRowsCount ? "is-warning" : "is-ready"}><b>{detail.unmappedItemRowsCount}</b> требуют выбора</span>
-      </div>
-      <div className="inventory-ppe-norm-detail-toolbar">
-        <label><Search size={14} /><span>Категория ГОСТ</span>
-          <select value={categoryFilter} onChange={(event) => onCategoryChange(event.target.value)}>
-            <option value="all">Все категории</option>
-            {groups.map((group) => <option key={group.id} value={group.id}>{group.normItemName}</option>)}
-          </select>
-        </label>
-        <label><Search size={14} /><span>Найти норму</span><input onChange={(event) => setNormSearch(event.target.value)} placeholder="Обувь, зимняя, п. 4.7…" type="search" value={normSearch} /></label>
-        <label><Search size={14} /><span>Номенклатура</span><input onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Название, артикул, модель…" type="search" value={catalogSearch} /></label>
-        <small>{catalogLoading ? "Загружаем каталог СИЗ…" : `Показано ${filteredCatalogItems.length} из ${catalogItems.length} позиций`}</small>
-      </div>
-      <div className="inventory-ppe-norm-category-list">
-        {ungrouped.length ? <NormCategoryRows canManage={canManage} normSetVersion={detail.normSet.version} title="Без категории" rows={ungrouped} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={onSaved} /> : null}
-        {visibleGroups.map((group) => <NormCategoryRows canManage={canManage} key={group.id} normSetVersion={detail.normSet.version} title={group.normItemName} rows={detail.rows.filter((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row))} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={onSaved} />)}
-        {!ungrouped.length && !visibleGroups.length ? <div className="inventory-ppe-norm-message">По заданному поиску нормативные строки не найдены.</div> : null}
-      </div>
-    </div>
-  );
-}
-
-function NormCategoryRows({
-  canManage,
-  normSetVersion,
-  title,
-  rows,
-  catalogItems,
-  onSaveMapping,
-  mappingRowId,
-  onNotify,
-  onSaved,
-}: {
-  canManage: boolean;
-  normSetVersion: number;
-  title: string;
-  rows: InventoryPpeNormRowDto[];
-  catalogItems: InventoryItemDto[];
-  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
-  mappingRowId: string;
-  onNotify: (message: string) => void;
-  onSaved: () => Promise<void>;
-}) {
-  if (!rows.length) return null;
-  return (
-    <section className="inventory-ppe-norm-category">
-      <header><strong>{title}</strong><span>{rows.length} позиций</span></header>
-      <div className="inventory-ppe-norm-row-list">
-        {rows.map((row) => {
-          const defaultMapping = row.mappings.find((mapping) => mapping.isDefault) ?? row.mappings[0];
-          const mappedIds = new Set(row.mappings.map((mapping) => mapping.itemId));
-          const selectableItems = catalogItems.filter((item) => !mappedIds.has(item.id));
-          return (
-            <div className="inventory-ppe-norm-row" key={row.id}>
-              <div className="inventory-ppe-norm-row-copy">
-                <strong>{row.normItemName}</strong>
-                <small>{row.quantityText || "Количество не распознано"}{row.lifeMonths ? ` · ${row.lifeMonths} мес.` : ""}</small>
-                <small className="is-point">{row.normPoint || "Основание не указано"}</small>
-              </div>
-              <NormRowRulesEditor canManage={canManage} normSetVersion={normSetVersion} onNotify={onNotify} onSaved={onSaved} row={row} />
-              {row.mappings.length ? <div className="inventory-ppe-norm-mappings" aria-label={`Допустимая номенклатура: ${row.normItemName}`}>
-                {row.mappings.map((mapping) => <span className={mapping.isDefault ? "is-default" : ""} key={mapping.id}>
-                  <span><strong>{mapping.itemName}</strong><small>{mapping.itemSku || "Без артикула"}</small></span>
-                  {mapping.isDefault ? <em>Основное</em> : <button disabled={mappingRowId === row.id} onClick={() => onSaveMapping(row, mapping.itemId, true)} type="button">Сделать основным</button>}
-                  <MappingApprovalEditor canManage={canManage} mapping={mapping} normRowId={row.id} normSetVersion={normSetVersion} onNotify={onNotify} onSaved={onSaved} />
-                </span>)}
-              </div> : null}
-              <NormCatalogSelector
-                disabled={!canManage || mappingRowId === row.id}
-                items={selectableItems}
-                onSelect={(itemId) => onSaveMapping(row, itemId, row.mappings.length === 0)}
-                row={row}
-              />
-              {mappingRowId === row.id ? <span className="inventory-ppe-norm-row-saving">Сохранение…</span> : defaultMapping ? <span className="inventory-ppe-norm-row-ready">Готово</span> : <span className="inventory-ppe-norm-row-warning">Нужно выбрать</span>}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function NormScopeEditor({ canManage, normSet, onNotify, onSaved }: { canManage: boolean; normSet: InventoryPpeNormSetDto; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
-  const repository = useInventoryRepository();
-  const [departmentName, setDepartmentName] = useState(normSet.departmentName ?? "");
-  const [aliases, setAliases] = useState((normSet.positionAliases ?? []).join(", "));
-  const [saving, setSaving] = useState(false);
-  async function save() {
-    try {
-      setSaving(true);
-      await repository.updatePpeNormSetScope(normSet.id, { expectedVersion: normSet.version, departmentName, positionAliases: aliases.split(",").map((value) => value.trim()).filter(Boolean) });
-      await onSaved();
-      onNotify("Область применения нормы сохранена");
-    } catch (reason) {
-      onNotify(reason instanceof Error ? reason.message : "Не удалось сохранить область нормы");
-    } finally { setSaving(false); }
-  }
-  return <div className="inventory-ppe-norm-detail-toolbar"><label><span>Подразделение</span><input disabled={!canManage} value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} /></label><label><span>Псевдонимы должности</span><input disabled={!canManage} value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Через запятую" /></label><button className="button secondary" disabled={!canManage || saving} onClick={() => void save()} type="button">Подтвердить область</button></div>;
-}
-
-function NormRowRulesEditor({ canManage, normSetVersion, row, onNotify, onSaved }: { canManage: boolean; normSetVersion: number; row: InventoryPpeNormRowDto; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
-  const repository = useInventoryRepository();
-  const [unitSymbol, setUnitSymbol] = useState(row.unitSymbol ?? "шт.");
-  const [periodMonths, setPeriodMonths] = useState(row.periodMonths?.toString() ?? "");
-  const [lifeMonths, setLifeMonths] = useState(row.lifeMonths?.toString() ?? "");
-  const [alternativeGroup, setAlternativeGroup] = useState(row.alternativeGroup ?? "");
-  const [previousRequirementRowId, setPreviousRequirementRowId] = useState(row.previousRequirementRowId ?? "");
-  const [saving, setSaving] = useState(false);
-  async function save() {
-    try {
-      setSaving(true);
-      await repository.updatePpeNormRowRules(row.id, { expectedVersion: normSetVersion, unitSymbol, periodMonths: numberOrNull(periodMonths), lifeMonths: numberOrNull(lifeMonths), previousRequirementRowId: previousRequirementRowId.trim() || null, alternativeGroup });
-      await onSaved();
-      onNotify("Правила строки нормы сохранены");
-    } catch (reason) {
-      onNotify(reason instanceof Error ? reason.message : "Не удалось сохранить правила строки нормы");
-    } finally { setSaving(false); }
-  }
-  return <details className="inventory-ppe-norm-catalog-selector"><summary>Правила строки</summary><label>Единица<input disabled={!canManage} value={unitSymbol} onChange={(event) => setUnitSymbol(event.target.value)} /></label><label>Период, мес.<input disabled={!canManage} min="1" type="number" value={periodMonths} onChange={(event) => setPeriodMonths(event.target.value)} /></label><label>Срок носки, мес.<input disabled={!canManage} min="1" type="number" value={lifeMonths} onChange={(event) => setLifeMonths(event.target.value)} /></label><label>Предыдущее требование<input disabled={!canManage} value={previousRequirementRowId} onChange={(event) => setPreviousRequirementRowId(event.target.value)} /></label><label>Группа альтернатив<input disabled={!canManage} value={alternativeGroup} onChange={(event) => setAlternativeGroup(event.target.value)} /></label><button className="button secondary" disabled={!canManage || saving} onClick={() => void save()} type="button">Сохранить правила</button></details>;
-}
-
-function MappingApprovalEditor({ canManage, mapping, normRowId, normSetVersion, onNotify, onSaved }: { canManage: boolean; mapping: InventoryPpeNormRowDto["mappings"][number]; normRowId: string; normSetVersion: number; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
-  const repository = useInventoryRepository();
-  const [evidence, setEvidence] = useState(mapping.approvalEvidence ?? "");
-  const [factor, setFactor] = useState((mapping.normUnitsPerItem ?? 1).toString());
-  const [saving, setSaving] = useState(false);
-  async function approve() {
-    if (!evidence.trim()) return;
-    try {
-      setSaving(true);
-      await repository.approvePpeNormMapping(normRowId, { expectedNormVersion: normSetVersion, itemId: mapping.itemId, normUnitsPerItem: Number(factor), evidence, brandModelArticle: mapping.brandModelArticle, defaultUnitPriceMinor: mapping.defaultUnitPriceMinor });
-      await onSaved();
-      onNotify("Товар для нормы утверждён");
-    } catch (reason) {
-      onNotify(reason instanceof Error ? reason.message : "Не удалось утвердить товар для нормы");
-    } finally { setSaving(false); }
-  }
-  return <details className="inventory-ppe-norm-catalog-selector"><summary>{mapping.isApproved ? "Утверждено" : "Утвердить"}</summary><label>Основание<input disabled={!canManage} value={evidence} onChange={(event) => setEvidence(event.target.value)} /></label><label>Коэффициент<input disabled={!canManage} min="0.001" step="0.001" type="number" value={factor} onChange={(event) => setFactor(event.target.value)} /></label><button className="button secondary" disabled={!canManage || saving || !evidence.trim() || Number(factor) <= 0} onClick={() => void approve()} type="button">Подтвердить товар</button></details>;
-}
-
-function numberOrNull(value: string) { const parsed = Number(value); return Number.isFinite(parsed) && parsed > 0 ? parsed : null; }
-
-function NormCatalogSelector({
-  disabled,
-  items,
-  onSelect,
-  row,
-}: {
-  disabled: boolean;
-  items: InventoryItemDto[];
-  onSelect: (itemId: string) => void;
-  row: InventoryPpeNormRowDto;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [showOther, setShowOther] = useState(false);
-  const deferredQuery = useDeferredValue(query);
-  const matches = useMemo(
-    () => rankPpeCatalogItemsForNorm(row, items, deferredQuery, showOther, showOther ? 40 : 12),
-    [deferredQuery, items, row, showOther],
-  );
-
-  function select(itemId: string) {
-    onSelect(itemId);
-    setOpen(false);
-    setQuery("");
-    setShowOther(false);
-  }
-
-  return (
-    <div className="inventory-ppe-norm-catalog-selector">
-      <button
-        aria-expanded={open}
-        className="inventory-ppe-norm-catalog-trigger"
-        disabled={disabled || !items.length}
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <Search aria-hidden="true" size={14} />
-        {row.mappings.length ? "Добавить допустимый товар" : "Подобрать товар из номенклатуры"}
-        <ChevronDown aria-hidden="true" size={14} />
-      </button>
-      {open ? (
-        <div className="inventory-ppe-norm-catalog-popover">
-          <label>
-            <span>Поиск внутри этой нормы</span>
-            <input
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Например: сапоги зимние, артикул…"
-              type="search"
-              value={query}
-            />
-          </label>
-          <div className="inventory-ppe-norm-catalog-result-head">
-            <span>{showOther ? "Все найденные позиции" : "Рекомендуемые соответствия"}</span>
-            <b>{matches.length}</b>
-          </div>
-          <div className="inventory-ppe-norm-catalog-results">
-            {matches.map(({ item, reasons }) => (
-              <button key={item.id} onClick={() => select(item.id)} type="button">
-                <span>
-                  <strong>{item.name}</strong>
-                  <small>{[item.sku || item.article, item.category, item.unit].filter(Boolean).join(" · ") || "Без дополнительных данных"}</small>
-                </span>
-                <span className="inventory-ppe-norm-match-reasons">
-                  {reasons.slice(0, 2).map((reason) => <em className={reason === "Требует ручной проверки" ? "is-warning" : ""} key={reason}>{reason}</em>)}
-                </span>
-              </button>
-            ))}
-            {!matches.length ? <p>{query ? "По этому запросу подходящие позиции не найдены." : "Автоматические рекомендации не найдены."}</p> : null}
-          </div>
-          <button className="inventory-ppe-norm-show-other" onClick={() => setShowOther((current) => !current)} type="button">
-            {showOther ? "Показывать только подходящие" : "Показать остальные позиции для ручного выбора"}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function formatDate(value: string | null) {
   if (!value) return "не указано";
   return new Intl.DateTimeFormat("ru-RU").format(new Date(`${value}T00:00:00`));
 }
+
+function isReady(row: InventoryPpeNormSetDto) { return row.status === "active" && !row.requiresReview && Boolean(row.readiness?.isReady); }

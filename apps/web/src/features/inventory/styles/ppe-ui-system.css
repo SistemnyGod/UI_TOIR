@@ -1,5 +1,4 @@
-.inventory-web-shell,
-.ppe-ui-modal-backdrop {
+.inventory-web-shell {
   --ppe-ui-bg: var(--inventory-bg, #f6f9fe);
   --ppe-ui-surface: var(--inventory-card, #fff);
   --ppe-ui-surface-soft: var(--inventory-card-soft, #f7faff);
@@ -111,7 +110,6 @@
 }
 .ppe-ui-button:disabled { cursor: not-allowed; opacity: .55; transform: none; }
 .ppe-ui-button:focus-visible,
-.ppe-ui-modal :is(input, select, textarea, button):focus-visible,
 .ppe-v2-screen :is(input, select, textarea, button, summary):focus-visible,
 .ppe-issue-workflow :is(input, select, textarea, button):focus-visible {
   outline: 3px solid rgb(37 99 235 / 24%);
@@ -119,34 +117,6 @@
 }
 .ppe-ui-button-spinner { animation: ppe-ui-spin .8s linear infinite; }
 .ppe-ui-button-label { min-width: 0; overflow-wrap: anywhere; }
-
-.ppe-ui-modal-backdrop {
-  background: rgb(15 30 56 / 48%);
-  overscroll-behavior: contain;
-}
-.ppe-ui-modal {
-  background: var(--ppe-ui-surface);
-  border: 1px solid var(--ppe-ui-border-strong);
-  border-radius: var(--ppe-ui-radius-modal);
-  box-shadow: var(--ppe-ui-shadow-modal);
-  color: var(--ppe-ui-text);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-.ppe-ui-modal-head {
-  background: var(--ppe-ui-surface);
-  border-bottom-color: var(--ppe-ui-border);
-  gap: 16px;
-  padding: 16px 18px;
-}
-.ppe-ui-modal-head > div { min-width: 0; }
-.ppe-ui-modal-head h2 { color: var(--ppe-ui-text); font-size: 20px; overflow-wrap: anywhere; }
-.ppe-ui-modal-head p { color: var(--ppe-ui-muted); line-height: 1.4; }
-.ppe-ui-modal-body { min-height: 0; overflow: auto; }
-.ppe-ui-modal-actions {
-  background: var(--ppe-ui-surface);
-  border-top-color: var(--ppe-ui-border);
-  padding: 12px 18px;
-}
 
 .ppe-v2-screen,
 .ppe-issue-workflow {
@@ -237,8 +207,7 @@
 .ppe-issue-mobile-row,
 .ppe-issue-set-list article,
 .ppe-issue-set-preview,
-.ppe-v2-selected-item,
-.ppe-v2-operation-summary > div {
+.ppe-v2-selected-item{
   border-radius: var(--ppe-ui-radius-control);
 }
 .ppe-v2-kpis > span { background:transparent; border:0; border-radius:0; }
@@ -286,23 +255,6 @@
   .ppe-v2-screen .ppe-v2-employee-identity h2 { font-size:18px; }
   .ppe-ui-button:not(.is-compact):not(.is-link) { min-height: 44px; }
   .ppe-ui-button.is-icon { height: 44px; min-height: 44px; min-width: 44px; width: 44px; }
-  .ppe-ui-modal-backdrop { padding: 0; }
-  .ppe-ui-modal {
-    border: 0;
-    border-radius: 0;
-    height: 100dvh;
-    max-height: 100dvh;
-    width: 100vw;
-  }
-  .ppe-ui-modal-head { padding: 12px 13px; }
-  .ppe-ui-modal-head h2 { font-size: 18px; }
-  .ppe-ui-modal-actions {
-    display: grid;
-    gap: 8px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  }
-  .ppe-ui-modal-actions .ppe-ui-button { width: 100%; }
   .ppe-v2-table-wrap:has(.ppe-v2-responsive-table) { overflow: visible; }
   .ppe-v2-responsive-table { min-width: 0; }
   .ppe-v2-responsive-table tr {
@@ -312,12 +264,7 @@
   }
 }
 
-@media (max-width: 380px) {
-  .ppe-ui-modal-actions { grid-template-columns: 1fr; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .ppe-ui-button,
-  .ppe-ui-modal { transition: none; }
+  .ppe-ui-button { transition: none; }
   .ppe-ui-button-spinner { animation-duration: 1.6s; }
 }

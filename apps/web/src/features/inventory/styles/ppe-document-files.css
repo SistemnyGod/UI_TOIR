@@ -1,0 +1,15 @@
+.ppe-document-file-state { margin: 0; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); background: var(--ui-surface-muted); color: var(--ui-muted); font-size: 13px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.ppe-document-screen .ppe-document-file-error, .ppe-prepared-pdf .field-error { margin: 0; padding: 10px 12px; color: var(--ui-danger); background: var(--ui-danger-soft); border-radius: var(--ui-radius-control); font-size: 13px; line-height: 1.5; font-weight: 400; overflow-wrap: anywhere; }
+.ppe-prepared-pdf { min-width: 0; display: grid; gap: 12px; padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-card); background: var(--ui-surface); }
+.ppe-prepared-pdf-head { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.ppe-prepared-pdf-head strong { color: var(--ui-text); font-size: 15px; font-weight: 600; }
+.ppe-prepared-pdf-head p { margin: 4px 0 0; color: var(--ui-muted); font-size: 13px; font-weight: 400; line-height: 1.5; }
+.ppe-prepared-pdf-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ppe-prepared-pdf-actions .ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.ppe-prepared-pdf .ppe-document-preview { display: block; width: 100%; min-width: 0; height: 560px; margin: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-control); }
+@media (max-width: 767px) {
+  .ppe-prepared-pdf { padding: 12px; }
+  .ppe-prepared-pdf-head, .ppe-prepared-pdf-actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .ppe-prepared-pdf-actions .ui-button { min-height: 44px; white-space: normal; text-align: center; }
+  .ppe-prepared-pdf .ppe-document-preview { height: 420px; }
+}

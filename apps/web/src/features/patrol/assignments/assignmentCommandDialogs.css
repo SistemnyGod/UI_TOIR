@@ -1,0 +1,36 @@
+/* Command editors use ModalShell's single scroll region and pinned actions. */
+.assignment-command-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.modal-shell.assign-am-complete-modal .modal-shell-actions { margin: 0; }
+.assign-am-complete-modal .assign-am-complete-summary,
+.assign-am-complete-modal .assign-am-modal-grid,
+.assign-am-complete-modal .assign-am-complete-checklist { margin-inline: 0; }
+.assign-am-complete-modal .assign-am-complete-summary { margin-top: 0; padding: 10px 12px; border-radius: var(--radius-control); background: var(--ui-blue-soft); }
+.assign-am-complete-modal .assign-am-modal-grid { gap: 12px; }
+.assign-am-complete-modal .assign-am-field { min-width: 0; color: var(--ui-muted); font-weight: 600; }
+.assign-am-complete-modal .assign-am-field :is(input, select, textarea) { min-width: 0; width: 100%; font-size: 13px; font-weight: 500; line-height: 1.45; }
+.assign-am-complete-modal .modal-shell-header p { font-weight: 500; line-height: 1.4; }
+.assign-am-complete-modal .assign-am-field small { overflow-wrap: anywhere; }
+.assign-am-complete-modal .assign-am-point-grid { gap: 10px; }
+.assign-am-complete-modal .assign-am-complete-checklist .assign-am-list { max-height: none; overflow: visible; }
+.assign-am-complete-modal details.assignment-complete-point { display: block; padding: 10px 12px; min-width: 0; border: 1px solid var(--ui-border); background: var(--ui-surface); border-radius: var(--radius-control); }
+.assignment-complete-point > summary { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 6px; align-items: center; cursor: pointer; min-height: 44px; color: var(--ui-text); padding-block: 6px; overflow-wrap: anywhere; }
+.assignment-complete-point > summary::before { content: ""; grid-column: 1; grid-row: 1 / 3; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--ui-blue); }
+.assignment-complete-point[open] > summary::before { transform: rotate(90deg); }
+.assignment-complete-point > summary::-webkit-details-marker { display: none; }
+.assignment-complete-point > summary strong { font-size: 14px; font-weight: 600; }
+.assignment-complete-point > summary small { grid-column: 2; display: block; color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.assignment-complete-point[open] > summary { margin-bottom: 8px; border-bottom: 1px solid var(--ui-border); }
+.assignment-photo-picker { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-blue-soft); color: var(--ui-blue); cursor: pointer; }
+.assign-am-complete-modal .assignment-photo-picker input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; min-height: 0; padding: 0; }
+.assignment-photo-picker:focus-within { outline: 2px solid var(--ui-blue); outline-offset: 2px; }
+.assign-am-complete-modal .assignment-photo-picker > span { color: var(--ui-blue); font-weight: 500; }
+.assign-am-complete-modal .assignment-photo-status { color: var(--ui-blue); }
+.assignment-prepared-photos { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.assignment-prepared-photos button { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; overflow-wrap: anywhere; border: 1px solid var(--ui-border); border-radius: var(--radius-control); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: 12px; font-weight: 500; padding: 6px; cursor: pointer; }
+.assignment-prepared-photos button > span { display: inline; color: var(--ui-muted); }
+.assign-am-cancel-modal .patrol-cancel-modal-field { margin-block: 12px; }
+@media (max-width: 760px) {
+  .assign-am-complete-modal .assign-am-modal-grid,
+  .assign-am-complete-modal .assign-am-point-grid { grid-template-columns: minmax(0, 1fr); }
+  .assign-am-complete-modal .assign-am-complete-checklist { padding: 12px; }
+}

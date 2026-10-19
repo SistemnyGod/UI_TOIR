@@ -42,8 +42,6 @@
 .ppe-kit-line > label { position:relative; padding-bottom:18px; }
 .ppe-kit-line > .ppe-line-duration > small { position:absolute; bottom:0; margin:0; white-space:nowrap; font-size:11px; }
 .ppe-kit-line-actions { display:flex; align-items:center; gap:4px; padding-top:20px; }
-.ppe-line-reason { display:grid; gap:8px; margin-top:12px; }
-.ppe-line-reason textarea { min-width:0; width:100%; border:1px solid #bdcbdc; border-radius:8px; padding:10px; font:inherit; }
 @media(min-width:1100px) { .ppe-kit > .ppe-document-lines { overflow-x:auto; } .ppe-kit > .ppe-document-lines > section { min-width:1100px; } }
 @media(max-width:1099px) { .ppe-document-lines .ppe-kit-line { grid-template-columns:repeat(3,minmax(0,1fr)); } .ppe-document-lines .ppe-kit-line > .ppe-kit-item { grid-column:1/-1; padding-top:0; } .ppe-kit-line-actions { padding-top:18px; justify-content:flex-end; } }
 
@@ -54,19 +52,6 @@
 .ppe-ref-modal { width:min(1120px,calc(100vw - 32px)); max-width:none; font:14px/1.45 system-ui,sans-serif; color:#1e293b; }
 .ppe-ref-modal .modal-shell-body { min-height:0; max-height:70dvh; overflow:auto; }
 .ppe-ref-modal .modal-shell-actions { flex-wrap:wrap; gap:12px; }
-.ppe-picker-filters { display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; margin-bottom:16px; }
-.ppe-picker-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
-.ppe-product-tile { position:relative; min-width:0; display:flex; align-items:flex-start; flex-direction:column; gap:4px; text-align:left; padding:10px 12px; border:1px solid #c4d0df; border-radius:8px; background:#fff; color:#1e293b; font:inherit; cursor:pointer; }
-.ppe-product-tile > svg { position:absolute; top:10px; right:10px; width:22px; height:22px; margin:0; color:#64748b; }
-.ppe-product-tile > strong { padding-right:30px; font-size:14px; font-weight:600; line-height:1.3; }
-.ppe-product-tile > b { margin-top:auto; font-size:14px; }
-.ppe-product-tile .ppe-tile-standards { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35; }
-.ppe-product-tile small { color:#52627a; font-size:12px; }
-.ppe-product-tile.is-selected { border-color:#0865db; box-shadow:inset 0 0 0 1px #0865db; background:#f5f9ff; }
-.ppe-product-tile:focus-visible { outline:3px solid #0865db; outline-offset:2px; }
-.ppe-picker-selected { display:grid; gap:12px; margin-top:16px; }
-.ppe-picker-selected section { border:1px solid #c4d0df; border-radius:8px; padding:14px; }
-.ppe-picker-selected .ppe-ref-fields { grid-template-columns:repeat(5,minmax(0,1fr)); margin-top:12px; }
 .ppe-template-modal { width:min(600px,calc(100vw - 32px)); }
 .ppe-template-modal fieldset { border:1px solid #d8e0e8; margin:16px 0; border-radius:8px; }
 .ppe-template-modal fieldset label { display:flex; align-items:center; padding:8px 0; }
@@ -82,26 +67,7 @@
 .ppe-viewer-toolbar strong { margin-right:auto; }
 .ppe-viewer-toolbar label { display:flex; align-items:center; gap:8px; font-size:12px; }
 .ppe-paper-canvas { padding:20px; max-width:100%; overflow:auto; }
-.ppe-print-paper { color:#000; background:#fff; font:clamp(10px,1vw,14px)/1.3 "Times New Roman",serif; width:100%; max-width:794px; margin:auto; padding:5%; min-height:600px; box-shadow:0 2px 8px #0002; }
-.ppe-print-paper h3 { font:700 1.25em/1.3 "Times New Roman",serif; text-align:center; margin:0 0 22px; color:#000; }
-.ppe-print-metadata { display:grid; grid-template-columns:1.6fr 1fr; gap:18px; margin-bottom:24px; }
-.ppe-print-metadata table { width:100%; border-collapse:collapse; }
-.ppe-print-metadata th { width:47%; text-align:left; padding:5px 8px 5px 0; font-weight:700; vertical-align:top; }
-.ppe-print-metadata td { border-bottom:1px solid #333; padding:5px 0; vertical-align:top; }
-.ppe-print-basis { margin:20px 0; }
-.ppe-print-grid { border-collapse:collapse; table-layout:fixed; width:100%; }
-.ppe-print-grid th,.ppe-print-grid td { border:1px solid #333; padding:5px; overflow-wrap:anywhere; vertical-align:middle; height:24px; color:#000; background:#fff; }
-.ppe-print-grid th:first-child { width:49%; }
-.ppe-print-grid th { text-align:center; font-weight:700; }
-.ppe-print-sign { margin-top:28px; }
-.ppe-print-paper.is-landscape { max-width:1123px; min-height:480px; }
-.ppe-print-paper.is-landscape .ppe-print-grid th:first-child { width:15%; }
-.ppe-print-paper.is-landscape .ppe-print-grid th:nth-child(2) { width:15%; }
-.actual-size .ppe-print-paper { width:794px; max-width:none; font-size:14px; }
-.actual-size .ppe-print-paper.is-landscape { width:1123px; }
 .ppe-viewer-note { padding:0 16px; }
-.ppe-full-paper { width:min(1400px,calc(100vw - 32px)); }
-.ppe-full-paper .ppe-print-paper { font-size:14px; }
 @media(max-width:1100px) { .ppe-employee-layout { grid-template-columns:minmax(0,1fr); } .ppe-review-layout { grid-template-columns:180px minmax(0,1fr); } }
 @media(max-width:767px) {
  .ppe-document-screen { padding:12px; }
@@ -112,39 +78,12 @@
  .ppe-document-lines .ppe-kit-line { grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; }
  .ppe-kit-toolbar label { width:100%; }
  .ppe-ref-modal { width:calc(100vw - 16px); }
- .ppe-picker-filters { grid-template-columns:minmax(0,1fr); }
- .ppe-picker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
- .ppe-product-tile { padding:10px; }
- .ppe-picker-selected .ppe-ref-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .ppe-review-layout { grid-template-columns:minmax(0,1fr); }
  .ppe-document-picker { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px; }
  .ppe-document-picker h2,.ppe-document-picker p { grid-column:1/-1; margin:0; }
  .ppe-document-picker button { margin:0; padding:10px; }
  .ppe-document-picker button svg { width:22px; height:22px; }
  .ppe-paper-canvas { padding:8px; }
- .ppe-print-paper { min-height:400px; }
- .ppe-print-metadata { gap:8px; }
  .ppe-ref-modal input:not([type=radio]),.ppe-ref-modal select,.ppe-ref-fields input,.ppe-ref-fields select { min-height:44px; font-size:16px; }
-}
-.ppe-actions-modal { width:min(460px,calc(100vw - 24px)); } .ppe-actions-section { padding:12px 0; border-bottom:1px solid #e1e7ee; } .ppe-actions-section:last-child { border-bottom:0; } .ppe-actions-section p { font-size:13px; line-height:1.5; color:#52627a; margin:8px 0; } .ppe-actions-section summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-weight:500; } .ppe-actions-section label { display:grid; gap:6px; margin-bottom:12px; } .ppe-actions-section input { width:100%; min-height:44px; border:1px solid #bdcbdc; border-radius:8px; padding:8px; }
-.ppe-ref-modal.ppe-picker-split { width:min(1440px,calc(100vw - 32px)); max-width:1440px; }
-.ppe-picker-columns { display:grid; grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr); gap:20px; min-height:0; }
-.ppe-picker-catalog,.ppe-picker-editor { min-width:0; max-height:calc(100dvh - 240px); overflow:auto; overscroll-behavior:contain; padding:2px 4px; }
-.ppe-picker-editor { border-left:1px solid #dce5f0; padding-left:20px; }
-.ppe-picker-catalog .ppe-picker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-.ppe-picker-catalog .ppe-picker-filters { grid-template-columns:1fr 1fr; }
-.ppe-picker-catalog .ppe-picker-filters > label:first-child { grid-column:1/-1; }
-.ppe-picker-editor .ppe-picker-selected { margin-top:12px; }
-.ppe-picker-editor .ppe-ref-fields { grid-template-columns:repeat(3,minmax(0,1fr)); }
-.ppe-picker-tabs { display:none; }
-.ppe-picker-columns h3 { margin:0 0 12px; font-size:16px; font-weight:600; }
-@media(max-width:900px) {
- .ppe-picker-tabs { display:flex; gap:8px; margin-bottom:12px; }
- .ppe-picker-tabs button { flex:1; }
- .ppe-picker-tabs button[aria-pressed="true"] { background:#e0edff; border-color:#0865db; color:#0759c7; }
- .ppe-picker-columns { display:block; }
- .ppe-picker-columns.show-catalog .ppe-picker-editor,.ppe-picker-columns.show-selected .ppe-picker-catalog { display:none; }
- .ppe-picker-catalog,.ppe-picker-editor { max-height:none; overflow:visible; border:0; padding:0; }
- .ppe-picker-editor .ppe-ref-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 .ppe-kit-line-actions .ppe-document-icon:first-child { color:#52627a; }

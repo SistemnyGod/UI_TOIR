@@ -1,5 +1,7 @@
 export const mockPpeIssueDocuments = {
     async getPpeKitTemplates() { return []; },
+    async getLegacyPpeKitTemplates() { return []; },
+    async bindLegacyPpeKitTemplate() { throw new Error("Привязка шаблонов недоступна в демонстрационном режиме"); },
     async createPpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
     async updatePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
     async renamePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },

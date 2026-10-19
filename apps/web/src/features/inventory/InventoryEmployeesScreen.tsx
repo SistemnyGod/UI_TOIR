@@ -13,10 +13,8 @@ import {
   Upload,
   UserPlus,
   Users,
-  X,
 } from "lucide-react";
 import type {
-  CreateEmployeeDto,
   InventoryEmployeeDto,
   InventoryEmployeeImportPreviewDto,
   InventoryEmployeeImportResultDto,
@@ -24,7 +22,9 @@ import type {
   UpdateEmployeeDto,
 } from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
-import { PpeMovementHistoryPanel } from "./PpeMovementHistoryPanel";
+import { EmployeePpeHistoryDialog } from "./employees/EmployeePpeHistoryDialog";
+import { EmployeeFormDialog, type EmployeeFormState, type EmployeeFormMode } from "./employees/EmployeeFormDialog";
+import { ConfirmDialog, ImportPreviewDialog, ImportResultDialog } from "./employees/EmployeeImportDialogs";
 import "./inventoryWeb.css";
 
 type InventoryEmployeesScreenProps = {
@@ -35,25 +35,12 @@ type InventoryEmployeesScreenProps = {
   onReload: () => Promise<void>;
 };
 
-type EmployeeFormMode = "create" | "edit";
-
-type EmployeeFormState = CreateEmployeeDto;
-
-const emptyEmployeeForm: EmployeeFormState = {
-  birthDate: null,
-  department: "",
-  employeeGroup: "",
-  fullName: "",
-  hasMobileAccount: false,
-  hiredAt: new Date().toISOString().slice(0, 10),
-  personnelNo: "",
-  position: "",
-  shift: "Пятидневка",
-  status: "active",
-};
-
 export function InventoryEmployeesScreen({ employees, error, loading = false, onNotify }: InventoryEmployeesScreenProps) {
   const inventoryRepository = useInventoryRepository();
+  const mounted = useRef(true);
+  const mutationLocks = useRef(new Set<string>());
+  const previewGeneration = useRef(0);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; previewGeneration.current += 1; }; }, []);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -141,71 +128,67 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
   async function previewImportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
-    if (!file) return;
-
+    if (!file || importing) return;
+    const generation = ++previewGeneration.current;
+    setPreviewing(true);
     try {
-      setPreviewing(true);
-      setImportFile(file);
-      setImportPreview(await inventoryRepository.previewEmployeesImport(file));
-    } catch (previewError) {
-      setImportFile(null);
-      setImportPreview(null);
-      onNotify(previewError instanceof Error ? previewError.message : "Не удалось прочитать файл сотрудников");
+      const preview = await inventoryRepository.previewEmployeesImport(file);
+      if (!mounted.current || generation !== previewGeneration.current) return;
+      setImportFile(file); setImportPreview(preview);
+    } catch (failure) {
+      if (mounted.current && generation === previewGeneration.current) onNotify(failure instanceof Error ? failure.message : "Не удалось прочитать файл сотрудников");
     } finally {
-      setPreviewing(false);
+      if (mounted.current && generation === previewGeneration.current) setPreviewing(false);
     }
   }
 
   async function confirmImport() {
-    if (!importFile) return;
-
+    if (!importFile || mutationLocks.current.has("import")) return false;
+    mutationLocks.current.add("import"); setImporting(true);
     try {
-      setImporting(true);
       const result = await inventoryRepository.importEmployees(importFile, importPreview?.previewToken);
-      setImportResult(result);
-      setImportPreview(null);
-      setImportFile(null);
+      if (!mounted.current) return false;
+      setImportResult(result); setImportPreview(null); setImportFile(null);
       onNotify("Импорт сотрудников выполнен");
-      await reload();
-    } catch (importError) {
-      onNotify(importError instanceof Error ? importError.message : "Не удалось импортировать сотрудников");
+      void reload();
+      return true;
     } finally {
-      setImporting(false);
+      mutationLocks.current.delete("import");
+      if (mounted.current) setImporting(false);
     }
   }
 
   async function archiveEmployee(row: InventoryEmployeeDto) {
+    if (mutationLocks.current.has("archive")) return false;
+    mutationLocks.current.add("archive"); setBusyId(row.id);
     try {
-      setBusyId(row.id);
       await inventoryRepository.archiveEmployee(row.id);
-      setArchiveCandidate(null);
-      onNotify("Сотрудник перенесен в архив учета");
-      await reload();
-    } catch (archiveError) {
-      onNotify(archiveError instanceof Error ? archiveError.message : "Не удалось архивировать сотрудника");
+      if (!mounted.current) return false;
+      setArchiveCandidate(null); onNotify("Сотрудник перенесён в архив учёта");
+      void reload();
+      return true;
     } finally {
-      setBusyId("");
+      mutationLocks.current.delete("archive");
+      if (mounted.current) setBusyId("");
     }
   }
 
   async function saveEmployee(payload: EmployeeFormState) {
+    if (mutationLocks.current.has("employee")) return false;
+    mutationLocks.current.add("employee"); setSavingEmployee(true);
     try {
-      setSavingEmployee(true);
-      if (formMode === "edit" && formEmployee) {
-        await inventoryRepository.updateEmployee(formEmployee.id, payload as UpdateEmployeeDto);
-        onNotify("Карточка сотрудника обновлена");
-      } else {
-        await inventoryRepository.createEmployee(payload);
-        setStatus("active");
-        onNotify("Сотрудник создан");
-      }
-      setFormMode(null);
-      setFormEmployee(null);
-      await reload();
-    } catch (saveError) {
-      onNotify(saveError instanceof Error ? saveError.message : "Не удалось сохранить сотрудника");
+      const editing = formMode === "edit" && formEmployee;
+      if (editing) await inventoryRepository.updateEmployee(editing.id, payload as UpdateEmployeeDto);
+      else await inventoryRepository.createEmployee(payload);
+      if (!mounted.current) return false;
+      if (!editing) setStatus("active");
+      onNotify(editing ? "Карточка сотрудника обновлена" : "Сотрудник создан");
+      setFormMode(null); setFormEmployee(null);
+      void reload();
+      return true;
     } finally {
-      setSavingEmployee(false);
+      mutationLocks.current.delete("employee");
+      if (mounted.current) setSavingEmployee(false);
     }
   }
 
@@ -244,10 +227,10 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
       </header>
 
       {serverError ? <EmployeeState kind="error" title="API сотрудников не ответил" text={serverError} /> : null}
-      {isLoading ? <EmployeeState kind="loading" title="Загрузка сотрудников" text="Получаем сотрудников бухгалтерского модуля." /> : null}
+      <div className="inventory-employees-refresh" role="status">{isLoading ? rowsState ? "Обновляем список. Показанные данные остаются доступны." : "Загружаем сотрудников…" : ""}</div>
+      {serverError ? <button className="button ghost" onClick={() => void reload()} type="button">Повторить загрузку</button> : null}
 
-      {!isLoading && !serverError ? (
-        <>
+      <>
           <section className="inventory-employees-kpis" aria-label="Сводка сотрудников">
             <EmployeeKpi label="Всего в фильтре" value={total} />
             <EmployeeKpi label="На странице" tone="blue" value={rows.length} />
@@ -260,15 +243,15 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
               <Search size={17} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по ФИО, табельному, должности или подразделению" type="search" />
             </label>
-            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+            <select aria-label="Подразделение" value={department} onChange={(event) => setDepartment(event.target.value)}>
               <option value="all">Все подразделения</option>
               {visibleDepartments.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-            <select value={employeeGroup} onChange={(event) => setEmployeeGroup(event.target.value)}>
+            <select aria-label="Группа сотрудников" value={employeeGroup} onChange={(event) => setEmployeeGroup(event.target.value)}>
               <option value="all">Все группы</option>
               {visibleGroups.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <select aria-label="Статус сотрудников" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="all">Все статусы</option>
               <option value="active">Активные</option>
               <option value="archived">Архив</option>
@@ -279,7 +262,7 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
           </section>
 
           <div className="inventory-employees-workspace">
-            <section className="inventory-employees-table-card">
+            <section className="inventory-employees-table-card" aria-busy={isLoading}>
               <div className="inventory-employees-panel-head">
                 <div>
                   <h2>Список сотрудников</h2>
@@ -287,7 +270,7 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
                 </div>
                 <EmployeesPager page={page} pageCount={pageCount} onPage={setPage} />
               </div>
-              <EmployeesTable
+              {!rowsState && isLoading ? <EmployeeState kind="loading" title="Загрузка сотрудников" text="Получаем справочник." /> : <EmployeesTable
                 busyId={busyId}
                 onArchive={setArchiveCandidate}
                 onEdit={openEdit}
@@ -295,7 +278,7 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
                 onSelect={setSelectedEmployeeId}
                 rows={rows}
                 selectedId={selectedEmployee?.id ?? ""}
-              />
+              />}
             </section>
 
             <EmployeeInspector
@@ -305,8 +288,7 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
               onOpenMovements={setMovementEmployee}
             />
           </div>
-        </>
-      ) : null}
+      </>
 
       {importPreview ? (
         <ImportPreviewDialog
@@ -316,7 +298,7 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
             setImportPreview(null);
             setImportFile(null);
           }}
-          onConfirm={() => void confirmImport()}
+          onConfirm={confirmImport}
           preview={importPreview}
         />
       ) : null}
@@ -327,12 +309,13 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
           confirmLabel="Архивировать"
           message="Сотрудник будет скрыт из активного списка бухгалтерии. История выдач, СИЗ и операций останется без изменений."
           onCancel={() => setArchiveCandidate(null)}
-          onConfirm={() => void archiveEmployee(archiveCandidate)}
+          onConfirm={() => archiveEmployee(archiveCandidate)}
           title={`Архивировать ${archiveCandidate.fullName}?`}
         />
       ) : null}
       {formMode ? (
         <EmployeeFormDialog
+          key={`${formMode}:${formEmployee?.id ?? "new"}`}
           busy={savingEmployee}
           employee={formEmployee}
           mode={formMode}
@@ -340,122 +323,14 @@ export function InventoryEmployeesScreen({ employees, error, loading = false, on
             setFormMode(null);
             setFormEmployee(null);
           }}
-          onConfirm={(payload) => void saveEmployee(payload)}
+          onConfirm={saveEmployee}
           referenceOptions={{ departments, employeeGroups, positions }}
         />
       ) : null}
       {movementEmployee ? (
-        <EmployeePpeMovementDialog employee={movementEmployee} onClose={() => setMovementEmployee(null)} />
+        <EmployeePpeHistoryDialog employee={movementEmployee} onClose={() => setMovementEmployee(null)} />
       ) : null}
     </section>
-  );
-}
-
-function EmployeeFormDialog({
-  busy,
-  employee,
-  mode,
-  onCancel,
-  onConfirm,
-  referenceOptions,
-}: {
-  busy: boolean;
-  employee: InventoryEmployeeDto | null;
-  mode: EmployeeFormMode;
-  onCancel: () => void;
-  onConfirm: (payload: EmployeeFormState) => void;
-  referenceOptions: {
-    departments: string[];
-    employeeGroups: string[];
-    positions: string[];
-  };
-}) {
-  const [form, setForm] = useState<EmployeeFormState>(() => employee ? employeeToForm(employee) : emptyEmployeeForm);
-  const canSubmit = form.fullName.trim().length > 0 && !busy;
-  const patch = (changes: Partial<EmployeeFormState>) => setForm((current) => ({ ...current, ...changes }));
-
-  return (
-    <div className="inventory-employees-dialog-backdrop" onMouseDown={onCancel} role="presentation">
-      <section className="inventory-employees-dialog inventory-employees-editor" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={mode === "edit" ? "Редактирование сотрудника" : "Создание сотрудника"}>
-        <header>
-          <div>
-            <p>Справочник сотрудников</p>
-            <h2>{mode === "edit" ? "Редактирование сотрудника" : "Создание сотрудника"}</h2>
-          </div>
-          <button className="inventory-employees-icon-button" onClick={onCancel} type="button" aria-label="Закрыть"><X size={18} /></button>
-        </header>
-
-        <div className="inventory-employees-form-grid">
-          <label className="is-wide">
-            <span>ФИО</span>
-            <input autoFocus value={form.fullName} onChange={(event) => patch({ fullName: event.target.value })} placeholder="Иванов Иван Иванович" />
-          </label>
-          <label>
-            <span>Табельный номер</span>
-            <input value={form.personnelNo} onChange={(event) => patch({ personnelNo: event.target.value })} placeholder="Можно оставить пустым" />
-          </label>
-          <label>
-            <span>Статус</span>
-            <select value={form.status} onChange={(event) => patch({ status: event.target.value })}>
-              <option value="active">Активен</option>
-              <option value="inactive">Неактивен</option>
-              <option value="disabled">Отключен</option>
-              <option value="archived">Архив</option>
-            </select>
-          </label>
-          <label>
-            <span>Должность</span>
-            <input list="inventory-employee-positions" value={form.position} onChange={(event) => patch({ position: event.target.value })} placeholder="Сотрудник" />
-          </label>
-          <label>
-            <span>Подразделение</span>
-            <input list="inventory-employee-departments" value={form.department} onChange={(event) => patch({ department: event.target.value })} placeholder="Не указано" />
-          </label>
-          <label>
-            <span>Основная группа</span>
-            <input list="inventory-employee-groups" value={form.employeeGroup} onChange={(event) => patch({ employeeGroup: event.target.value })} placeholder="Атом / Атом Экология / Подрядчики" />
-          </label>
-          <label>
-            <span>Смена</span>
-            <select value={form.shift} onChange={(event) => patch({ shift: event.target.value })}>
-              <option value="Пятидневка">Пятидневка</option>
-              <option value="День">День</option>
-              <option value="Ночь">Ночь</option>
-              <option value="11-часовая">11-часовая</option>
-              <option value="Индивидуальная">Индивидуальная</option>
-            </select>
-          </label>
-          <label>
-            <span>Дата приема</span>
-            <input value={form.hiredAt ?? ""} onChange={(event) => patch({ hiredAt: event.target.value || null })} type="date" />
-          </label>
-          <label>
-            <span>Дата рождения</span>
-            <input value={form.birthDate ?? ""} onChange={(event) => patch({ birthDate: event.target.value || null })} type="date" />
-          </label>
-        </div>
-        <datalist id="inventory-employee-positions">
-          {referenceOptions.positions.map((value) => <option key={value} value={value} />)}
-        </datalist>
-        <datalist id="inventory-employee-departments">
-          {referenceOptions.departments.map((value) => <option key={value} value={value} />)}
-        </datalist>
-        <datalist id="inventory-employee-groups">
-          {referenceOptions.employeeGroups.map((value) => <option key={value} value={value} />)}
-        </datalist>
-
-        <p className="inventory-employees-dialog-text">
-          Должность, подразделение и группа можно ввести вручную. После сохранения они будут доступны в поиске и фильтрах справочника.
-        </p>
-
-        <div className="inventory-employees-dialog-actions">
-          <button className="button ghost" disabled={busy} onClick={onCancel} type="button">Отмена</button>
-          <button className="button primary" disabled={!canSubmit} onClick={() => onConfirm(form)} type="button">
-            {busy ? "Сохраняем..." : mode === "edit" ? "Сохранить изменения" : "Создать"}
-          </button>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -498,7 +373,7 @@ function EmployeesTable({
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className={row.id === selectedId ? "is-selected" : undefined} onClick={() => onSelect(row.id)}>
-              <td>
+              <td data-label="Сотрудник">
                 <div className="inventory-employees-person">
                   <span>{getInitials(row.fullName)}</span>
                   <div>
@@ -507,13 +382,13 @@ function EmployeesTable({
                   </div>
                 </div>
               </td>
-              <td>{row.personnelNo || "не указан"}</td>
-              <td>{row.position || "не указана"}</td>
-              <td>{row.department || "не указано"}</td>
-              <td>{row.employeeGroup || "не указана"}</td>
-              <td>{formatDateOnly(row.hiredAt)}</td>
-              <td><span className={`inventory-employees-status ${row.status}`}>{employeeStatusLabel(row.status)}</span></td>
-              <td>
+              <td data-label="Табельный">{row.personnelNo || "не указан"}</td>
+              <td data-label="Должность">{row.position || "не указана"}</td>
+              <td data-label="Подразделение">{row.department || "не указано"}</td>
+              <td data-label="Группа">{row.employeeGroup || "не указана"}</td>
+              <td data-label="Приём">{formatDateOnly(row.hiredAt)}</td>
+              <td data-label="Статус"><span className={`inventory-employees-status ${row.status}`}>{employeeStatusLabel(row.status)}</span></td>
+              <td data-label="Действия">
                 <div className="inventory-employees-row-actions" onClick={(event) => event.stopPropagation()}>
                   <button className="button ghost" onClick={() => onEdit(row)} type="button"><Edit3 size={14} /> Изменить</button>
                   <button className="button ghost" onClick={() => onOpenMovements(row)} type="button"><Eye size={14} /> История</button>
@@ -587,32 +462,6 @@ function EmployeeInspector({
   );
 }
 
-function EmployeePpeMovementDialog({ employee, onClose }: { employee: InventoryEmployeeDto; onClose: () => void }) {
-  return (
-    <div className="inventory-employees-dialog-backdrop" onMouseDown={onClose} role="presentation">
-      <section className="inventory-employees-dialog inventory-employees-movements-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="История СИЗ сотрудника">
-        <header>
-          <div>
-            <p>История движения СИЗ</p>
-            <h2>{employee.fullName}</h2>
-          </div>
-          <button className="inventory-employees-icon-button" onClick={onClose} type="button" aria-label="Закрыть"><X size={18} /></button>
-        </header>
-        <PpeMovementHistoryPanel
-          employeeId={employee.id}
-          emptyText="По этому сотруднику пока нет выдач, возвратов или списаний СИЗ."
-          hideEmployee
-          pageSize={12}
-          title="Что выдавали под ответственность"
-        />
-        <div className="inventory-employees-dialog-actions">
-          <button className="button primary" onClick={onClose} type="button">Закрыть</button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function EmployeesPager({ onPage, page, pageCount }: { onPage: (page: number) => void; page: number; pageCount: number }) {
   return (
     <div className="inventory-employees-pager">
@@ -642,129 +491,6 @@ function EmployeeState({ kind, text, title }: { kind: "empty" | "error" | "loadi
   );
 }
 
-function ImportPreviewDialog({ busy, fileName, onCancel, onConfirm, preview }: { busy: boolean; fileName: string; onCancel: () => void; onConfirm: () => void; preview: InventoryEmployeeImportPreviewDto }) {
-  return (
-    <div className="inventory-employees-dialog-backdrop" onMouseDown={onCancel} role="presentation">
-      <section className="inventory-employees-dialog inventory-employees-dialog-wide" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Предпросмотр импорта сотрудников">
-        <header>
-          <div>
-            <p>Импорт сотрудников</p>
-            <h2>{fileName || "Файл сотрудников"}</h2>
-          </div>
-          <button className="inventory-employees-icon-button" onClick={onCancel} type="button" aria-label="Закрыть"><X size={18} /></button>
-        </header>
-        <div className="inventory-employees-import-summary">
-          <EmployeeKpi label="Строк" value={preview.rowsRead} />
-          <EmployeeKpi label="Новые" tone="green" value={preview.newRows} />
-          <EmployeeKpi label="Обновления" tone="blue" value={preview.updateRows} />
-          <EmployeeKpi label="Ошибки" tone="red" value={preview.errors.length} />
-        </div>
-        <div className="inventory-employees-import-references">
-          <div><strong>Новые должности</strong><p>{preview.newPositions.join(", ") || "нет"}</p></div>
-          <div><strong>Новые подразделения</strong><p>{preview.newDepartments.join(", ") || "нет"}</p></div>
-          <div><strong>Новые группы</strong><p>{preview.newGroups.join(", ") || "нет"}</p></div>
-        </div>
-        {preview.errors.length ? <EmployeeState kind="error" title="Есть ошибки импорта" text={preview.errors.slice(0, 3).join("; ")} /> : null}
-        <div className="inventory-employees-preview-table-wrap">
-          <table className="inventory-employees-preview-table">
-            <thead>
-              <tr>
-                <th>Строка</th>
-                <th>Действие</th>
-                <th>ФИО</th>
-                <th>Табельный</th>
-                <th>Должность</th>
-                <th>Подразделение</th>
-                <th>Группа</th>
-                <th>Ошибка</th>
-              </tr>
-            </thead>
-            <tbody>
-              {preview.rows.slice(0, 80).map((row) => (
-                <tr key={`${row.rowNumber}-${row.fullName}`} className={row.error ? "is-error" : undefined}>
-                  <td>{row.rowNumber}</td>
-                  <td><span className={`inventory-employees-change ${row.changeType}`}>{importChangeLabel(row.changeType)}</span></td>
-                  <td>{row.fullName}</td>
-                  <td>{row.personnelNo}</td>
-                  <td>{row.position}</td>
-                  <td>{row.department}</td>
-                  <td>{row.employeeGroup}</td>
-                  <td>{row.error || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <footer>
-          <button className="button ghost" disabled={busy} onClick={onCancel} type="button">Отмена</button>
-          <button className="button primary" disabled={busy || preview.errors.length > 0} onClick={onConfirm} type="button">{busy ? "Импорт..." : "Импортировать"}</button>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function ImportResultDialog({ onClose, result }: { onClose: () => void; result: InventoryEmployeeImportResultDto }) {
-  return (
-    <div className="inventory-employees-dialog-backdrop" onMouseDown={onClose} role="presentation">
-      <section className="inventory-employees-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Результат импорта сотрудников">
-        <header>
-          <div>
-            <p>Импорт завершен</p>
-            <h2>{result.rowsRead} строк обработано</h2>
-          </div>
-          <button className="inventory-employees-icon-button" onClick={onClose} type="button" aria-label="Закрыть"><X size={18} /></button>
-        </header>
-        <div className="inventory-employees-import-summary">
-          <EmployeeKpi label="Добавлено" tone="green" value={result.insertedRows} />
-          <EmployeeKpi label="Обновлено" tone="blue" value={result.updatedRows} />
-          <EmployeeKpi label="Пропущено" value={result.skippedRows} />
-          <EmployeeKpi label="Ошибки" tone="red" value={result.errors.length} />
-        </div>
-        <div className="inventory-employees-dialog-actions">
-          <button className="button primary" onClick={onClose} type="button">Закрыть</button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ConfirmDialog({ busy, confirmLabel, message, onCancel, onConfirm, title }: { busy: boolean; confirmLabel: string; message: string; onCancel: () => void; onConfirm: () => void; title: string }) {
-  return (
-    <div className="inventory-employees-dialog-backdrop" onMouseDown={onCancel} role="presentation">
-      <section className="inventory-employees-dialog is-narrow" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <div>
-            <p>Подтверждение</p>
-            <h2>{title}</h2>
-          </div>
-          <button className="inventory-employees-icon-button" onClick={onCancel} type="button" aria-label="Закрыть"><X size={18} /></button>
-        </header>
-        <p className="inventory-employees-dialog-text">{message}</p>
-        <div className="inventory-employees-dialog-actions">
-          <button className="button ghost" disabled={busy} onClick={onCancel} type="button">Отмена</button>
-          <button className="button primary" disabled={busy} onClick={onConfirm} type="button">{busy ? "Выполняем..." : confirmLabel}</button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function employeeToForm(employee: InventoryEmployeeDto): EmployeeFormState {
-  return {
-    birthDate: employee.birthDate,
-    department: employee.department,
-    employeeGroup: employee.employeeGroup,
-    fullName: employee.fullName,
-    hasMobileAccount: false,
-    hiredAt: employee.hiredAt,
-    personnelNo: employee.personnelNo,
-    position: employee.position,
-    shift: "Пятидневка",
-    status: employee.status || "active",
-  };
-}
-
 function uniqueValues(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"));
 }
@@ -777,15 +503,6 @@ function employeeStatusLabel(status: string) {
     inactive: "Неактивен",
   };
   return labels[status] ?? status;
-}
-
-function importChangeLabel(value: string) {
-  const labels: Record<string, string> = {
-    create: "Создать",
-    error: "Ошибка",
-    update: "Обновить",
-  };
-  return labels[value] ?? value;
 }
 
 function formatDateOnly(value?: string | null) {

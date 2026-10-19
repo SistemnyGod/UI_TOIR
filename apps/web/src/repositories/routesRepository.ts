@@ -50,7 +50,8 @@ export function updateLocalRoute(routes: RouteDirectoryItem[], routeId: string, 
 }
 
 export function deleteLocalRoute(routes: RouteDirectoryItem[], routeId: string) {
-  return routes.filter((route) => route.id !== routeId);
+  // Match the server's DELETE contract: routes are archived, not erased.
+  return routes.map((route) => route.id === routeId ? { ...route, status: "Архив" as const } : route);
 }
 
 export function createLocalRoutePoint(routes: RouteDirectoryItem[], routeId: string, payload: RoutePointFormPayload) {
@@ -129,7 +130,7 @@ export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}
     async updateRoute(routeId: string, payload: RouteFormPayload, expectedVersionNo?: number) {
       const route = await client.put<RouteDto, UpdateRouteDto>(`/api/v1/routes/${routeId}`, {
         ...mapRoutePayload(payload),
-        expectedVersionNo,
+        expectedVersionNo: payload.expectedVersionNo ?? expectedVersionNo,
       });
       return mapRoute(route);
     },

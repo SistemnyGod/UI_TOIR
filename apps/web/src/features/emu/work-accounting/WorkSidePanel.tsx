@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type { EmuDecisionDto, EmuEmployeeShiftSummaryDto, EmuWorkSessionDto } from "../../../api/contracts";
 import { buildApiUrl } from "../../../api/client";
 import type { EmuWorkspace } from "../../../hooks/useEmuWorkspace";
@@ -6,9 +6,10 @@ import { calculateLiveWorkSessionMinutes } from "../../../domain/emuWorkTime";
 import type { EmuEmployeeWorkload } from "../../../domain/emuWorkBoard";
 import { WorkSummary } from "./components/WorkSummary";
 import { DecisionList } from "./side/DecisionPanels";
-import { EmployeeWorkloadPanel } from "./side/EmployeeWorkloadPanel";
+import { EmployeeWorkloadPanel, type EmployeeWorkloadView } from "./side/EmployeeWorkloadPanel";
+import { WorkEmployeeActions } from "./components/WorkEmployeeActions";
 import { ShiftAdjustModal, ShiftSummaryPanel } from "./side/ShiftPanels";
-import { activeEmployeeStatus, employeeStatusLabel, employeeWorkloadLabel, formatEmployeeShortName, formatMinutes, initials, toDateInput } from "./workAccountingUtils";
+import { activeEmployeeStatus, employeeStatusLabel, employeeWorkloadLabel, formatMinutes, initials, toDateInput } from "./workAccountingUtils";
 import { Button } from "../../../shared/ui";
 
 export { ResolveDecisionModal } from "./side/DecisionPanels";
@@ -38,6 +39,10 @@ export function WorkSidePanel({
   selectedWork,
   workspace,
   workSessions,
+  onClearSelection,
+  onOpenWorkDetails,
+  workloadView,
+  onWorkloadViewChange,
 }: {
   canAdjustShift: boolean;
   canCreate: boolean;
@@ -63,6 +68,10 @@ export function WorkSidePanel({
   selectedWork?: EmuWorkSessionDto;
   workspace: EmuWorkspace;
   workSessions: EmuWorkSessionDto[];
+  onClearSelection: () => void;
+  onOpenWorkDetails: (id: string) => void;
+  workloadView: EmployeeWorkloadView;
+  onWorkloadViewChange: Dispatch<SetStateAction<EmployeeWorkloadView>>;
 }) {
   const [shiftSummary, setShiftSummary] = useState<EmuEmployeeShiftSummaryDto | null>(null);
   const [shiftLoading, setShiftLoading] = useState(false);
@@ -83,7 +92,7 @@ export function WorkSidePanel({
       .then((summary) => {
         if (!cancelled) {
           setShiftSummary(summary);
-          void workspace.actions.getDecisions("new");
+          void workspace.actions.getDecisions("new").catch(error => { if (!cancelled) onNotify(error instanceof Error ? error.message : "Не удалось обновить спорные ситуации. Показанные сведения сохранены."); });
         }
       })
       .catch((error) => {
@@ -106,7 +115,8 @@ export function WorkSidePanel({
     const workDecisions = decisions.filter((decision) => decision.workSessionId === selectedWork.id);
     return (
       <aside className="emu-panel emu-work-side-panel">
-        <WorkSummary work={selectedWork} />
+        <div className="emu-side-navigation"><Button variant="ghost" onClick={onClearSelection}>← Сотрудники</Button><Button variant="secondary" onClick={() => onOpenWorkDetails(selectedWork.id)}>Карточка</Button></div>
+        <WorkSummary work={selectedWork} showEmployees={false} now={now} />
         <DecisionList
           canResolveDecision={canResolveDecision}
           decisions={workDecisions}
@@ -140,25 +150,18 @@ export function WorkSidePanel({
             const employeeMinutes = liveMinutes.employeesById.get(employee.employeeId);
             const status = activeEmployeeStatus(employee);
             const label = employeeStatusLabel(status);
-            const isWorking = label === "Работает";
-            const isPaused = label === "На паузе" || status === "В ожидании" || status === "На другой работе";
-            const isFinished = Boolean(employee.finishedAt);
             return (
               <div className="emu-side-employee-card" key={employee.employeeId}>
                 <button onClick={() => onSelectEmployee(employee.employeeId)} type="button">
-                  <strong>{formatEmployeeShortName(employee.fullNameSnapshot)}</strong>
+                  <strong>{employee.fullNameSnapshot}</strong>
                   <span>{label}</span>
                   <small>работа {formatMinutes(employeeMinutes?.personalWorkMinutes ?? employee.workMinutes)} · пауза {formatMinutes(employeeMinutes?.personalPauseMinutes ?? employee.waitingMinutes + employee.otherWorkMinutes)}</small>
                   {employee.currentPauseReason ? <em>{employee.currentPauseReason}</em> : null}
                 </button>
-                {!selectedWork.completedAt ? (
-                  <div className="emu-side-employee-actions">
-                    {canPause && isWorking && !isFinished ? <button onClick={() => onPauseEmployee(selectedWork.id, employee.employeeId)} type="button">Пауза</button> : null}
-                    {canPause && isPaused && !isFinished ? <button onClick={() => onResumeEmployee(selectedWork.id, employee.employeeId)} type="button">Вернуть</button> : null}
-                    {canComplete && !isFinished ? <button onClick={() => onFinishEmployee(selectedWork.id, employee.employeeId)} type="button">Завершить участие</button> : null}
-                    {canUpdate && !isFinished ? <button className="danger" onClick={() => onMistakenEmployee(selectedWork.id, employee.employeeId)} type="button">Ошибочно</button> : null}
-                  </div>
-                ) : null}
+                {!selectedWork.completedAt && !selectedWork.deletedAt ? <WorkEmployeeActions employee={employee} permissions={{ canPause, canComplete, canUpdate }} onAction={(action, employeeId) => {
+                  const callbacks = { pause: onPauseEmployee, resume: onResumeEmployee, finishEmployee: onFinishEmployee, mistakenEmployee: onMistakenEmployee };
+                  callbacks[action](selectedWork.id, employeeId);
+                }} /> : null}
               </div>
             );
           })}
@@ -177,6 +180,7 @@ export function WorkSidePanel({
 
     return (
       <aside className="emu-panel emu-work-side-panel">
+        <div className="emu-side-navigation"><Button variant="ghost" onClick={onClearSelection}>← Сотрудники</Button></div>
         <div className="emu-side-profile">
           <span>{initials(selectedEmployee.fullName)}</span>
           <div>
@@ -223,6 +227,7 @@ export function WorkSidePanel({
         </div>
         {shiftModalOpen && shiftSummary ? (
           <ShiftAdjustModal
+            key={shiftSummary.shift.id}
             onClose={() => setShiftModalOpen(false)}
             onNotify={onNotify}
             onSaved={(shift) => setShiftSummary((current) => (current ? { ...current, shift } : current))}
@@ -237,6 +242,8 @@ export function WorkSidePanel({
   return (
     <aside className="emu-panel emu-work-side-panel">
       <EmployeeWorkloadPanel
+        view={workloadView}
+        onViewChange={onWorkloadViewChange}
         canCreate={canCreate}
         employees={employeeWorkload}
         onCreateForEmployee={onCreateForEmployee}

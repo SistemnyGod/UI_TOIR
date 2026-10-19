@@ -1,3 +1,4 @@
+@import "./styles/legacy-global.css";
 @import "./styles/inventory-shell.css";
 @import "./styles/inventory-issue-operations.css";
 @import "./styles/inventory-history-reports.css";
@@ -20,3 +21,5 @@
 @import "./styles/inventory-items-polish.css";
 @import "./styles/inventory-employees-polish.css";
 @import "./styles/inventory-overview-polish.css";
+@import "./employees/employeeDialogs.css";
+@import "./custody/custodyDialogs.css";

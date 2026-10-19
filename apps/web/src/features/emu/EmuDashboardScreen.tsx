@@ -18,6 +18,7 @@ import { buildEmuEmployeeWorkload, normalizeEmuText, type EmuEmployeeWorkload } 
 import type { EmuWorkspace } from "../../hooks/useEmuWorkspace";
 import { Button, ModalShell, PageHeader, Panel } from "../../shared/ui";
 import type { EmployeeDirectoryItem } from "../../types";
+import './dashboardDrilldown.css';
 
 type MetricTone = "blue" | "green" | "orange" | "red";
 type WorkStatusKind = "inWork" | "paused" | "completed" | "attention";

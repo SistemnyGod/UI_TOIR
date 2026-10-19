@@ -1,8 +1,10 @@
-import { Button, Chip, EmptyState, Field } from "../../../../shared/ui";
+import { useRef, useState } from "react";
+import { Button, Chip, EmptyState, Field, ModalShell } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem, ScreenId } from "../../../../types";
 
 interface EmployeeProfileDrawerProps {
   canManage?: boolean;
+  canAssign?: boolean;
   employee?: EmployeeDirectoryItem;
   isSaving?: boolean;
   onDeactivateEmployee: (id: string) => Promise<void> | void;
@@ -14,14 +16,29 @@ interface EmployeeProfileDrawerProps {
 export function EmployeeProfileDrawer({
   employee,
   canManage = true,
+  canAssign = true,
   isSaving = false,
   onDeactivateEmployee,
   onEditEmployee,
   onNavigate,
   onRemoveFromPatrol,
 }: EmployeeProfileDrawerProps) {
+  const [deactivateTarget, setDeactivateTarget] = useState<EmployeeDirectoryItem | null>(null);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const busy = useRef(false);
+  async function runAction(action: () => Promise<void> | void) {
+    if (busy.current || isSaving) return;
+    busy.current = true;
+    setPending(true);
+    setError("");
+    try { await action(); setDeactivateTarget(null); }
+    catch (error) { setError(error instanceof Error ? error.message : "Не удалось выполнить действие. Повторите попытку."); }
+    finally { busy.current = false; setPending(false); }
+  }
   return (
     <aside className="side-drawer profile-drawer employee-profile-drawer">
+      <button type="button" className="link-button employee-back-to-list" onClick={() => document.querySelector(".employee-directory-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}>← К списку сотрудников</button>
       {!employee ? (
         <EmptyState
           title="Сотрудник не выбран"
@@ -39,22 +56,24 @@ export function EmployeeProfileDrawer({
           </div>
 
           <div className="employee-profile-primary-action">
-            <Button onClick={() => onNavigate("assign")} variant="primary">
+            <Button disabled={!canAssign} onClick={() => onNavigate("assign")} variant="primary">
               Назначить маршрут
             </Button>
           </div>
 
           <div className="drawer-actions employee-profile-actions">
-            <Button disabled={!canManage || isSaving} onClick={() => onEditEmployee(employee)} variant="ghost">
+            <Button disabled={!canManage || isSaving || pending} onClick={() => onEditEmployee(employee)} variant="ghost">
               Редактировать
             </Button>
-            <Button disabled={!canManage || isSaving} onClick={() => onRemoveFromPatrol(employee.id)} variant="ghost">
+            <Button disabled={!canManage || isSaving || pending} onClick={() => runAction(() => onRemoveFromPatrol(employee.id))} variant="ghost">
               Убрать из обхода
             </Button>
-            <Button className="danger-text" disabled={!canManage || isSaving} onClick={() => onDeactivateEmployee(employee.id)} variant="ghost">
+            <Button className="danger-text" disabled={!canManage || isSaving || pending} onClick={() => { setError(""); setDeactivateTarget(employee); }} variant="ghost">
               Деактивировать в справочнике
             </Button>
           </div>
+          {error && !deactivateTarget ? <p role="alert" className="employee-form-error">{error}</p> : null}
+          <div className="employee-mobile-summary"><span>Мобильный аккаунт</span><Chip>{employee.mobileStatus}</Chip><small>Привязка управляется во вкладке «Мобильные аккаунты».</small></div>
 
           <section className="employee-profile-section">
             <h3>Основные данные</h3>
@@ -67,8 +86,8 @@ export function EmployeeProfileDrawer({
             </dl>
           </section>
 
-          <section className="employee-profile-section">
-            <h3>Кадровая информация</h3>
+          <details className="employee-profile-section employee-hr-details">
+            <summary><h3>Кадровая информация</h3></summary>
             <dl className="meta-list compact-meta">
               <Field label="Дата приёма" value={employee.hiredAt || "Не указана"} />
               <Field label="Дата рождения" value={employee.birthDate || "Не указана"} />
@@ -76,9 +95,13 @@ export function EmployeeProfileDrawer({
               <Field label="Телефон" value={employee.phone || "Не указан"} />
               <Field label="Email" value={employee.email || "Не указан"} />
             </dl>
-          </section>
+          </details>
         </>
       )}
+      {deactivateTarget ? <ModalShell className="employee-deactivate-modal" title="Деактивировать сотрудника?" subtitle={deactivateTarget.fullName} pending={pending} onClose={() => { if (!pending) setDeactivateTarget(null); }} actions={<>
+        <Button disabled={pending} onClick={() => setDeactivateTarget(null)} variant="ghost">Отмена</Button>
+        <Button disabled={pending || !canManage} isLoading={pending} onClick={() => runAction(() => onDeactivateEmployee(deactivateTarget.id))} variant="danger">Деактивировать</Button>
+      </>}><p>Действие меняет статус в общем справочнике. Чтобы убрать сотрудника только из рабочего списка, используйте «Убрать из обхода».</p>{error ? <p role="alert" className="employee-form-error">{error}</p> : null}</ModalShell> : null}
     </aside>
   );
 }

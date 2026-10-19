@@ -1,38 +1,108 @@
-import { useEffect, useMemo, useState } from "react";
-import type { InventoryPpeNormRowDto, PpeKitTemplateDto, SavePpeKitTemplateLineDto } from "../../../api/contracts";
-import { ModalShell } from "../../../shared/ui/ModalShell";
-import { createClientUuid } from "../../../shared/clientUuid";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { InventoryPpeNormRowDto, PpeKitTemplateDto } from "../../../api/contracts";
+import { Button, ModalShell, useDialogCloseGuard } from "../../../shared/ui";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
-import { type DraftLine, type KitTemplate } from "./documentWorkflow";
+import type { DraftLine, KitTemplate } from "./documentWorkflow";
 import { ppeErrorMessage } from "./ppeErrors";
+import { writeDocumentStorage } from "./documentStorage";
+import { legacyTemplatesKey, mergeTemplates, readImportedTemplates, readLegacyTemplates, templateDraftLines, templateLineInputs } from "./kitTemplateModel";
+import { KitTemplateEntry } from "./KitTemplateEntry";
+import { validateKitLines } from "./kitLineValidation";
+import { usePpeDialogOperation } from "./usePpeDialogOperation";
+import "../styles/ppe-kit-dialogs.css";
 
-export function KitTemplates({ userId, canManageShared, normSetId, rows, lines, date, onClose, onApply }: { userId: string; canManageShared: boolean; normSetId: string; rows: InventoryPpeNormRowDto[]; lines: DraftLine[]; date: string; onClose: () => void; onApply: (updater: (current: DraftLine[]) => DraftLine[]) => void }) {
+type Props = { userId: string; canManageShared: boolean; normSetId: string; rows: InventoryPpeNormRowDto[]; lines: DraftLine[]; date: string; onClose: () => void; onApply: (updater: (current: DraftLine[]) => DraftLine[]) => void };
+type Intent = { kind: "apply" | "archive"; template: PpeKitTemplateDto };
+export function KitTemplates(props: Props) {
   const repository = useInventoryRepository();
-  const legacyKey = `patrol360.ppe.kits.v1.${userId}`;
-  const importedKey = `${legacyKey}.imported`;
-  const legacy = useMemo<KitTemplate[]>(() => { try { const stored = JSON.parse(localStorage.getItem(legacyKey) ?? "[]"); return Array.isArray(stored) ? stored.filter(item => typeof item?.name === "string" && Array.isArray(item.lines) && typeof item.normSetId === "string") : []; } catch { return []; } }, [legacyKey]);
-  const [templates, setTemplates] = useState<PpeKitTemplateDto[]>([]);
-  const [imported, setImported] = useState<Set<string>>(() => { try { const value = JSON.parse(sessionStorage.getItem(importedKey) ?? "[]"); return new Set<string>(Array.isArray(value) ? value.filter(item => typeof item === "string") : []); } catch { return new Set<string>(); } });
-  const [importingId, setImportingId] = useState("");
-  const [name, setName] = useState(""); const [shared, setShared] = useState(false); const [query, setQuery] = useState(""); const [replace, setReplace] = useState(false); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  useEffect(() => { let active = true; repository.getPpeKitTemplates().then(value => { if (active) setTemplates(value); }, reason => { if (active) setError(message(reason)); }); return () => { active = false; }; }, [repository]);
-  const payloadLines = (source: DraftLine[]): SavePpeKitTemplateLineDto[] => source.map(line => ({ normRowId: line.normRowId, itemId: line.itemId, itemName: line.itemName, unitSymbol: line.unitSymbol, quantity: line.quantity, lifeMonths: line.lifeMonths ?? null, unitPriceMinor: line.unitPriceMinor ?? null }));
-  async function create(templateName: string, source: DraftLine[], sourceNormSetId = normSetId, isShared = false) { const saved = await repository.createPpeKitTemplate({ name: templateName, normSetId: sourceNormSetId, isShared, lines: payloadLines(source) }); setTemplates(current => [saved, ...current]); return saved; }
-  function markImported(id: string) { setImported(current => { const next = new Set(current).add(id); sessionStorage.setItem(importedKey, JSON.stringify([...next])); return next; }); }
-  async function action(run: () => Promise<void>) { setBusy(true); setError(""); try { await run(); } catch (reason) { setError(message(reason)); } finally { setBusy(false); } }
-  async function apply(template: PpeKitTemplateDto) { await action(async () => { const checked = await repository.validatePpeKitTemplate(template.id, normSetId); if (replace && lines.length && !window.confirm("Заменить текущий комплект позициями шаблона?")) return; const next: DraftLine[] = checked.lines.map(line => { const row = rows.find(item => item.id === line.normRowId); return { id: createClientUuid(), normRowId: line.normRowId, itemId: line.itemId, itemName: line.itemName, unitSymbol: line.unitSymbol, normName: row?.normItemName ?? line.itemName, normPoint: row?.normPoint, approved: true, quantity: line.quantity, lifeMonths: line.lifeMonths, unitPriceMinor: line.unitPriceMinor, issueDate: date, sizeText: "", exceptionReason: "", manualControlConfirmed: false }; }); onApply(current => replace ? next : [...current, ...next]); onClose(); }); }
-  return <ModalShell title="Готовые комплекты" className="ppe-ref-modal ppe-template-modal" onClose={onClose}>
-    <p className="ppe-ref-muted">Личные и общие шаблоны хранятся на сервере. Размеры, сотрудник и даты выдачи в шаблон не входят.</p>
-    {legacy.length ? <aside className="ppe-template-import"><strong>Найдены шаблоны этого браузера: {legacy.length}</strong><p>Проверьте состав каждого шаблона. После импорта локальные данные сохранятся.</p>{legacy.map(item => <details key={item.id}><summary>{item.name} · {item.lines.length} позиций {imported.has(item.id) ? "· импортирован" : ""}</summary><ul>{item.lines.map((line, index) => <li key={`${line.normRowId}:${line.itemId}:${index}`}>{line.itemName} · {line.quantity} {line.unitSymbol}</li>)}</ul><button className="button secondary" disabled={busy || imported.has(item.id)} type="button" onClick={() => void action(async () => { setImportingId(item.id); try { await create(item.name, item.lines, item.normSetId); markImported(item.id); } finally { setImportingId(""); } })}>{importingId === item.id ? "Импортируем…" : imported.has(item.id) ? "Импортирован" : "Импортировать этот шаблон"}</button></details>)}</aside> : null}
-    <div className="ppe-ref-fields"><label>Название нового шаблона<input maxLength={160} placeholder="Электромонтёр · зимний комплект" value={name} onChange={event => setName(event.target.value)} /></label><label><input type="checkbox" checked={shared} disabled={!canManageShared} onChange={event => setShared(event.target.checked)} /> Общий шаблон</label><button className="button secondary" disabled={busy || !name.trim() || !lines.length} onClick={() => void action(async () => { await create(name.trim(), lines, normSetId, shared); setName(""); setShared(false); })} type="button">Сохранить текущий комплект</button><label>Найти шаблон<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label></div>
-    {error ? <p role="alert" className="ppe-ref-error">{error}</p> : null}
-    <fieldset><legend>Как применить шаблон</legend><label><input type="radio" checked={!replace} onChange={() => setReplace(false)} /> Добавить к текущему комплекту</label><label><input type="radio" checked={replace} onChange={() => setReplace(true)} /> Заменить комплект</label></fieldset>
-    {templates.filter(template => template.name.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru"))).map(template => {
-      const canEdit = template.isShared ? canManageShared : template.ownerUserId === userId;
-      return <details className="ppe-template" key={template.id}><summary>{template.name} · {template.lines.length} позиций · {template.isShared ? `Общий, ${template.ownerName}` : "Личный"}</summary>{canEdit ? <label>Название шаблона<input maxLength={160} defaultValue={template.name} disabled={busy} onBlur={event => { const next = event.target.value.trim(); if (!next || next === template.name) { event.target.value = template.name; return; } void action(async () => { const saved = await repository.renamePpeKitTemplate(template.id, template.version, next); setTemplates(current => current.map(item => item.id === saved.id ? saved : item)); }); }} /></label> : null}<ul>{template.lines.map((line, i) => <li key={`${line.normRowId}:${line.itemId}:${i}`}>{line.itemName} · {line.quantity} {line.unitSymbol} · {line.lifeMonths ? `${line.lifeMonths} мес.` : "Срок из нормы"}</li>)}</ul><div className="ppe-document-actions"><button className="button primary" disabled={busy} type="button" onClick={() => void apply(template)}>Применить шаблон</button><button className="button secondary" disabled={busy} type="button" onClick={() => void action(async () => { const saved = await repository.copyPpeKitTemplate(template.id); setTemplates(current => [saved, ...current]); })}>Создать копию</button>{canEdit ? <button className="button ghost" disabled={busy} type="button" onClick={() => void action(async () => { await repository.archivePpeKitTemplate(template.id, template.version); setTemplates(current => current.filter(item => item.id !== template.id)); })}>В архив</button> : null}</div></details>;
-    })}
-    {!templates.length ? <p>Сохраните подобранный комплект, чтобы использовать его повторно.</p> : null}
-  </ModalShell>;
+  const owner = useRef({ repository, revision: 0 });
+  if (owner.current.repository !== repository) owner.current = { repository, revision: owner.current.revision + 1 };
+  return <TemplateWorkspace key={`${props.userId}:${props.normSetId}:${props.date}:${owner.current.revision}`} {...props} />;
 }
-
-function message(reason: unknown) { return ppeErrorMessage(reason, "Не удалось выполнить операцию с шаблоном"); }
+function TemplateWorkspace({ userId, canManageShared, normSetId, rows, lines, date, onClose, onApply }: Props) {
+  const repository = useInventoryRepository(), operation = usePpeDialogOperation();
+  const [templates, setTemplates] = useState<PpeKitTemplateDto[]>([]), [draftNames, setDraftNames] = useState<Record<string, string>>({});
+  const [name, setName] = useState(""), [shared, setShared] = useState(false), [query, setQuery] = useState(""), [replace, setReplace] = useState(false);
+  const [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(""), [reload, setReload] = useState(0), [notice, setNotice] = useState("");
+  const [intent, setIntent] = useState<Intent | null>(null), [importingId, setImportingId] = useState(""), [page, setPage] = useState(1);
+  const writes = useRef(new Map<string, number>()), writeRevision = useRef(0);
+  const legacy = useMemo(() => readLegacyTemplates(userId), [userId]);
+  const importedKey = `${legacyTemplatesKey(userId)}.imported`;
+  const [imported, setImported] = useState(() => readImportedTemplates(importedKey));
+  const importedRef = useRef(imported); importedRef.current = imported;
+  const editedNames = Object.entries(draftNames).filter(([id, value]) => templates.some(template => template.id === id && template.name !== value));
+  const dirty = Boolean(name || shared || editedNames.length);
+  const { requestClose, discardDialog } = useDialogCloseGuard({ dirty, pending: operation.pending, onClose });
+  useEffect(() => {
+    let active = true;
+    const startedAt = writeRevision.current;
+    setLoading(true); setLoadError("");
+    repository.getPpeKitTemplates().then(value => { if (active) setTemplates(current => mergeTemplates(current, value, new Set([...writes.current].filter(([, revision]) => revision > startedAt).map(([id]) => id)))); }, failure => { if (active) setLoadError(ppeErrorMessage(failure, "Не удалось загрузить шаблоны")); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [repository, reload]);
+  function touch(id: string) { writes.current.set(id, ++writeRevision.current); }
+  function commit(template: PpeKitTemplateDto) { touch(template.id); setTemplates(current => current.some(item => item.id === template.id) ? current.map(item => item.id === template.id ? template : item) : [template, ...current]); }
+  function forgetName(id: string) { setDraftNames(current => { const next = { ...current }; delete next[id]; return next; }); }
+  function create() {
+    if (!name.trim()) { operation.setError("Укажите название шаблона."); return; }
+    if (shared && !canManageShared) { operation.setError("Нет права сохранять общий шаблон."); return; }
+    const invalid = validateKitLines(lines, false);
+    if (invalid) { operation.setError(invalid); return; }
+    if (!lines.length) { operation.setError("Добавьте позиции в комплект."); return; }
+    void operation.execute(() => repository.createPpeKitTemplate({ name: name.trim(), normSetId, isShared: shared, lines: templateLineInputs(lines) }), saved => { commit(saved); setName(""); setShared(false); setNotice("Шаблон сохранён на сервере."); });
+  }
+  function importLegacy(template: KitTemplate) {
+    const invalid = validateKitLines(template.lines, false);
+    if (invalid) { operation.setError(invalid); return; }
+    setImportingId(template.id);
+    void operation.execute(() => repository.createPpeKitTemplate({ name: template.name, normSetId: template.normSetId, isShared: false, lines: templateLineInputs(template.lines) }), saved => {
+      commit(saved);
+      const next = new Set(importedRef.current).add(template.id); importedRef.current = next; setImported(next);
+      const persisted = writeDocumentStorage("sessionStorage", importedKey, JSON.stringify([...next]));
+      setNotice(persisted ? "Шаблон импортирован. Исходные данные браузера сохранены." : "Шаблон сохранён на сервере. Отметка импорта сохранена в памяти этого сеанса.");
+      setImportingId("");
+    });
+  }
+  function rename(template: PpeKitTemplateDto) {
+    const next = (draftNames[template.id] ?? template.name).trim();
+    if (!next) { operation.setError("Название шаблона не может быть пустым."); return; }
+    void operation.execute(() => repository.renamePpeKitTemplate(template.id, template.version, next), saved => { commit(saved); forgetName(saved.id); setNotice("Имя шаблона сохранено."); });
+  }
+  function apply(template: PpeKitTemplateDto) {
+    if (dirty || replace && lines.length) { operation.setError(""); setIntent({ kind: "apply", template }); return; }
+    applyChecked(template);
+  }
+  function applyChecked(template: PpeKitTemplateDto) {
+    void operation.execute(() => repository.validatePpeKitTemplate(template.id, normSetId), checked => { const next = templateDraftLines(checked, rows, date); onApply(current => replace ? next : [...current, ...next]); onClose(); });
+  }
+  function archive(template: PpeKitTemplateDto) {
+    const allowed = template.isShared ? canManageShared : template.ownerUserId === userId;
+    if (!allowed) { operation.setError("Нет права изменять этот шаблон."); return; }
+    void operation.execute(() => repository.archivePpeKitTemplate(template.id, template.version), () => { touch(template.id); setTemplates(current => current.filter(item => item.id !== template.id)); forgetName(template.id); setIntent(null); setNotice("Шаблон перенесён в архив."); });
+  }
+  const visible = templates.filter(template => template.name.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru")));
+  const pages = Math.max(1, Math.ceil(visible.length / 20)), currentPage = Math.min(page, pages);
+  return <><ModalShell title="Готовые комплекты" subtitle="Личные и общие шаблоны на сервере" className="ppe-kit-templates-dialog" onClose={requestClose} pending={operation.pending}
+    actions={<>{editedNames.length ? <span className="ppe-kit-dialog-hint">Несохранённых имён: {editedNames.length}</span> : null}<Button disabled={operation.pending} variant="ghost" onClick={requestClose}>Закрыть просмотр</Button></>}>
+    <p className="ppe-kit-dialog-hint">Сотрудник, размеры и даты выдачи в шаблон не входят.</p>
+    {loading ? <p role="status" className="ppe-kit-dialog-hint">{templates.length ? "Обновляем шаблоны…" : "Загружаем шаблоны…"}</p> : null}
+    {loadError ? <p role="alert" className="field-error">{loadError} <Button variant="ghost" disabled={operation.pending || loading} onClick={() => setReload(value => value + 1)}>Повторить загрузку</Button></p> : null}
+    {operation.error ? <p role="alert" className="field-error">{operation.error}</p> : null}{notice ? <p role="status" className="ppe-kit-dialog-hint">{notice}</p> : null}
+    <fieldset className="ppe-kit-template-workspace" disabled={operation.pending}>
+      {legacy.length ? <details className="ppe-kit-template-legacy"><summary>Шаблоны этого браузера: {legacy.length}</summary><p>Проверьте состав перед импортом. Локальные данные останутся доступны.</p>{legacy.map(template => <details key={template.id}><summary>{template.name} · {template.lines.length} позиций {imported.has(template.id) ? "· импортирован" : ""}</summary><ul>{template.lines.map((line, index) => <li key={`${line.normRowId}:${line.itemId}:${index}`}>{line.itemName} · {line.quantity} {line.unitSymbol}</li>)}</ul><Button variant="ghost" disabled={operation.pending || imported.has(template.id)} onClick={() => importLegacy(template)}>{importingId === template.id && operation.pending ? "Импортируем…" : imported.has(template.id) ? "Импортирован" : "Импортировать этот шаблон"}</Button></details>)}</details> : null}
+      <details className="ppe-kit-template-save"><summary>Сохранить комплект как новый шаблон</summary><form className="ppe-kit-template-create" onSubmit={event => { event.preventDefault(); create(); }}><label>Название нового шаблона<input maxLength={160} placeholder="Электромонтёр · зимний комплект" value={name} onChange={event => { setName(event.target.value); operation.setError(""); }} /></label><label className="ppe-kit-dialog-checkbox"><input type="checkbox" checked={shared} disabled={!canManageShared || operation.pending} onChange={event => setShared(event.target.checked)} /> Общий шаблон</label><Button variant="ghost" disabled={operation.pending || !name.trim() || !lines.length} type="submit">Сохранить текущий комплект</Button></form></details>
+      <div className="ppe-kit-dialog-toolbar"><label>Найти шаблон<input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} /></label><Button variant="ghost" disabled={loading || operation.pending} onClick={() => setReload(value => value + 1)}>Обновить список</Button></div>
+      <fieldset className="ppe-kit-template-mode"><legend>Как применить шаблон</legend><label><input type="radio" name="template-apply-mode" checked={!replace} onChange={() => setReplace(false)} /> Добавить к текущему комплекту</label><label><input type="radio" name="template-apply-mode" checked={replace} onChange={() => setReplace(true)} /> Заменить комплект</label></fieldset>
+      {visible.slice((currentPage - 1) * 20, currentPage * 20).map(template => <KitTemplateEntry key={template.id} template={template} name={draftNames[template.id] ?? template.name} disabled={operation.pending} canEdit={template.isShared ? canManageShared : template.ownerUserId === userId} compatible={template.normSetId === normSetId}
+        onName={value => setDraftNames(current => ({ ...current, [template.id]: value }))} onRename={() => rename(template)} onApply={() => apply(template)} onCopy={() => { void operation.execute(() => repository.copyPpeKitTemplate(template.id), saved => { commit(saved); setNotice("Копия шаблона создана."); }); }} onArchive={() => { operation.setError(""); setIntent({ kind: "archive", template }); }} />)}
+      {!loading && !visible.length ? <p className="ppe-kit-dialog-hint">{query ? "По запросу шаблонов нет." : "Сохраните комплект, чтобы использовать его повторно."}</p> : null}
+      {visible.length > 20 ? <nav className="ppe-kit-dialog-pager" aria-label="Страницы шаблонов"><Button size="sm" variant="ghost" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Назад</Button><span>{currentPage} / {pages}</span><Button size="sm" variant="ghost" disabled={currentPage >= pages} onClick={() => setPage(currentPage + 1)}>Вперёд</Button></nav> : null}
+    </fieldset>
+  </ModalShell>{discardDialog}
+    {intent ? <ModalShell title={intent.kind === "archive" ? "Архивировать шаблон?" : "Применить шаблон?"} subtitle={intent.template.name} className="ppe-kit-template-confirm" pending={operation.pending} onClose={() => setIntent(null)}
+      actions={<><Button disabled={operation.pending} variant="ghost" onClick={() => setIntent(null)}>Вернуться</Button><Button disabled={operation.pending} variant={intent.kind === "archive" || replace ? "danger" : "primary"} onClick={() => intent.kind === "archive" ? archive(intent.template) : applyChecked(intent.template)}>{operation.pending ? "Выполняем…" : intent.kind === "archive" ? "Архивировать" : replace ? "Заменить комплект" : "Добавить комплект"}</Button></>}>
+      <p>{intent.kind === "archive" ? "Шаблон будет скрыт из активного списка. Состав уже сохранённых документов не изменится." : replace ? "Текущие позиции комплекта будут заменены после серверной проверки шаблона." : "Позиции шаблона будут добавлены после серверной проверки."}</p>
+      {dirty && intent.kind === "apply" ? <p>Несохранённые изменения названий шаблонов не будут сохранены.</p> : null}{operation.error ? <p role="alert" className="field-error">{operation.error}</p> : null}
+    </ModalShell> : null}
+  </>;
+}
