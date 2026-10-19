@@ -556,6 +556,12 @@ export interface ResultListItemDto {
   photos: number;
   issueType: string;
   severity: string;
+  /** "auto" when the phone sent the report by itself; absent for older apps. */
+  submissionMode?: "auto" | "manual" | null;
+  /** The report arrived after the patrol was closed and a dispatcher applied it. */
+  lateReport?: boolean;
+  /** Photos named in the report that the phone has not uploaded yet. */
+  pendingPhotos?: number;
 }
 
 export interface IssueDto {
@@ -629,6 +635,37 @@ export interface MobileDeviceHealthDto {
   pendingOutboxCount: number;
   staleOutboxCount: number;
   lastError?: string | null;
+  trusted?: boolean;
+  blockedAt?: string | null;
+  heartbeatAt?: string | null;
+  heartbeatPendingCount?: number | null;
+  heartbeatFailedCount?: number | null;
+  heartbeatOldestPendingAgeSeconds?: number | null;
+}
+
+export interface PatrolLateReportDto {
+  id: string;
+  assignmentId: string;
+  requestId: string;
+  routeName: string;
+  employeeName: string;
+  accountLogin: string;
+  reasonCode: "assignmentClosed" | "assignmentCancelled" | "assignmentNeedsDecision" | string;
+  assignmentStatusAtReceipt: string;
+  currentAssignmentStatus: string;
+  submissionMode?: "auto" | "manual" | null;
+  completedAtLocal: string;
+  receivedAt: string;
+  status: "pending" | "applied" | "dismissed" | string;
+  pointCount: number;
+  issueCount: number;
+  photoCount: number;
+  pendingPhotoCount: number;
+  canApply: boolean;
+  resolutionComment: string;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  payload?: unknown;
 }
 
 export interface InventoryOverviewDto {

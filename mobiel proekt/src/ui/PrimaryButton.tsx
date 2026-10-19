@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { GradientFill } from "@/ui/GradientFill";
 import { font, softShadow } from "@/ui/typography";
 
 type PrimaryButtonProps = {
@@ -46,6 +47,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
         pressed && !blocked && !isPrimary ? styles.outlinePressed : null
       ]}
     >
+      {isPrimary && !blocked ? <GradientFill colors={colors} kind="accent" radius={size === "large" ? 18 : 16} style={styles.gradient} /> : null}
       <View style={styles.content}>
         {loading ? <ActivityIndicator color={labelColor} /> : icon ? <Ionicons color={labelColor} name={icon} size={size === "large" ? 22 : 18} /> : null}
         <Text
@@ -76,6 +78,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 15,
     paddingVertical: 12
+  },
+  /** Covers the 1px border too, so the fill reaches the rounded edge. */
+  gradient: {
+    left: -1,
+    top: -1,
+    right: -1,
+    bottom: -1
   },
   content: {
     alignItems: "center",

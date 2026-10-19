@@ -164,6 +164,9 @@ function mapResult(result: ResultListItemDto | ResultDetailDto): PatrolResult {
     issueType: normalizeIssueType(result.issueType),
     severity: normalizeSeverity(result.severity) as PatrolResult["severity"],
     source: "mobile",
+    submissionMode: result.submissionMode ?? undefined,
+    lateReport: result.lateReport || undefined,
+    pendingPhotos: result.pendingPhotos || undefined,
     attachments:
       "attachments" in result
         ? result.attachments.map((attachment) => ({

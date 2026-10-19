@@ -24,6 +24,7 @@ import { PatrolResultDetails, type ResultPointMode, type ResultReadingMode } fro
 import { ResultMediaViewer } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
 import { PatrolAppealsView } from "./PatrolAppealsView";
+import { LateReportsView } from "./LateReportsView";
 import { PatrolRequestHistory } from "./PatrolRequestHistory";
 import type { ResultGroup } from "./resultTypes";
 import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
@@ -139,7 +140,7 @@ export function ResultsWorkspace({
     previousDetailOwnerRef.current = detailOwner;
     setOpenGroupId(null);
   }, [detailOwner]);
-  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests" | "appeals">("results");
+  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests" | "appeals" | "late">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
@@ -476,9 +477,10 @@ export function ResultsWorkspace({
           История заявок
         </button>
         <button className={activeView === "appeals" ? "is-active" : ""} onClick={() => setActiveView("appeals")} type="button">Обращения диспетчеру</button>
+        <button className={activeView === "late" ? "is-active" : ""} onClick={() => setActiveView("late")} type="button">Поздние отчёты</button>
       </nav>
 
-      {activeView === "appeals" ? <PatrolAppealsView dataSourceMode={dataSourceMode} /> : activeView === "remarks" ? (
+      {activeView === "late" ? <LateReportsView dataSourceMode={dataSourceMode} /> : activeView === "appeals" ? <PatrolAppealsView dataSourceMode={dataSourceMode} /> : activeView === "remarks" ? (
         <FoundRemarksView dataSourceMode={dataSourceMode} onNotify={onNotify} />
       ) : activeView === "requests" ? (
         <PatrolRequestHistory

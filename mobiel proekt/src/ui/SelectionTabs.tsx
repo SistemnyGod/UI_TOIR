@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { GradientFill } from "@/ui/GradientFill";
 import { font } from "@/ui/typography";
 
 export type SelectionTab<T extends string> = {
@@ -133,24 +134,26 @@ function SelectionTabButton<T extends string>({
     >
       <Animated.View
         pointerEvents="none"
-        style={[styles.selectedBackground, { backgroundColor: colors.backgroundAccent }, animatedStyle]}
-      />
+        style={[styles.selectedBackground, { backgroundColor: colors.accent, shadowColor: colors.accent }, animatedStyle]}
+      >
+        <GradientFill colors={colors} kind="accent" radius={12} />
+      </Animated.View>
       <View style={[styles.labelRow, compact ? styles.labelRowCompact : null, compact && stretch ? styles.stackedLabelRow : null]}>
         {item.icon ? (
-          <Ionicons color={selected ? colors.primary : colors.mutedText} name={item.icon} size={compact ? 16 : 18} />
+          <Ionicons color={selected ? colors.onAccent : colors.mutedText} name={item.icon} size={compact ? 16 : 18} />
         ) : null}
         <Text
           style={[
             styles.label,
             font(800),
             compact ? styles.labelCompact : null,
-            { color: selected ? colors.primary : colors.mutedText }
+            { color: selected ? colors.onAccent : colors.mutedText }
           ]}
         >
           {item.label}
         </Text>
         {typeof item.count === "number" ? (
-          <View style={[styles.countBadge, { backgroundColor: selected ? colors.accent : colors.backgroundAccent }]}>
+          <View style={[styles.countBadge, { backgroundColor: selected ? "rgba(255,255,255,0.22)" : colors.backgroundAccent }]}>
             <Text style={[styles.countText, font(800), compact ? styles.countTextCompact : null, { color: selected ? colors.onAccent : colors.mutedText }]}>{item.count}</Text>
           </View>
         ) : null}
@@ -218,6 +221,10 @@ const styles = StyleSheet.create({
   selectedBackground: {
     ...StyleSheet.absoluteFill,
     borderRadius: 12,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
   },
   labelRow: {
     flexWrap: "nowrap",

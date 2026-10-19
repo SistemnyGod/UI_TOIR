@@ -151,6 +151,30 @@ public sealed class MobileController(
         }
     }
 
+    // Lightweight outbox pulse: the phone reports how many commands are still
+    // unsent so dispatchers see a stuck phone before the daily diagnostics.
+    [HttpPost("heartbeat")]
+    [RequestSizeLimit(4 * 1024)]
+    public ActionResult<MobileHeartbeatReceiptDto> Heartbeat(MobileHeartbeatRequestDto request)
+    {
+        if (request.PendingCommandCount < 0
+            || request.OldestPendingCommandAgeSeconds < 0
+            || request.FailedCommandCount < 0)
+        {
+            return BadRequest(new { message = "Heartbeat counters must not be negative." });
+        }
+
+        try
+        {
+            var result = mobileAppService.SaveHeartbeat(MobileAccessToken, request);
+            return result is null ? Unauthorized() : Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     [HttpGet("notifications")]
     public ActionResult<IReadOnlyList<MobileNotificationDto>> Notifications([FromQuery] bool unreadOnly = false)
     {

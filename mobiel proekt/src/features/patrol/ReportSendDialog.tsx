@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ReportDeliveryState } from '@/domain/reporting/reportDeliveryState';
 import { useAppTheme } from '@/features/settings/themePreference';
+import { GradientFill } from '@/ui/GradientFill';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { useReducedMotion } from '@/ui/useReducedMotion';
 
@@ -42,9 +43,12 @@ export function ReportSendDialog({ visible, delivery, busy, error, onClose, onCo
             <Ionicons name='close' size={22} color={colors.mutedText} />
           </Pressable>
           <ScrollView contentContainerStyle={styles.content} bounces={false}>
-            <View style={[styles.symbol, { backgroundColor: delivered ? colors.successSurface : needsAttention ? colors.warningSurface : colors.backgroundAccent }]}>
-              {sending ? <ActivityIndicator size='large' color={tint} /> : <Ionicons
-                name={delivered ? 'checkmark-circle-outline' : needsAttention ? 'alert-circle-outline' : 'cloud-upload-outline'} size={40} color={tint} />}
+            <View style={[styles.halo, { backgroundColor: delivered ? colors.successSurface : needsAttention ? colors.warningSurface : colors.backgroundAccent }]}>
+              <View style={[styles.symbol, { backgroundColor: tint, shadowColor: tint }]}>
+                <GradientFill colors={colors} kind={delivered ? 'success' : needsAttention ? 'warning' : 'accent'} radius={24} />
+                {sending ? <ActivityIndicator size='large' color='#ffffff' /> : <Ionicons
+                  name={delivered ? 'checkmark-circle-outline' : needsAttention ? 'alert-circle-outline' : 'cloud-upload-outline'} size={36} color='#ffffff' />}
+              </View>
             </View>
             <View accessibilityLiveRegion='polite' style={styles.copy}>
               <Text accessibilityRole='header' style={[styles.title, { color: colors.text }]}>{title}</Text>
@@ -63,10 +67,12 @@ export function ReportSendDialog({ visible, delivery, busy, error, onClose, onCo
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
-  dialog: { width: '100%', maxWidth: 400, maxHeight: '100%', borderRadius: 24, borderWidth: 1, padding: 20 },
+  dialog: { width: '100%', maxWidth: 400, maxHeight: '100%', borderRadius: 28, borderWidth: 1, padding: 20 },
   close: { alignSelf: 'flex-end', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, marginTop: -8, marginRight: -8 },
   content: { alignItems: 'center', gap: 20, paddingBottom: 4 },
-  symbol: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
+  halo: { width: 112, height: 112, borderRadius: 56, alignItems: 'center', justifyContent: 'center' },
+  symbol: { width: 72, height: 72, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+    shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 6 },
   copy: { gap: 10, alignSelf: 'stretch' },
   title: { fontSize: 22, lineHeight: 28, fontFamily: "Manrope_800ExtraBold", textAlign: 'center' },
   message: { fontSize: 16, lineHeight: 24, textAlign: 'center' },

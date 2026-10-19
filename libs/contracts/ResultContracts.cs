@@ -30,7 +30,14 @@ public sealed record ResultListItemDto(
     string Comment,
     int Photos,
     string IssueType,
-    string Severity);
+    string Severity)
+{
+    // "auto" when the phone sent the report by itself, "manual" when the
+    // employee pressed submit, null for older app versions.
+    public string? SubmissionMode { get; init; }
+    public bool LateReport { get; init; }
+    public int PendingPhotos { get; init; }
+}
 
 public sealed record ResultPageDto(
     IReadOnlyList<ResultListItemDto> Items,
@@ -78,7 +85,12 @@ public sealed record ResultDetailDto(
     string Severity,
     IReadOnlyList<IssueDto> Issues,
     IReadOnlyList<AttachmentMetadataDto> Attachments,
-    IReadOnlyList<string> Chronology);
+    IReadOnlyList<string> Chronology)
+{
+    public string? SubmissionMode { get; init; }
+    public bool LateReport { get; init; }
+    public int PendingPhotos { get; init; }
+}
 
 public sealed record IssueDto(
     Guid Id,

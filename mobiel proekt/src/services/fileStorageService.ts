@@ -93,6 +93,25 @@ export function isOwnedTemporaryMediaUri(
   return uri.startsWith(cacheRoot) && uri.length > cacheRoot.length && !uri.startsWith(`${managedDirectory}/`);
 }
 
+/** A downloaded update APK is not account data and may be large: keep it. */
+const cacheEntriesKeptOnSignOut = new Set(["app-updates"]);
+
+/**
+ * Sign-out removes everything else in the app cache: camera, picker and resize
+ * copies, image and HTTP caches. The OS may drop these files at any time, so
+ * no library relies on them surviving.
+ */
+export async function deleteAccountCacheFiles(cacheDirectory: string | null = FileSystem.cacheDirectory) {
+  if (!cacheDirectory) return;
+  const root = cacheDirectory.endsWith("/") ? cacheDirectory : `${cacheDirectory}/`;
+  const names = await FileSystem.readDirectoryAsync(root);
+  const failures: unknown[] = [];
+  await mapWithConcurrency(names.filter(name => !cacheEntriesKeptOnSignOut.has(name)), 4, async (name) => {
+    await FileSystem.deleteAsync(`${root}${name}`, { idempotent: true }).catch(error => { failures.push(error); });
+  });
+  if (failures.length > 0) throw new Error(`Не удалось удалить временные файлы: ${failures.length}.`);
+}
+
 /** Only copies inside the managed attachment directory belong to a files row. */
 export function isManagedMediaUri(uri: string | null | undefined, managedDirectory: string = getPatrolPhotoDirectory()): uri is string {
   if (!uri || !managedDirectory || uri.includes("/../") || uri.includes("/./")) return false;

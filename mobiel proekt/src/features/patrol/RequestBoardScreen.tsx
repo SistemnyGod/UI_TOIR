@@ -13,6 +13,8 @@ import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
 import { enterPatrolRequest } from "@/services/patrolEntryService";
 import { TransientNotice } from "@/ui/TransientNotice";
 import { Card } from "@/ui/Card";
+import { GradientFill } from "@/ui/GradientFill";
+import { RingChart } from "@/ui/RingChart";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { SelectionTabs } from "@/ui/SelectionTabs";
@@ -246,18 +248,25 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
     return (
       <Rise>
         <View style={[styles.hero, { backgroundColor: colors.accent, shadowColor: colors.accent }]}>
+          <GradientFill colors={colors} kind="hero" radius={24} />
           <View pointerEvents="none" style={[styles.heroBubble, { right: -40, bottom: -70, width: 190, height: 190 }]} />
           <View pointerEvents="none" style={[styles.heroBubble, { right: 70, top: -50, width: 110, height: 110 }]} />
-          <View style={styles.heroChip}>
-            <View style={styles.heroDot} />
-            <Text style={[font(800), styles.heroChipText]}>Сейчас в работе</Text>
+          <View style={styles.heroMain}>
+            <View style={styles.heroCopy}>
+              <View style={styles.heroChip}>
+                <View style={styles.heroDot} />
+                <Text style={[font(800), styles.heroChipText]}>Сейчас в работе</Text>
+              </View>
+              <Text style={[font(800), styles.heroTitle]}>{item.routeName}</Text>
+              <Text style={[font(600), styles.heroText]}>{item.assignedFullName ?? "сотрудник не выбран"} · План: {formatDateTime(item.plannedStartAt)}</Text>
+            </View>
+            <View accessible accessibilityRole="progressbar" accessibilityLabel={`Пройдено ${progressLabel}`}>
+              <RingChart size={68} stroke={7} track="rgba(255,255,255,0.22)" total={1} segments={[{ value: share, color: "#ffffff" }]}>
+                <Text style={[font(800), styles.heroRingValue]}>{Number.isFinite(done) ? done : 0}</Text>
+                <Text style={[font(700), styles.heroRingTotal]}>из {Number.isFinite(total) ? total : 0}</Text>
+              </RingChart>
+            </View>
           </View>
-          <View style={styles.row}>
-            <Text style={[font(800), styles.heroTitle]}>{item.routeName}</Text>
-            <Text style={[font(800), styles.heroCount]}>{progressLabel}</Text>
-          </View>
-          <Text style={[font(600), styles.heroText]}>{item.assignedFullName ?? "сотрудник не выбран"} · План: {formatDateTime(item.plannedStartAt)}</Text>
-          <View accessibilityLabel={`Пройдено ${progressLabel}`} style={styles.heroTrack}><View style={[styles.heroFill, { width: `${Math.round(share * 100)}%` }]} /></View>
           <PrimaryButton testID="request-card-action" variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
         </View>
       </Rise>
@@ -350,17 +359,17 @@ const styles = StyleSheet.create({
   heroChip: { alignItems: "center", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 999, flexDirection: "row", gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
   heroDot: { backgroundColor: "#7dffc0", borderRadius: 3, height: 6, width: 6 },
   heroChipText: { color: "#ffffff", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase" },
+  heroMain: { alignItems: "center", flexDirection: "row", gap: 14 },
+  heroCopy: { flex: 1, gap: 6, minWidth: 0 },
+  heroRingValue: { color: "#ffffff", fontSize: 17, lineHeight: 19 },
+  heroRingTotal: { color: "rgba(255,255,255,0.8)", fontSize: 10, lineHeight: 12 },
   heroTitle: { color: "#ffffff", flexShrink: 1, fontSize: 22, letterSpacing: -0.3, lineHeight: 28 },
-  heroCount: { color: "rgba(255,255,255,0.85)", fontSize: 14 },
   heroText: { color: "rgba(255,255,255,0.8)", fontSize: 13, lineHeight: 18 },
-  heroTrack: { backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 4, height: 8, overflow: "hidden" },
-  heroFill: { backgroundColor: "#ffffff", borderRadius: 4, height: 8 },
   actionRow: { alignItems: "center", borderStyle: "dashed", borderTopWidth: 1, flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between", paddingTop: 12 },
   requestCard: { overflow: "hidden", padding: 0 },
   requestContent: { gap: 12, padding: 14 },
   cardTop: { alignItems: "center", flexDirection: "row", gap: 12 },
   tile: { alignItems: "center", borderRadius: 14, height: 44, justifyContent: "center", width: 44 },
-  row: { alignItems: "baseline", flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "space-between" },
   titleBox: { flex: 1, gap: 2, minWidth: 0 },
   displayNumber: { fontSize: 12 },
   title: { fontSize: 17, lineHeight: 22 },

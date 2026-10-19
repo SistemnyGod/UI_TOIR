@@ -51,6 +51,11 @@ async function readContext(ownerUserId: string): Promise<PatrolDeviceContext> {
   }
 }
 
+/** Sign-out: the SQLite row goes with the owner tables; this removes the compatibility copy. */
+export function deleteStoredPatrolDeviceContext(ownerUserId: string) {
+  return SecureStore.deleteItemAsync(storageKey(ownerUserId));
+}
+
 let pendingWrite = Promise.resolve();
 
 export async function setPatrolDeviceContext(update: Partial<PatrolDeviceContext>) {

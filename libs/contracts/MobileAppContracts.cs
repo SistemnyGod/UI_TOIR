@@ -201,6 +201,15 @@ public sealed record MobileBootstrapDto(
     public bool BoundEmployeesComplete { get; init; }
     public IReadOnlyList<MobilePatrolSnapshotManifestDto> PatrolSnapshotManifests { get; init; } = [];
     public IReadOnlyList<MobilePatrolAppealDto> PatrolAppeals { get; init; } = [];
+    // Minutes a finished patrol waits on the phone before it is sent
+    // automatically. Configured by Patrol360:Mobile:ReportAutoSubmitDelayMinutes.
+    public int ReportAutoSubmitDelayMinutes { get; init; } = 15;
+    // completePatrolAssignment accepts lateReportPolicy = "review".
+    public bool LateReportReview { get; init; }
+    // completePatrolAssignment accepts photoUploadMode = "deferred".
+    public bool DeferredReportPhotos { get; init; }
+    // POST api/v1/mobile/heartbeat is available.
+    public bool OutboxHeartbeat { get; init; }
 }
 
 public sealed record MobilePatrolSnapshotPointDto(Guid PointId, long Revision);
@@ -247,6 +256,10 @@ public sealed record MobilePatrolAssignmentDto(
 {
     public Guid? EmployeeId { get; init; }
     public MobilePatrolAssignmentSnapshotDto? RouteSnapshot { get; init; }
+    public DateTimeOffset? PlannedAt { get; init; }
+    // Time by which the patrol is expected to be finished: planned start +
+    // route duration + Patrol360:Mobile:PatrolDueGraceMinutes.
+    public DateTimeOffset? DueAt { get; init; }
 }
 
 public sealed record MobilePatrolAssignmentSnapshotDto(
@@ -363,7 +376,58 @@ public sealed record MobileDeviceHealthDto(
     int StaleOutboxCount,
     string? LastError,
     bool Trusted,
-    DateTimeOffset? BlockedAt);
+    DateTimeOffset? BlockedAt)
+{
+    // Last outbox heartbeat from the phone. Null until the app sends one.
+    public DateTimeOffset? HeartbeatAt { get; init; }
+    public int? HeartbeatPendingCount { get; init; }
+    public int? HeartbeatFailedCount { get; init; }
+    public int? HeartbeatOldestPendingAgeSeconds { get; init; }
+}
+
+public sealed record MobileHeartbeatRequestDto(
+    int PendingCommandCount,
+    int? OldestPendingCommandAgeSeconds = null,
+    int? FailedCommandCount = null,
+    string? DeviceId = null,
+    DateTimeOffset? SentAtLocal = null);
+
+public sealed record MobileHeartbeatReceiptDto(
+    DateTimeOffset ReceivedAt,
+    int NextHeartbeatSeconds);
+
+public sealed record PatrolLateReportDto(
+    Guid Id,
+    Guid AssignmentId,
+    Guid RequestId,
+    string RouteName,
+    string EmployeeName,
+    string AccountLogin,
+    string ReasonCode,
+    string AssignmentStatusAtReceipt,
+    string CurrentAssignmentStatus,
+    string? SubmissionMode,
+    DateTimeOffset CompletedAtLocal,
+    DateTimeOffset ReceivedAt,
+    string Status,
+    int PointCount,
+    int IssueCount,
+    int PhotoCount,
+    int PendingPhotoCount,
+    bool CanApply,
+    string ResolutionComment,
+    string? ResolvedBy,
+    DateTimeOffset? ResolvedAt,
+    object? Payload);
+
+public sealed record PatrolLateReportResolutionRequestDto(
+    string Decision,
+    string? Comment);
+
+public sealed record PatrolLateReportResolutionResult(
+    PatrolLateReportDto? Report,
+    string? ErrorCode,
+    string? ErrorMessage);
 
 public sealed record MobileDeviceAdminDto(
     string DeviceId,

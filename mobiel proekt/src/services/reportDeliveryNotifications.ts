@@ -103,3 +103,18 @@ export async function readSentReportNotices(): Promise<Record<string, ReportNoti
 export async function saveSentReportNotices(sent: Record<string, ReportNotice["kind"]>) {
   await SecureStore.setItemAsync(sentNoticesKey, JSON.stringify(sent));
 }
+
+/**
+ * Sign-out: tray notifications and pending reminders name routes and patrols
+ * of the previous account, and the sent-notice ledger refers to its reports.
+ */
+export async function clearAccountNotifications() {
+  const results = await Promise.allSettled([
+    Notifications.cancelAllScheduledNotificationsAsync(),
+    Notifications.dismissAllNotificationsAsync(),
+    Notifications.setBadgeCountAsync(0),
+    SecureStore.deleteItemAsync(sentNoticesKey)
+  ]);
+  const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failed) throw failed.reason;
+}

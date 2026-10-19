@@ -130,3 +130,27 @@ it('does not start an unaccepted request or enqueue an implicit acceptance', asy
   expect(patrolStatus('a').assignment).toBe('assigned');
   expect(selectAll(raw, 'SELECT command_type FROM outbox_commands')).toEqual([]);
 });
+
+it('startup repairs a legacy start queued after its point commands, once and without gaps', async () => {
+  seedPatrol('a', 'inProgress');
+  const insert = raw.prepare(`INSERT INTO outbox_commands(client_operation_id, owner_user_id, contour_id, command_type, entity_type, entity_local_id,
+      payload_json, created_at_local, status, last_error, aggregate_key, sequence_no)
+    VALUES (?, 'alice', 'test', ?, 'patrolAssignment', 'a', '{"assignmentId":"a"}', '2026-10-19', ?, ?, 'patrolAssignment:a', ?)`);
+  insert.run('accept', 'acceptPatrolRequest', 'accepted', null, 1);
+  insert.run('scan', 'scanPatrolPointNfc', 'pending', null, 2);
+  insert.run('mark', 'markPatrolPointOk', 'pending', null, 3);
+  insert.run('start', 'startPatrolAssignment', 'rejected', legacyStartRejection, 4);
+  raw.exec("DELETE FROM schema_migrations WHERE id = '20260728_repair_misordered_patrol_outbox'");
+
+  vi.resetModules();
+  await openRealDatabase(raw);
+
+  const order = () => selectAll(raw, "SELECT client_operation_id AS id FROM outbox_commands ORDER BY sequence_no").map(row => row.id);
+  expect(order()).toEqual(['accept', 'start', 'scan', 'mark']);
+  expect(selectAll(raw, 'SELECT sequence_no FROM outbox_commands ORDER BY sequence_no').map(row => row.sequence_no)).toEqual([1, 2, 3, 4]);
+
+  // Later launches leave the repaired order alone.
+  vi.resetModules();
+  await openRealDatabase(raw);
+  expect(order()).toEqual(['accept', 'start', 'scan', 'mark']);
+});

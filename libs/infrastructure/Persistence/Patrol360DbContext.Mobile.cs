@@ -97,6 +97,10 @@ public sealed partial class Patrol360DbContext
             entity.Property(session => session.RefreshExpiresAt).HasColumnName("refresh_expires_at");
             entity.Property(session => session.RevokedAt).HasColumnName("revoked_at");
             entity.Property(session => session.LastSeenAt).HasColumnName("last_seen_at");
+            entity.Property(session => session.HeartbeatAt).HasColumnName("heartbeat_at");
+            entity.Property(session => session.HeartbeatPendingCount).HasColumnName("heartbeat_pending_count");
+            entity.Property(session => session.HeartbeatFailedCount).HasColumnName("heartbeat_failed_count");
+            entity.Property(session => session.HeartbeatOldestPendingAgeSeconds).HasColumnName("heartbeat_oldest_pending_age_seconds");
 
             entity.HasOne(session => session.MobileAccount)
                 .WithMany(account => account.Sessions)

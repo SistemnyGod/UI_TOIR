@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-const s = vi.hoisted(() => ({ owner: 'alice', generation: 0, bootstrap: vi.fn(), save: vi.fn(), event: vi.fn(), push: vi.fn() }));
+const s = vi.hoisted(() => ({ owner: 'alice', generation: 0, bootstrap: vi.fn(), save: vi.fn(), event: vi.fn(), push: vi.fn(), workItems: vi.fn(), legacyWorkTasks: vi.fn() }));
 vi.mock('@/auth/tokenStorage', () => ({ getStoredOwnerUserId: async () => s.owner }));
 vi.mock('@/auth/sessionGeneration', () => ({ getSessionGeneration: () => s.generation }));
 vi.mock('@/core/environments', () => ({ currentContourId: 'test' }));
@@ -11,7 +11,7 @@ vi.mock('@/db/repositories/patrolAppealRepository', () => ({ refreshPatrolAppeal
 vi.mock('@/db/repositories/mobileActionLogRepository', () => ({ logMobileAction: async () => {} }));
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/notificationService', () => ({ refreshPushRegistrationIfAllowed: s.push, syncMobileNotifications: async () => {} }));
-vi.mock('@/services/workTaskService', () => ({ syncWorkItems: async () => {} }));
+vi.mock('@/services/workTaskService', () => ({ syncWorkItems: s.workItems, syncWorkTasks: s.legacyWorkTasks }));
 vi.mock('@/sync/syncEvents', () => ({ emitSyncEvent: s.event }));
 import { refreshMobileData } from '@/services/mobileDataRefreshService';
 
@@ -71,4 +71,12 @@ it('does not loop when the replacement session is also cancelled', async () => {
   await expect(refreshMobileData()).rejects.toThrow('cancelled refresh');
   expect(s.bootstrap).toHaveBeenCalledTimes(2);
   expect(s.save).not.toHaveBeenCalled();
+});
+
+it('refreshes work items through the paged v2 work item sync and announces them', async () => {
+  s.workItems.mockResolvedValue(undefined);
+  await expect(refreshMobileData()).resolves.toBe(true);
+  expect(s.workItems).toHaveBeenCalledExactlyOnceWith();
+  expect(s.legacyWorkTasks).not.toHaveBeenCalled();
+  expect(s.event).toHaveBeenCalledWith(expect.objectContaining({ refreshedZones: ['workItems'] }));
 });

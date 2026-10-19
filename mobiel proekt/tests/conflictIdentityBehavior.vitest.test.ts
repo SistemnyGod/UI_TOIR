@@ -300,3 +300,63 @@ it.each(protectedStatuses)('the startup migration freezes the route of a %s patr
   expect(selectAll(raw, 'SELECT assignment_id, point_id FROM assignment_route_points'))
     .toEqual([{ assignment_id: 'active-assignment', point_id: 'active-point' }]);
 });
+
+function seedPlainCommand(id: string, commandType: string, entityLocalId: string, aggregateKey: string, payload: Record<string, unknown>, createdAtLocal = '2026-10-19T08:00:00Z') {
+  raw.prepare(`INSERT INTO outbox_commands(client_operation_id, owner_user_id, contour_id, command_type, entity_type, entity_local_id,
+      payload_json, created_at_local, status, aggregate_key, sequence_no)
+    VALUES (?, 'alice', 'test', ?, 'patrolAssignment', ?, ?, ?, 'pending', ?, 1)`)
+    .run(id, commandType, entityLocalId, JSON.stringify(payload), createdAtLocal, aggregateKey);
+}
+const queued = (id: string) => {
+  const row = raw.prepare('SELECT entity_local_id AS entityLocalId, aggregate_key AS aggregateKey, payload_json AS payload FROM outbox_commands WHERE client_operation_id = ?')
+    .get(id) as { entityLocalId: string; aggregateKey: string; payload: string };
+  return { ...row, payload: JSON.parse(row.payload) };
+};
+
+it('bootstrap moves every local reference of a merged assignment to the server id', async () => {
+  seedPatrol('local-a', 'inProgress', { requestId: 'request-a' });
+  seedPlainCommand('start', 'startPatrolAssignment', 'local-a', 'patrolAssignment:local-a', { assignmentId: 'local-a' });
+  seedPlainCommand('switch', 'switchPatrolAssignment', 'other', 'patrolAssignment:other', { assignmentId: 'other', sourceAssignmentId: 'local-a' });
+  raw.prepare(`INSERT INTO patrol_report_cache(owner_user_id, contour_id, assignment_id, route_name, employee_name, completed_at, cached_at)
+    VALUES ('alice', 'test', 'local-a', 'Route', 'Alice', NULL, '2026-10-19')`).run();
+  raw.prepare(`INSERT INTO patrol_device_context(owner_user_id, contour_id, employee_id, assignment_id, updated_at)
+    VALUES ('alice', 'test', NULL, 'local-a', '2026-10-19')`).run();
+  const { saveBootstrap } = await import('@/db/repositories/bootstrapRepository');
+
+  await saveBootstrap(bootstrap({ assignments: [{ ...serverAssignment('server-a', 'request-a'), status: 'inProgress' }] }));
+
+  expect(selectAll(raw, 'SELECT assignment_id FROM patrol_assignments')).toEqual([{ assignment_id: 'server-a' }]);
+  expect(queued('start')).toMatchObject({ entityLocalId: 'server-a', aggregateKey: 'patrolAssignment:server-a', payload: { assignmentId: 'server-a' } });
+  // The other side of a pending switch keeps its own queue but points at the merged assignment.
+  expect(queued('switch')).toMatchObject({ aggregateKey: 'patrolAssignment:other', payload: { assignmentId: 'other', sourceAssignmentId: 'server-a' } });
+  expect(selectAll(raw, 'SELECT assignment_id FROM patrol_report_cache')).toEqual([{ assignment_id: 'server-a' }]);
+  expect(selectAll(raw, 'SELECT assignment_id FROM patrol_device_context')).toEqual([{ assignment_id: 'server-a' }]);
+});
+
+const completedAt = (id: string) => (raw.prepare('SELECT completed_at_local AS value FROM patrol_assignments WHERE assignment_id = ?').get(id) as { value: string | null }).value;
+
+it('bootstrap recovers a lost local completion time from the queued report, never from server time', async () => {
+  // Realistic ids: the completion command is also found by the id inside its payload.
+  seedPatrol('patrol-1111', 'completedLocal');
+  seedPatrol('patrol-2222', 'completedLocal');
+  seedPlainCommand('report-a', 'completePatrolAssignment', 'patrol-1111', 'patrolAssignment:patrol-1111', { assignmentId: 'patrol-1111', completedAtLocal: '2026-10-19T09:15:00Z' });
+  seedPlainCommand('report-b', 'completePatrolAssignment', 'patrol-2222', 'patrolAssignment:patrol-2222', { assignmentId: 'patrol-2222' }, '2026-10-19T09:20:00Z');
+  const { saveBootstrap } = await import('@/db/repositories/bootstrapRepository');
+
+  await saveBootstrap(bootstrap({ assignments: [{ ...serverAssignment('patrol-1111'), status: 'inProgress' }, { ...serverAssignment('patrol-2222'), status: 'inProgress' }] }));
+
+  expect(completedAt('patrol-1111')).toBe('2026-10-19T09:15:00Z');
+  expect(completedAt('patrol-2222')).toBe('2026-10-19T09:20:00Z');
+});
+
+it('bootstrap keeps the local completion time of a report that is still on the phone', async () => {
+  seedPatrol('a', 'completedLocal');
+  raw.prepare("UPDATE patrol_assignments SET completed_at_local = '2026-10-19T09:15:00Z' WHERE assignment_id = 'a'").run();
+  seedPlainCommand('report-a', 'completePatrolAssignment', 'a', 'patrolAssignment:a', { assignmentId: 'a', completedAtLocal: '2026-10-19T09:15:00Z' });
+  const { saveBootstrap } = await import('@/db/repositories/bootstrapRepository');
+
+  await saveBootstrap(bootstrap({ assignments: [{ ...serverAssignment('a'), status: 'inProgress', completedAtLocal: '2026-10-19T10:00:00Z' }] }));
+
+  expect(completedAt('a')).toBe('2026-10-19T09:15:00Z');
+  expect(patrol('a')?.status).toBe('completedLocal');
+});

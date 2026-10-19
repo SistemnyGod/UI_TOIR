@@ -6,9 +6,10 @@ export type QueryHook = (sql: string, args: unknown[]) => void;
 
 type MockedOpener = { mockResolvedValue(value: unknown): void };
 
-export async function openRealDatabase() {
-  const raw = new DatabaseSync(':memory:');
-  const hooks: { afterRead: QueryHook | null; afterWrite: QueryHook | null } = { afterRead: null, afterWrite: null };
+// Passing an existing database re-runs startup on it (after vi.resetModules), as on the next app launch.
+export async function openRealDatabase(existing?: DatabaseSync) {
+  const raw = existing ?? new DatabaseSync(':memory:');
+  const hooks: { afterRead: QueryHook | null; afterWrite: QueryHook | null; beforeWrite: QueryHook | null } = { afterRead: null, afterWrite: null, beforeWrite: null };
   const adapter = {
     execAsync: async (sql: string) => { raw.exec(sql); },
     getAllAsync: async (sql: string, args: never[] = []) => {
@@ -22,6 +23,7 @@ export async function openRealDatabase() {
       return result;
     },
     runAsync: async (sql: string, args: never[] = []) => {
+      hooks.beforeWrite?.(sql, args);
       const result = raw.prepare(sql).run(...args);
       hooks.afterWrite?.(sql, args);
       return result;

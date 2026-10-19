@@ -90,13 +90,32 @@
 
 Проверка вручную: на побайтной копии `src/` каждая защита по очереди удалялась или ослаблялась, затем запускался соответствующий тест; все 123 изменения дали падение, контрольное изменение без смысла — нет. Код приложения не менялся. `databaseStartup.vitest.test.ts` теперь сам создаёт `output/selected-optimizations-audit/`. `npm run verify`: 107 Node-сценариев, 664 Vitest-теста и 2 ожидаемых падения (`it.fails`, см. ниже), кодировка, TypeScript и ESLint.
 
-**Выявленный дефект (не исправлен, этап 0 не меняет поведение).** `restoreMissingPointAttachment` (`patrolRepository.ts`) на реальной схеме всегда падает: читает `assignment_route_points.status` и пишет `outbox_commands.sent_at_local`, а таких столбцов нет ни в схеме, ни в миграциях. Значит, завершённый отчёт с потерянным фото нельзя восстановить из приложения. Два сценария в `patrolReportBehavior` помечены `it.fails` и станут зелёными после исправления; до тех пор защиты повторной постановки остаются проверкой текста в `mobileAuditRegression`.
+**Выявленный дефект (не исправлен, этап 0 не меняет поведение).** `restoreMissingPointAttachment` (`patrolRepository.ts`) на реальной схеме всегда падает: читает `assignment_route_points.status` и пишет `outbox_commands.sent_at_local`, а таких столбцов нет ни в схеме, ни в миграциях. Значит, завершённый отчёт с потерянным фото нельзя восстановить из приложения. Два сценария в `patrolReportBehavior` помечены `it.fails` и станут зелёными после исправления.
 
 Наблюдения без изменения поведения: ветка `acceptPatrolRequest` в `restoredStatus` функции `cancelRejectedOutboxCommand` недостижима (раньше срабатывает финализация отменённого назначения); проверка `assignmentUpdate.changes !== 1` в `applyBootstrapConflictResolutionsInTransaction` не достигается обычным `saveBootstrap` и проверена через перехват чтения.
 
-Остаётся в чтении исходников: связки экранов и `_layout.tsx`, тексты UI, архитектурные запреты (`databaseEncryptionPolicy`, `sqliteServiceWriteRetry`, NFC-стратегии), серверный контракт C# в `legacyStartRecovery`. Этап 0 по проверкам доставки, изоляции, порядка команд и восстановления закрыт.
+**Статус на 19.10.2026 (этап 0 завершён: проверок текста исходников не осталось).** Последние 10 файлов, читавших `src/` и `app/` как текст (`mobileAuditRegression`, `offlineRecoveryRegression`, `reportSubmissionRegression`, `legacyStartRecovery`, `bootstrapResolution`, `databaseEncryptionPolicy`, `diagnosticUploadRegression`, `nfcReadStrategy`, `nfcTagIdentityStrategy`, `sqliteServiceWriteRetry`), переписаны; 7 из них удалены целиком. Код приложения не менялся.
 
-В 17 файлах тестов встречается чтение исходников. Не все такие проверки бесполезны: архитектурные запреты можно оставить. Однако ключевые свойства доставки, изоляции, порядка команд и восстановления должны проверяться поведением, а не именами локальных переменных.
+| Что защищала проверка текста | Чем заменено |
+|---|---|
+| Связки экранов: повторное нажатие не запускает действие дважды; фоновая синхронизация перечитывает карточку без загрузчика и только по своим зонам; кнопка обхода ведёт к отчёту лишь при непустом заполненном маршруте; сбой чтения или проверки доставки не оставляет загрузчик | новые `patrolRequestUi`, `activePatrolUi`; дополнен `refreshContinuity`; очередь уже покрыта `screenLoadIsolation` |
+| `_layout.tsx`: цикл восстановления после запуска и при каждом возврате в приложение, передача отчётов фоновой задаче | новый `rootLayoutLifecycle` |
+| Точка: порядок маршрута при открытии, переход после сохранения по политике сканирования (NFC/QR/все метки) | дополнены `scanUi`, `pointUnifiedUi` |
+| NFC: один сеанс reader mode (NFC-A/V, без `requestTechnology`, без сброса после первого чтения), коды NDEF и UID одной метки, совпадение по UID при чужом тексте, остановка считывателя и синхронизация при блокировке статусом | новый `nfcReaderSession`; дополнены `scanTagOutcome`, `scanFeedbackUi` |
+| Очередь: «сервер прав» только по решению сервиса конфликтов, подпись «Отчёт»/«Маршрут», повторяемая команда с `lastError` не считается проблемой | дополнен `syncQueueSafeActions` |
+| `syncWorkItems` вместо `syncWorkTasks` при обновлении и входе | дополнены `mobileRefreshSession`, `authTransition` |
+| Переброс `MobileNetworkError` при загрузке вложения: офлайн останавливает проход и ставит очередь в ожидание сети | дополнен `reportDeliveryFailures` |
+| Реактивация старых отклонённых запусков и точек в проходе синхронизации без перенумерации; однократный ремонт порядка при запуске | дополнены `reportDeliveryFailures`, `patrolLifecycleRecovery` |
+| Сведение локального и серверного id: ключ агрегата, `sourceAssignmentId`, кэш отчёта, контекст устройства; восстановление времени завершения из команды | дополнен `conflictIdentityBehavior` |
+| Сообщения о вложениях и диагностике — по-русски и видны сотруднику | дополнен `completionAttachmentPreflight`; новый `diagnosticsSettingsUi` |
+| Запись служебных репозиториев переживает `SQLITE_BUSY` и применяется один раз | новый `serviceWriteBusyRetry` |
+| Архитектурные запреты: `withExclusiveTransactionAsync` в `src/db`, `await db.runAsync` без `withSqliteBusyRetry` в четырёх служебных репозиториях | правила `no-restricted-syntax` в `eslint.config.js` (по AST, а не по тексту) |
+
+Удалено без замены: отсутствие `Alert.alert` и вызов `queuePatrolReport` на экране отчёта (уже проверяются в `submitReportUi`); проверки серверного C# из мобильного теста — сервер проверяет себя сам (`MobileAppDbIntegrationTests`: отказ `takePatrolRequest`). Пробел на сервере: отказ запуска непринятого назначения не покрыт `PatrolAssignmentStateMachineTests`.
+
+Проверка вручную: 23 изменения кода (и подброшенное нарушение для правил ESLint), по одному на защиту, — каждое дало падение своего теста; одно сначала не дало, тест усилен. `npm run verify`: 93 Node-сценария, 974 Vitest-теста, кодировка, TypeScript и ESLint. Чтение файлов в тестах осталось только для не-исходников: контракт `tests/support/appUpdateContract.json` и патч нативного модуля в `node_modules` (`expoActivityResultPatch`).
+
+Наблюдения без изменения поведения: `ActivePatrolScreen` записывает ошибку повторного чтения и проверки доставки в `loadError`, но показывает её, только пока обход не загружен; поиск команды завершения в `saveBootstrap` сравнивает id подстрокой в `payload_json`, поэтому короткий id может совпасть с чужим отчётом (для UUID практически не встречается).
 
 ## Легаси: что можно убирать первым
 

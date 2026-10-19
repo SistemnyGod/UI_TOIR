@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   preventRemove: null as null | ((event: any) => void), appState: null as null | ((value: string) => void),
   dispatch: vi.fn(), push: vi.fn(), replace: vi.fn(), back: vi.fn(),
   saveDraft: vi.fn(), saveOk: vi.fn(), saveIssue: vi.fn(), skip: vi.fn(), camera: vi.fn(), gallery: vi.fn(), readiness: vi.fn(), load: vi.fn(), getPoint: vi.fn(), fileReads: 0,
-  series: vi.fn(), deleteFile: vi.fn(), replacePhoto: vi.fn(), editBlocks: {} as Record<string, string>,
+  scanPolicy: { nfcEnabled: true, qrFallbackEnabled: true }, series: vi.fn(), deleteFile: vi.fn(), replacePhoto: vi.fn(), editBlocks: {} as Record<string, string>,
 }));
 vi.mock('expo-router', async () => {
   const R = await import('react');
@@ -73,7 +73,7 @@ vi.mock('@/db/repositories/filesRepository', () => ({ listPointFiles: async () =
 vi.mock('@/db/repositories/patrolRepository', () => ({
   assertPointCanBeOpened: state.load, getPointForFill: state.getPoint,
   getReportReadiness: state.readiness,
-  getAssignmentScanPolicy: async () => ({ nfcEnabled: true, qrFallbackEnabled: true }),
+  getAssignmentScanPolicy: async () => state.scanPolicy,
   savePointDraft: state.saveDraft, savePointOk: state.saveOk, savePointIssue: state.saveIssue, skipPoint: state.skip,
   beginManualPointInspection: vi.fn(), deferPoint: vi.fn(), listPointAttachmentEditBlocks: async () => state.editBlocks,
 }));
@@ -90,7 +90,7 @@ beforeEach(() => {
   state.point = { pointId: 'point', name: 'Печь 930 Э', orderIndex: 1, status: 'pending',
     confirmationType: 'nfc', scannedAtLocal: '2026-09-28T12:00:00Z', comment: '', issueTypeId: null,
     requiresPhoto: false, description: 'Осмотреть оборудование', instruction: 'Проверить крепления', photoClientFileIds: [] };
-  state.files = []; state.editBlocks = {};
+  state.files = []; state.editBlocks = {}; state.scanPolicy = { nfcEnabled: true, qrFallbackEnabled: true };
   state.load.mockImplementation(async () => state.point); state.getPoint.mockImplementation(async () => state.point);
   state.db = new DatabaseSync(':memory:');
   state.db.exec('CREATE TABLE draft (owner TEXT PRIMARY KEY, payload TEXT NOT NULL)');
@@ -567,4 +567,16 @@ it('a refused delete is shown inside the open viewer and keeps the photo', async
   expect(modal.findByProps({ accessibilityRole: 'alert', accessibilityLiveRegion: 'assertive' }).findAllByType('Text' as any)[0].props.children)
     .toBe('Вложение уже передано в очередь отправки. Изменить или удалить его нельзя.');
   expect(modal.findByType('Image' as any).props.source.uri).toBe('file:///photo.jpg');
+});
+
+it.each([
+  [{ nfcEnabled: false, qrFallbackEnabled: true }, 'scan-qr'],
+  [{ nfcEnabled: false, qrFallbackEnabled: false }, 'all-points']
+])('after saving an unfinished route the form follows the assignment scan policy %o', async (policy, target) => {
+  state.scanPolicy = policy;
+  await mount();
+  await choose('Исправно');
+  await act(async () => { await button('Сохранить и продолжить').props.onPress(); });
+  expect(state.saveOk).toHaveBeenCalledTimes(1);
+  expect(state.replace).toHaveBeenCalledExactlyOnceWith(`/patrol/assignment/assignment/${target}`);
 });

@@ -23,7 +23,8 @@ const state = vi.hoisted(() => ({
   openNfcSettings: vi.fn(),
   refreshMobile: vi.fn(),
   cameraPermission: true,
-  qrFallbackEnabled: true
+  qrFallbackEnabled: true,
+  openPoint: vi.fn()
 }));
 
 vi.mock('expo-router', async () => {
@@ -72,7 +73,7 @@ vi.mock('@/db/repositories/patrolRepository', () => ({
   pauseAssignmentLocally: vi.fn(), scanPointByNfc: state.scanNfc, scanPointByQr: state.scanQr,
   getActiveAssignment: async () => state.assignment,
   getReportReadiness: async () => ({ ready: false, problems: [{ pointId: 'p1', reason: 'Добавьте обязательное фото' }] }),
-  assertPointCanBeOpened: async () => state.points[0], getPointForFill: async () => state.points[0], listMissingCompleteAssignmentAttachmentIds: async () => []
+  assertPointCanBeOpened: state.openPoint, getPointForFill: async () => state.points[0], listMissingCompleteAssignmentAttachmentIds: async () => []
 }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
 vi.mock('@/ui/ActionSheet', () => ({ ActionSheet: 'ActionSheet' }));
@@ -104,6 +105,7 @@ beforeEach(() => {
   state.assertOwner.mockResolvedValue(undefined); state.nfcSupported = false; state.qrFallbackEnabled = true;
   state.nfcLookup.mockImplementation(async () => ({ supported: state.nfcSupported, enabled: state.nfcEnabled }));
   state.enabledLookup.mockImplementation(async () => state.nfcEnabled);
+  state.openPoint.mockImplementation(async () => state.points[0]);
 });
 afterEach(async () => { if (screen) await act(() => screen?.unmount()); screen = undefined; });
 const mount = async (component: React.ComponentType) => { await act(async () => { screen = create(React.createElement(component)); }); };
@@ -298,4 +300,13 @@ it('NFC pulse stops while a detected tag is being checked', async () => {
   expect(screen!.root.findByType(ScanMessage).props).toMatchObject({ busy: true, scanning: false });
   await act(async () => resolve({ matched: true, point: { pointId: 'p1' } }));
   expect(screen!.root.findByType(ScanMessage).props).toMatchObject({ tone: 'success', scanning: false });
+});
+
+it('point detail of a running patrol checks route order and shows the refusal instead of the point', async () => {
+  state.openPoint.mockRejectedValue(new Error('Сначала завершите обязательную точку «Ворота».'));
+  await mount(PointDetailScreen);
+  expect(state.openPoint).toHaveBeenCalledWith('a1', undefined);
+  const visible = screen!.root.findAllByType('Text' as any).flatMap(node => node.children).filter(child => typeof child === 'string').join(' ');
+  expect(visible).toContain('Сначала завершите обязательную точку «Ворота».');
+  expect(visible).not.toContain('930 Э');
 });

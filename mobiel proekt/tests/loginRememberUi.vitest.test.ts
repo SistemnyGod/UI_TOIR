@@ -17,6 +17,7 @@ vi.mock('@/auth/tokenStorage', () => ({ getOfflineSession: async () => state.off
 vi.mock('@/auth/sessionGateState', () => ({ markSessionUnlocked: state.unlock, consumePendingSessionRoute: () => null }));
 vi.mock('@/services/patrolNavigationService', () => ({ resolvePatrolStartPath: async () => '/patrol/request-board' }));
 vi.mock('@/sync/syncTriggers', () => ({ triggerForegroundSyncWithRetry: vi.fn() }));
+vi.mock('@/features/settings/themePreference', async () => { const { darkColors } = await import('@/ui/atomTheme'); return { useAppTheme: () => ({ colors: darkColors, effectiveScheme: 'dark' }) }; });
 import { forgetRememberedCredentials, prepareRememberedCredentialsSave, readRememberedCredentials } from '@/auth/rememberedCredentials';
 import { Alert } from 'react-native';
 let LoginScreen: typeof import('@/features/auth/LoginScreen').LoginScreen;
@@ -155,4 +156,13 @@ it('a late preference restore cannot change the choice already submitted', async
   expect(checkbox().props.accessibilityState.checked).toBe(false);
   expect(field('Логин').props.value).toBe(' operator ');
   expect(await readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
+});
+
+it('the login card and fields follow the dark theme', async () => {
+  await mount();
+  const flat = (style: unknown): Record<string, unknown> => Array.isArray(style) ? Object.assign({}, ...style.map(flat)) : (style as Record<string, unknown>) ?? {};
+  const views = screen!.root.findAllByType('View' as any).map(node => flat(node.props.style));
+  expect(views.some(style => style.backgroundColor === '#0b1a2f')).toBe(true);
+  expect(flat(field('Логин').props.style).color).toBe('#f5f7fa');
+  await unmount();
 });

@@ -9,7 +9,9 @@ const state = vi.hoisted(() => ({
   failCleanup: false,
   restoredOldSession: false
   , retryOwner: undefined as string | null | undefined,
-  wipes: 0
+  wipes: 0,
+  signOutWipes: [] as (string | null)[],
+  traceWipes: [] as (string | null)[]
 }));
 
 vi.mock("@/api/authApi", () => ({
@@ -52,13 +54,20 @@ vi.mock("@/db/repositories/bootstrapRepository", () => ({
   } : null),
   replaceLocalUserDataWithBootstrap: vi.fn(async () => { state.replacementCommitted = true; state.pendingTarget = "new-user"; }),
   saveBootstrap: vi.fn(),
-  completePendingAuthTransition: vi.fn(async () => { state.pendingTarget = null; }),
-  cleanupPreviousUserPhotos: vi.fn(async () => { if (state.failCleanup) throw new Error("cleanup failed"); })
+  completePendingAuthTransition: vi.fn(async () => { state.pendingTarget = null; })
+}));
+vi.mock("@/services/accountDataWipe", () => ({
+  wipeSignedOutAccountData: vi.fn(async (owner: string | null) => { state.signOutWipes.push(owner); return []; }),
+  wipeAccountDeviceTraces: vi.fn(async (owner: string | null) => {
+    if (state.failCleanup) throw new Error("cleanup failed");
+    state.traceWipes.push(owner);
+    return [];
+  })
 }));
 vi.mock("@/db/repositories/mobileActionLogRepository", () => ({ logMobileAction: vi.fn(async () => undefined) }));
 vi.mock("@/db/repositories/logoutQueueRepository", () => ({ completePendingLogoutIntents: vi.fn(), enqueueLogoutIntent: vi.fn(), getPendingLogoutContourId: vi.fn(async () => undefined) }));
 vi.mock("@/services/notificationService", () => ({ registerPushNotifications: vi.fn(async () => null), syncMobileNotifications: vi.fn(async () => []) }));
-vi.mock("@/services/workTaskService", () => ({ syncWorkItems: vi.fn(async () => []) }));
+vi.mock("@/services/workTaskService", () => ({ syncWorkItems: vi.fn(async () => []), syncWorkTasks: vi.fn(async () => []) }));
 vi.mock("@/sync/syncTriggers", () => ({ triggerForegroundSyncWithRetry: vi.fn() }));
 vi.mock("@/sync/outboxRetryScheduler", () => ({ cancelNextOutboxRetry: vi.fn(), scheduleNextOutboxRetry: vi.fn(async (owner) => { state.retryOwner = owner; }) }));
 vi.mock("@/core/environments", () => ({ currentContourId: "test-contour" }));
@@ -67,11 +76,12 @@ vi.mock("@/auth/rememberedCredentials", () => ({ wipeRememberedCredentials: vi.f
 import { restoreSessionWithRefreshToken, signIn, signOut } from "@/auth/authService";
 import { login } from "@/api/authApi";
 import { getBootstrap } from "@/api/mobileApi";
+import { syncWorkItems, syncWorkTasks } from "@/services/workTaskService";
 
 beforeEach(() => {
   state.blockingCount = 0; state.replacementCommitted = false; state.pendingTarget = null;
   state.envelopeOwner = "old-user"; state.failEnvelope = false; state.failCleanup = false; state.restoredOldSession = false;
-  state.retryOwner = undefined; state.wipes = 0;
+  state.retryOwner = undefined; state.wipes = 0; state.signOutWipes = []; state.traceWipes = [];
 });
 
 describe("durable account transition", () => {
@@ -156,12 +166,40 @@ describe("remembered credentials lifecycle", () => {
     expect(state.wipes).toBe(1);
   });
 
-  it("wipes the saved pair on sign-out but not when sign-out is refused", async () => {
+  it("keeps a ticked saved pair on sign-out for the next shift login", async () => {
+    await signOut();
+    expect(state.wipes).toBe(0);
+  });
+});
+
+describe("sign-out data wipe", () => {
+  it("wipes the signed-out owner's data, but nothing while unsent work blocks sign-out", async () => {
     state.blockingCount = 1;
     await expect(signOut()).rejects.toThrow("Нельзя выйти");
-    expect(state.wipes).toBe(0);
+    expect(state.signOutWipes).toEqual([]);
     state.blockingCount = 0;
-    await signOut();
-    expect(state.wipes).toBe(1);
+    await expect(signOut()).resolves.toBe(true);
+    expect(state.signOutWipes).toEqual(["old-user"]);
+  });
+
+  it("removes the previous owner's files and notices when another account replaces local data", async () => {
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.traceWipes).toEqual(["old-user"]);
+    state.traceWipes = [];
+    state.envelopeOwner = "new-user";
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.traceWipes).toEqual([]);
+  });
+});
+
+describe("work items after authorization", () => {
+  it("sign-in and refresh recovery download work items through the v2 work item sync", async () => {
+    vi.mocked(syncWorkItems).mockClear(); vi.mocked(syncWorkTasks).mockClear();
+    await signIn("new", "password");
+    expect(syncWorkItems).toHaveBeenCalledWith();
+    vi.mocked(syncWorkItems).mockClear();
+    await restoreSessionWithRefreshToken();
+    expect(syncWorkItems).toHaveBeenCalledWith();
+    expect(syncWorkTasks).not.toHaveBeenCalled();
   });
 });

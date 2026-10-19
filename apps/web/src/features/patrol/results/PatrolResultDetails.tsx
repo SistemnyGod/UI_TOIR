@@ -4,6 +4,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Download
 import type { PatrolResult } from "../../../types";
 import { Button, ModalShell, SectionTabs } from "../../../shared/ui";
 import { ResultPointMedia } from "./ResultPointMedia";
+import { ReportDeliveryBadges } from "./ReportDeliveryBadges";
 import { getResultPointMeta, resultAttachmentCount, resultDateTime, resultHasIssue, usefulResultText } from "./resultPresentation";
 import type { ResultGroup } from "./resultTypes";
 import { usePhoneLayout } from "../../../hooks/usePhoneLayout";
@@ -83,6 +84,7 @@ export function PatrolResultDetails({ group, initialResultId, initialPointMode =
     <div className="patrol-detail-summary">
       <span><CalendarDays size={18} />Начало <strong>{started.time}</strong></span><span title={`${finished.date}, ${finished.time}`}><Clock3 size={18} />Окончание <strong>{finished.time}{finished.date !== started.date ? <small> · {finished.date}</small> : null}</strong></span>
       <span><MapPin size={18} />Проверено <strong>{group.okPoints + group.issuePoints} из {group.points}</strong></span><span><Paperclip size={18} />Вложения <strong>{group.photos}</strong></span>
+      <ReportDeliveryBadges results={group.results} />
     </div>
     <div className="patrol-detail-toolbar">
       <label className="patrol-detail-search"><Search size={18} /><input aria-label="Поиск точки обхода" value={pointQuery} onChange={event => setPointQuery(event.currentTarget.value)} placeholder="Точка, комментарий или замечание…" /></label>

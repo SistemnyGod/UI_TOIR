@@ -48,4 +48,9 @@ internal sealed class MobileAccountSessionEntity
     public DateTimeOffset? RevokedAt { get; set; }
 
     public DateTimeOffset LastSeenAt { get; set; }
+    // Last outbox heartbeat reported by the phone (see POST mobile/heartbeat).
+    public DateTimeOffset? HeartbeatAt { get; set; }
+    public int? HeartbeatPendingCount { get; set; }
+    public int? HeartbeatFailedCount { get; set; }
+    public int? HeartbeatOldestPendingAgeSeconds { get; set; }
 }

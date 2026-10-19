@@ -27,11 +27,17 @@ import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionG
 import { getOfflineSession, getRefreshToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getServerBaseUrl } from "@/core/serverSettings";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { useAppTheme } from "@/features/settings/themePreference";
+import type { ThemeColors } from "@/ui/atomTheme";
+import { BrandMark } from "@/ui/BrandMark";
+import { GradientFill } from "@/ui/GradientFill";
 
 const loginBackground = require("../../../assets/login-bg.png");
 
 export function LoginScreen() {
   const router = useRouter();
+  const { colors, effectiveScheme } = useAppTheme();
+  const skin = loginSkin(colors, effectiveScheme === "dark");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -246,15 +252,13 @@ export function LoginScreen() {
   return (
     <ImageBackground source={loginBackground} resizeMode="cover" style={styles.background}>
       <StatusBar style="light" />
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, skin.overlay]}>
         <SafeAreaView style={styles.safe}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View style={styles.logoBlock}>
                 <View accessible accessibilityRole="image" accessibilityLabel="ATOM Minerals" style={styles.mark}>
-                  <View style={styles.markTop} />
-                  <View style={styles.markOrbit} />
-                  <View style={styles.markCore} />
+                  <BrandMark size={64} light />
                 </View>
                 <Text style={styles.logoText}>ATOM</Text>
                 <Text style={styles.logoSubText}>MINERALS</Text>
@@ -262,10 +266,10 @@ export function LoginScreen() {
                 <Text style={styles.subtitle}>Вход в мобильное приложение</Text>
               </View>
 
-              <View style={styles.card}>
-                <Text style={styles.label}>Логин</Text>
-                <View style={styles.inputBox}>
-                  <Ionicons color="#2457f5" name="person-outline" size={21} />
+              <View style={[styles.card, skin.card]}>
+                <Text style={[styles.label, skin.muted]}>Логин</Text>
+                <View style={[styles.inputBox, skin.inputBox]}>
+                  <Ionicons color={colors.primary} name="person-outline" size={21} />
                   <TextInput
                     testID="login-username"
                     accessibilityLabel="Логин"
@@ -274,15 +278,15 @@ export function LoginScreen() {
                     editable={!isSubmitting}
                     onChangeText={value => { credentialsEdited.current = true; discardSavedPassword(); setLogin(value); }}
                     placeholder="Введите логин"
-                    placeholderTextColor="#8494aa"
-                    style={styles.input}
+                    placeholderTextColor={colors.placeholder}
+                    style={[styles.input, skin.text]}
                     value={login}
                   />
                 </View>
 
-                <Text style={[styles.label, styles.passwordLabel]}>Пароль</Text>
-                <View style={styles.inputBox}>
-                  <Ionicons color="#8494aa" name="lock-closed-outline" size={21} />
+                <Text style={[styles.label, styles.passwordLabel, skin.muted]}>Пароль</Text>
+                <View style={[styles.inputBox, skin.inputBox]}>
+                  <Ionicons color={colors.placeholder} name="lock-closed-outline" size={21} />
                   <TextInput
                     testID="login-password"
                     accessibilityLabel="Пароль"
@@ -291,12 +295,12 @@ export function LoginScreen() {
                     editable={!isSubmitting}
                     onChangeText={value => { credentialsEdited.current = true; if (value) discardSavedPassword(); setPassword(value); }}
                     placeholder={hasSavedPassword ? "Пароль сохранён на телефоне" : "Введите пароль"}
-                    placeholderTextColor="#8494aa"
+                    placeholderTextColor={colors.placeholder}
                     secureTextEntry
-                    style={styles.input}
+                    style={[styles.input, skin.text]}
                     value={password}
                   />
-                  <Ionicons accessibilityLabel="Пароль скрыт" color="#8494aa" name="eye-off-outline" size={20} />
+                  <Ionicons accessibilityLabel="Пароль скрыт" color={colors.placeholder} name="eye-off-outline" size={20} />
                 </View>
 
                 <View style={styles.rowBetween}>
@@ -308,19 +312,19 @@ export function LoginScreen() {
                     onPress={toggleRememberChoice}
                     style={styles.rememberRow}
                   >
-                    <View style={[styles.checkbox, rememberMe ? styles.checkboxActive : null]}>
+                    <View style={[styles.checkbox, skin.checkbox, rememberMe ? styles.checkboxActive : null]}>
                       {rememberMe ? <Ionicons color="#ffffff" name="checkmark" size={16} /> : null}
                     </View>
-                    <Text style={styles.rememberText}>Запомнить логин и пароль</Text>
+                    <Text style={[styles.rememberText, skin.text]}>Запомнить логин и пароль</Text>
                   </Pressable>
 
                   <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showPasswordRecovery} style={{ minHeight: 48, justifyContent: "center" }}>
-                    <Text style={styles.link}>Забыли пароль?</Text>
+                    <Text style={[styles.link, skin.link]}>Забыли пароль?</Text>
                   </Pressable>
                 </View>
 
-                {rememberError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{rememberError}</Text> : null}
-                {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+                {rememberError ? <Text accessibilityLiveRegion="polite" style={[styles.error, skin.error]}>{rememberError}</Text> : null}
+                {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={[styles.error, skin.error]}>{error}</Text> : null}
 
                 <Pressable
                   testID="login-submit"
@@ -333,29 +337,30 @@ export function LoginScreen() {
                     isSubmitting ? styles.loginButtonDisabled : null
                   ]}
                 >
+                  {isSubmitting ? null : <GradientFill colors={colors} kind="accent" radius={18} />}
                   {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>Войти на сервер</Text>}
                 </Pressable>
 
                 {offlineSessionName || biometricAvailable ? <View style={styles.quickLoginWrap}>
-                  <View style={styles.line} />
-                  <Text style={styles.quickLoginText}>Сохранённый доступ</Text>
-                  <View style={styles.line} />
+                  <View style={[styles.line, skin.line]} />
+                  <Text style={[styles.quickLoginText, skin.faint]}>Сохранённый доступ</Text>
+                  <View style={[styles.line, skin.line]} />
                 </View> : null}
 
                 {offlineSessionName ? (
                   <>
-                    <Text style={styles.offlineSessionText}>Аккаунт сохранённой смены: {offlineSessionName}</Text>
-                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, { backgroundColor: "#edf3ff", shadowOpacity: 0, elevation: 0 }, isSubmitting ? styles.loginButtonDisabled : null]}>
-                      <Text style={[styles.loginButtonText, { color: "#1e5bff" }]}>Открыть сохранённую смену</Text>
+                    <Text style={[styles.offlineSessionText, skin.muted]}>Аккаунт сохранённой смены: {offlineSessionName}</Text>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, { backgroundColor: skin.quiet.backgroundColor, shadowOpacity: 0, elevation: 0 }, isSubmitting ? styles.loginButtonDisabled : null]}>
+                      <Text style={[styles.loginButtonText, skin.link]}>Открыть сохранённую смену</Text>
                     </Pressable>
                   </>
                 ) : null}
                 {biometricAvailable ? (
                   <>
-                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} accessibilityLabel="Войти с биометрией" style={styles.fingerprintButton}>
-                      <Ionicons color="#2457f5" name="finger-print-outline" size={32} />
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} accessibilityLabel="Войти с биометрией" style={[styles.fingerprintButton, skin.quiet]}>
+                      <Ionicons color={colors.primary} name="finger-print-outline" size={32} />
                     </Pressable>
-                    <Text style={styles.fingerprintText}>Войти с биометрией</Text>
+                    <Text style={[styles.fingerprintText, skin.muted]}>Войти с биометрией</Text>
                   </>
                 ) : null}
               </View>
@@ -415,11 +420,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14
   },
-  mark: { alignItems: "center", backgroundColor: "#ffffff", borderRadius: 20, height: 64, justifyContent: "center", marginBottom: 12, overflow: "hidden", width: 64,
-    elevation: 10, shadowColor: "#000000", shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.3, shadowRadius: 18 },
-  markTop: { backgroundColor: "#dbe7ff", height: 32, left: 0, position: "absolute", right: 0, top: 0 },
-  markOrbit: { borderColor: "#2457f5", borderRadius: 24, borderWidth: 2.4, height: 18, position: "absolute", transform: [{ rotate: "-30deg" }], width: 48 },
-  markCore: { backgroundColor: "#2457f5", borderRadius: 6, height: 12, width: 12 },
+  mark: { alignItems: "center", height: 64, justifyContent: "center", marginBottom: 12, width: 64 },
   logoText: {
     color: "#ffffff",
     fontSize: 34,
@@ -536,6 +537,7 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     alignItems: "center",
+    overflow: "hidden",
     backgroundColor: "#2457f5",
     borderRadius: 18,
     elevation: 6,
@@ -681,3 +683,20 @@ const styles = StyleSheet.create({
     opacity: 0.6
   }
 });
+
+/** Theme-dependent colours; the blue photo hero stays, the card follows the light or dark theme. */
+function loginSkin(colors: ThemeColors, dark: boolean) {
+  return {
+    overlay: { backgroundColor: dark ? "rgba(3, 12, 32, 0.74)" : "rgba(9, 32, 92, 0.55)" },
+    card: { backgroundColor: dark ? "#0b1a2f" : colors.card, borderColor: colors.cardBorder, shadowOpacity: dark ? 0.5 : 0.32 },
+    inputBox: { backgroundColor: colors.field, borderColor: colors.border },
+    text: { color: colors.text },
+    muted: { color: colors.mutedText },
+    faint: { color: colors.faintText },
+    link: { color: colors.primary },
+    error: { color: colors.danger },
+    line: { backgroundColor: colors.border },
+    checkbox: { borderColor: dark ? colors.primary : colors.accent },
+    quiet: { backgroundColor: dark ? colors.tile : "#edf3ff", borderColor: dark ? colors.cardBorder : "#c9d9ff" }
+  };
+}

@@ -9,7 +9,7 @@ import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepositor
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
 import { deletePreparedMedia, deleteOwnedTemporaryMedia, assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto, isManagedMediaUri } from "@/services/fileStorageService";
 import { MediaPreparationProgressCallback, prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
-import { MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
+import { MAX_VIDEO_BYTES, MAX_VIDEO_CAPTURE_SECONDS, videoTooLargeMessage } from "@/domain/files/fileUploadLimits";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 const maxPhotoSidePx = 1600;
@@ -410,7 +410,7 @@ async function pickVideo(source: "camera" | "library") {
     ? await ImagePicker.launchCameraAsync({
         mediaTypes: "videos",
         quality: 0.5,
-        videoMaxDuration: 12
+        videoMaxDuration: MAX_VIDEO_CAPTURE_SECONDS
       })
     : await ImagePicker.launchImageLibraryAsync({
         allowsMultipleSelection: false,
@@ -618,7 +618,7 @@ async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   const info = asset.fileSize ? null : await getLocalFileInfo(asset.uri);
   const sizeBytes = asset.fileSize ?? (info?.exists ? info.size : null);
   if (sizeBytes && sizeBytes > MAX_VIDEO_BYTES) {
-    throw new Error("Видео слишком большое. Выберите файл до 25 МБ.");
+    throw new Error(videoTooLargeMessage);
   }
 
   await assertStorageForMedia(sizeBytes ?? MAX_VIDEO_BYTES);

@@ -116,3 +116,14 @@ it('manual pull-to-refresh starts immediately, prevents duplicate requests and s
   await act(async () => release(true));
   expect(list().props.refreshing).toBe(false);
 });
+
+it('sync events about other zones do not re-read the request list; request changes do', async () => {
+  await act(async () => { screen = create(React.createElement(RequestBoardScreen)); });
+  const reads = state.read.mock.calls.length;
+  await act(async () => state.listeners.forEach(listener => listener({ acceptedOperationIds: [], completedAssignmentIds: [], refreshedZones: ['workItems', 'notifications'] })));
+  expect(state.read).toHaveBeenCalledTimes(reads);
+  await act(async () => state.listeners.forEach(listener => listener({ acceptedOperationIds: ['op'], completedAssignmentIds: [] })));
+  expect(state.read).toHaveBeenCalledTimes(reads + 1);
+  await act(async () => emit());
+  expect(state.read).toHaveBeenCalledTimes(reads + 2);
+});

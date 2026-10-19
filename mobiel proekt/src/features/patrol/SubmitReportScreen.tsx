@@ -24,6 +24,7 @@ import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 import { queuePatrolReport } from '@/features/patrol/reportSubmissionCoordinator';
 import { ReportSendDialog } from '@/features/patrol/ReportSendDialog';
 import { ReportPreviewCard } from '@/features/patrol/ReportPreviewCard';
+import { ReportRejectedState, ReportSummaryDonut } from '@/features/patrol/ReportSummary';
 import { AutoSubmitCountdown } from '@/features/patrol/AutoSubmitCountdown';
 import { buildReportPreview, type ReportPreviewRow } from '@/features/patrol/reportPreviewPresentation';
 import { Card } from '@/ui/Card';
@@ -313,7 +314,9 @@ export function SubmitReportScreen() {
             <Ionicons color={colors.primary} name='cloud-upload-outline' size={24} />
           </Pressable>
         </View>
-        {presentation.action !== 'openProblems' ? <View accessibilityLiveRegion='polite' style={[styles.deliveryHeader, { backgroundColor: stateColors.background }]}>
+        <ReportSummaryDonut progress={readiness.progress} />
+        {presentation.action !== 'openProblems' && presentation.tone === 'danger' ? <ReportRejectedState title={presentation.title} detail={presentation.detail} />
+        : presentation.action !== 'openProblems' ? <View accessibilityLiveRegion='polite' style={[styles.deliveryHeader, { backgroundColor: stateColors.background }]}>
           <Ionicons color={stateColors.foreground} name={presentation.icon} size={26} />
           <View style={styles.deliveryText}>
             <Text testID="report-delivery-title" style={[styles.sectionTitle, { color: stateColors.foreground }]}>{presentation.title}</Text>
@@ -477,7 +480,7 @@ const styles = StyleSheet.create({
     marginTop: 14
   },
   progressValue: {
-    borderRadius: 10,
+    borderRadius: 14,
     flex: 1,
     gap: 2,
     minWidth: '42%',
@@ -495,7 +498,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12
   },
   deliveryText: {
