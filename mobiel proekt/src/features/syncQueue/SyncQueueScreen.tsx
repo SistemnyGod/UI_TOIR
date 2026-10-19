@@ -447,7 +447,7 @@ function fileSubject(file: SyncQueueFileItem) {
 
 /** Each queue entry is its own card; entries that need a decision get a danger outline. */
 function queueCardStyle(colors: Partial<ThemeColors>, tone: "success" | "warning" | "danger") {
-  return [{ backgroundColor: colors.card, borderColor: tone === "danger" ? colors.danger : colors.cardBorder }, softShadow(colors.shadow ?? "#000000", 1)];
+  return [{ backgroundColor: colors.card, borderColor: tone === "danger" ? colors.danger : colors.cardBorder }, softShadow(colors.shadow ?? "transparent", 1)];
 }
 
 function commandIcon(commandType: string): keyof typeof Ionicons.glyphMap {

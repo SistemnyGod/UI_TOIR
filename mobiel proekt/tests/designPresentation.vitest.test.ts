@@ -60,3 +60,11 @@ it('gradients pick the palette from the active theme and fall back to light', ()
   expect(gradientStops(lightColors, 'accent')).toEqual(['#2f6bff', '#1846d8']);
   expect(gradientStops({} as never, 'danger')).toEqual(gradientStops(lightColors, 'danger'));
 });
+
+it('work card avatar uses the first actual participant, then the assignee', async () => {
+  const { participantInitials } = await import('@/features/emuTask/WorkTaskCard');
+  const person = (fullName: string) => ({ employeeId: fullName, fullName, status: 'active', startedAt: null, finishedAt: null, isCurrentMobileEmployee: false });
+  expect(participantInitials({ actualParticipants: [person('костарев иван сергеевич')], assignedEmployees: [person('Бурухин Н. С.')] })).toBe('КИ');
+  expect(participantInitials({ actualParticipants: [], assignedEmployees: [person('Бурухин Н. С.')] })).toBe('БН');
+  expect(participantInitials({ actualParticipants: [], assignedEmployees: [] })).toBeNull();
+});
