@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const patrolRepositorySource = readFileSync(
-  new URL("../src/db/repositories/patrolRepository.ts", import.meta.url),
-  "utf8"
-);
 const repositorySource = readFileSync(
   new URL("../src/db/repositories/outboxRepository.ts", import.meta.url),
-  "utf8"
-);
-const responseRepositorySource = readFileSync(
-  new URL("../src/db/repositories/outboxResponseRepository.ts", import.meta.url),
   "utf8"
 );
 const databaseSource = readFileSync(
@@ -39,22 +31,15 @@ const serverLifecycleSource = readFileSync(
   "utf8"
 );
 
-test("requires explicit acceptance before starting a legacy rejected request", () => {
-  assert.match(repositorySource, /command_type = 'startPatrolAssignment'/);
-  assert.match(repositorySource, /status = 'rejected'/);
-  assert.match(repositorySource, /command_type = 'completePatrolAssignment'/);
-  assert.match(repositorySource, /reactivateRecoverableRejectedStartCommands/);
-  const startFunction = patrolRepositorySource.slice(patrolRepositorySource.indexOf("export async function startAssignmentLocally"));
-  assert.doesNotMatch(startFunction, /commandType: "acceptPatrolRequest"/);
-  assert.match(patrolRepositorySource.slice(0, patrolRepositorySource.indexOf("export async function startAssignmentLocally")), /commandType: "acceptPatrolRequest"/);
+// Requeueing recoverable rejections, reactivating legacy rejected starts and refusing an
+// unaccepted start are behavior-tested in patrolLifecycleRecovery.vitest.test.ts. What is
+// left here is wiring, an architectural ban, UI wording and the server-side contract.
+test("legacy start recovery stays wired and the server keeps rejecting legacy take requests", () => {
   assert.match(syncEngineSource, /await reactivateRecoverableRejectedStartCommands\(ownerUserId, options\.assignmentId\)/);
   assert.doesNotMatch(repositorySource, /sequence_no = sequence_no \+ 1/);
   assert.match(databaseSource, /repairMisorderedPatrolOutbox/);
   assert.match(databaseSource, /20260728_repair_misordered_patrol_outbox/);
   assert.match(repositorySource, /reactivateRecoverableRejectedPointCommands/);
-  assert.match(responseRepositorySource, /const recoverableLifecycleRejection =\s*response\.status === "rejected"\s*&& isRecoverableLifecycleRejection\(/);
-  assert.match(responseRepositorySource, /if \(recoverableLifecycleRejection\) \{[\s\S]*CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END/);
-  assert.match(repositorySource, /CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END/);
   assert.match(queueScreenSource, /completePatrolAssignment.*Отчёт.*Маршрут/);
   assert.doesNotMatch(queueScreenSource, /Boolean\(command\.lastError\)/);
   assert.match(nfcScreenSource, /'blocked'/);
