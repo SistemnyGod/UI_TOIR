@@ -31,6 +31,10 @@ infra/docker/certs/*.pfx
 infra/docker/secrets/
 infra/docker/mobile-diagnostics/
 mobile-diagnostics/
+# Android builds are published to the server release folder, never to git.
+mobile-releases/
+*.apk
+*.aab
 mobiel proekt/secrets/
 apps/mobile/secrets/
 *firebase-adminsdk*.json

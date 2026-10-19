@@ -78,6 +78,9 @@ public class ApiSmokeTests
             "MobileController.Health",
             "MobileController.Login",
             "MobileController.Refresh",
+            // An outdated phone or one with an expired session must still be able to update.
+            "MobileAppUpdateController.GetManifest",
+            "MobileAppUpdateController.DownloadApk",
         };
 
         var endpoints = typeof(AuthController).Assembly

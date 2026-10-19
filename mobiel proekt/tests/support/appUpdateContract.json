@@ -1,0 +1,23 @@
+{
+  "_comment": "Shared by the mobile Vitest suite and Patrol360.Api.Tests (MobileAppUpdateTests): the server must produce exactly these keys, the app must parse these bodies.",
+  "manifest": {
+    "versionName": "0.1.53",
+    "versionCode": 53,
+    "minimumVersionCode": 50,
+    "apkSizeBytes": 88080384,
+    "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    "releaseNotes": "Исправлена отправка фото.",
+    "downloadUrl": "/api/v1/mobile/app-update/apk/53",
+    "publishedAt": "2026-10-19T05:00:00+00:00"
+  },
+  "updateRequired": {
+    "code": "app_update_required",
+    "message": "Требуется обновление приложения Patrol360 до версии 0.1.53. Неотправленные данные на телефоне сохранены: установите обновление, и они будут отправлены.",
+    "title": "Требуется обновление приложения",
+    "detail": "Требуется обновление приложения Patrol360 до версии 0.1.53. Неотправленные данные на телефоне сохранены: установите обновление, и они будут отправлены.",
+    "installedVersionCode": 49,
+    "minimumVersionCode": 50,
+    "latestVersionCode": 53,
+    "latestVersionName": "0.1.53"
+  }
+}

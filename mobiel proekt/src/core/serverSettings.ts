@@ -1,5 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
+import { getInstalledAppVersion } from "@/core/appVersion";
 import { currentContourId, defaultEnvironment, localEnterpriseHttpsBaseUrl } from "@/core/environments";
 import { orderServerCandidateBaseUrls } from "@/core/serverCandidatePolicy";
 
@@ -33,6 +34,8 @@ export type MobileRuntimeConfig = {
   contourId: string;
   allowedBaseUrls: string[];
   syncProtocolVersion: "1.0";
+  /** Installed Android versionCode; null in development builds. */
+  appVersionCode?: number | null;
 };
 
 export async function getServerBaseUrl() {
@@ -88,7 +91,8 @@ export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
     apiBaseUrl: await getServerBaseUrl(),
     contourId: currentContourId,
     allowedBaseUrls: defaultEnvironment.allowedBaseUrls,
-    syncProtocolVersion: defaultEnvironment.syncProtocolVersion
+    syncProtocolVersion: defaultEnvironment.syncProtocolVersion,
+    appVersionCode: getInstalledAppVersion().versionCode
   };
 }
 

@@ -2,6 +2,7 @@ using Patrol360.Infrastructure;
 using Patrol360.Infrastructure.Persistence;
 using Patrol360.Api.Authorization;
 using Patrol360.Api.Services;
+using Patrol360.Api.MobileAppUpdates;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -29,6 +30,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IApplicationReadinessProbe, ApplicationReadinessProbe>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAuthenticatedSiteUserContext, AuthenticatedSiteUserContext>();
+builder.Services.AddMobileAppUpdates();
 builder.Services
     .AddAuthentication(options =>
     {
@@ -75,6 +77,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("web-auth", authRateLimitPartition);
     options.AddPolicy("mobile-auth", authRateLimitPartition);
+    options.AddMobileApkDownloadLimiter();
 });
 var configuredCorsOrigins = builder.Configuration
     .GetSection("WebCors:AllowedOrigins")
@@ -129,6 +132,7 @@ app.UseForwardedHeaders();
 app.UseMiddleware<MobileClockHeadersMiddleware>();
 app.UseCors(WebCorsPolicy);
 app.UseRateLimiter();
+app.UseMobileAppVersionGate();
 app.UseAuthentication();
 app.UseAuthorization();
 

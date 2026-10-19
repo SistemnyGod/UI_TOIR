@@ -42,6 +42,8 @@ services:
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
+      Patrol360__Mobile__AppUpdates__ReleaseDirectory: /app/mobile-releases
+      Patrol360__Mobile__AppUpdates__MinimumVersionCode: ${PATROL360_MOBILE_MIN_VERSION_CODE:-0}
       Features__PpeIssueDocuments: ${PPE_ISSUE_DOCUMENTS_ENABLED:-false}
       WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194}
       # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
@@ -50,6 +52,7 @@ services:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
       - api-mobile-files:/app/mobile-files
       - ./mobile-diagnostics:/app/mobile-diagnostics
+      - ./mobile-releases:/app/mobile-releases:ro
     networks:
       - default
       - printing
