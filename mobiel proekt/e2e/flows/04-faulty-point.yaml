@@ -14,6 +14,11 @@ name: 04 Faulty point with description
 - tapOn:
     id: point-save
 # Last point filled -> the app opens the report check screen.
+# Either the report screen or the battery Alert on top of it.
+- extendedWaitUntil:
+    visible: "Проверка отчёта|Позже|ПОЗЖЕ"
+    timeout: 20000
+- runFlow: subflows/dismiss-battery-prompt.yaml
 - extendedWaitUntil:
     visible:
       id: report-primary-action

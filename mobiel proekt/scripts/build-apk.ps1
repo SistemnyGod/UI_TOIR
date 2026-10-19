@@ -368,6 +368,14 @@ try {
     }
   }
 
+  if ($Patrol360Environment -eq "e2e") {
+    # e2e APKs are driven by Maestro without Metro. expo-dev-client would show
+    # its launcher instead of the embedded bundle, so leave it out of
+    # autolinking in the temporary build copy only (the app never imports it).
+    $buildPackageJson = Join-Path $BuildRoot "package.json"
+    Invoke-Checked "node" "-e" "const f=process.argv[1];const p=JSON.parse(require('fs').readFileSync(f,'utf8'));p.expo=p.expo||{};p.expo.autolinking={...(p.expo.autolinking||{}),exclude:['expo-dev-client','expo-dev-launcher','expo-dev-menu','expo-dev-menu-interface']};require('fs').writeFileSync(f,JSON.stringify(p,null,2));" $buildPackageJson
+  }
+
   Write-Host "Generating Android project..."
   Invoke-Checked "npx" "expo" "prebuild" "--platform" "android" "--clean" "--no-install"
 
@@ -382,6 +390,14 @@ try {
       $appBuildGradleContent = $appBuildGradleContent -replace 'react \{', "react {`r`n    debuggableVariants = []"
       Set-Content -LiteralPath $appBuildGradle -Value $appBuildGradleContent -NoNewline
     }
+  }
+
+  if ($Patrol360Environment -eq "e2e") {
+    # Without expo-dev-client nothing lifts android-image-cropper's
+    # androidx.databinding:viewbinding:8.5.2 request, and Google Maven does not
+    # publish that version. Pin the version the regular build resolves.
+    $appBuildGradle = Join-Path $BuildRoot "android\app\build.gradle"
+    Add-Content -LiteralPath $appBuildGradle -Value "`r`n// patrol360-e2e`r`nconfigurations.all { resolutionStrategy.force 'androidx.databinding:viewbinding:8.12.0' }`r`n"
   }
 
   $gradlePluginSettings = Join-Path $BuildRoot "node_modules\@react-native\gradle-plugin\settings.gradle.kts"

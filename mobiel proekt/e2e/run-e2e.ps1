@@ -50,11 +50,22 @@ foreach ($tool in @($Adb, $Maestro)) {
 }
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw "node is required for the mock backend" }
 
+# Windows PowerShell 5.1 turns native stderr into terminating errors under
+# ErrorActionPreference=Stop, and adb prints harmless notices there.
+function Invoke-Native {
+  param([string]$FilePath, [string[]]$Arguments)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try { $output = & $FilePath @Arguments 2>&1 | ForEach-Object { "$_" } }
+  finally { $ErrorActionPreference = $previous }
+  [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
+}
+
 function Invoke-Adb {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$AdbArgs)
-  $output = & $Adb -s $Device @AdbArgs 2>&1
-  if ($LASTEXITCODE -ne 0) { throw "adb $($AdbArgs -join ' ') failed: $output" }
-  $output
+  $result = Invoke-Native $Adb (@("-s", $Device) + $AdbArgs)
+  if ($result.ExitCode -ne 0) { throw "adb $($AdbArgs -join ' ') failed: $($result.Output)" }
+  $result.Output
 }
 
 function Set-DeviceNetwork {
@@ -79,25 +90,30 @@ function Invoke-Mock {
 }
 
 # --- device ---------------------------------------------------------------
-$state = (& $Adb -s $Device get-state 2>&1)
+Invoke-Native $Adb @("start-server") | Out-Null
+$state = (Invoke-Native $Adb @("-s", $Device, "get-state")).Output
 if ("$state".Trim() -ne "device") { throw "Device $Device is not ready (adb get-state: $state). Start the emulator first (README)." }
 if ((Invoke-Adb shell getprop sys.boot_completed).Trim() -ne "1") { throw "Device $Device has not finished booting." }
 
 if ($Apk) {
   $apkPath = (Resolve-Path -LiteralPath $Apk).Path
   Write-Host "Reinstalling $apkPath on $Device"
-  & $Adb -s $Device uninstall $AppId 2>&1 | Out-Null
+  Invoke-Native $Adb @("-s", $Device, "uninstall", $AppId) | Out-Null
   Invoke-Adb install -r -g $apkPath | Out-Null
 }
 Set-DeviceNetwork -Online $true
+# Gboard on API 34+ treats Maestro taps as stylus input and opens its
+# handwriting onboarding over the form, eating the typed text.
+Invoke-Native $Adb @("-s", $Device, "shell", "settings", "put", "secure", "stylus_handwriting_enabled", "0") | Out-Null
 # Notifications permission prompt would cover the first screen on API 33+.
-& $Adb -s $Device shell pm grant $AppId android.permission.POST_NOTIFICATIONS 2>&1 | Out-Null
-# Point the emulator's 10.0.2.2:$Port at nothing else but the host mock (sanity check from the host side).
+Invoke-Native $Adb @("-s", $Device, "shell", "pm", "grant", $AppId, "android.permission.POST_NOTIFICATIONS") | Out-Null
+# Background report delivery asks to leave battery optimisation once; pre-approve it.
+Invoke-Native $Adb @("-s", $Device, "shell", "dumpsys", "deviceidle", "whitelist", "+$AppId") | Out-Null
 
 # --- mock backend -----------------------------------------------------------
 $mockLog = Join-Path $ReportDir "mock-server.log"
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
-$mock = Start-Process -FilePath "node" -ArgumentList @((Join-Path $E2eRoot "mock-server\server.mjs"), "--port", "$Port") `
+$mock = Start-Process -FilePath "node" -ArgumentList @(('"' + (Join-Path $E2eRoot "mock-server\server.mjs") + '"'), "--port", "$Port") `
   -RedirectStandardOutput $mockLog -RedirectStandardError "$mockLog.err" -PassThru -WindowStyle Hidden
 try {
   $ready = $false
@@ -127,7 +143,10 @@ try {
     $flowPath = Join-Path $FlowDir $flow
     $flowOut = Join-Path $ReportDir ([IO.Path]::GetFileNameWithoutExtension($flow))
     Write-Host "`n=== $flow ($($plan[$flow])) ==="
-    & $Maestro --device $Device test $flowPath --format junit --output "$flowOut.xml" --debug-output $flowOut
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Maestro --device $Device test $flowPath --format junit --output "$flowOut.xml" --debug-output $flowOut 2>&1 | ForEach-Object { "$_" } | Write-Host }
+    finally { $ErrorActionPreference = $previous }
     if ($LASTEXITCODE -ne 0) { $results[$flow] = "FAILED"; $failed = $true } else { $results[$flow] = "PASSED" }
   }
 
