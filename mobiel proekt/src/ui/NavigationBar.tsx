@@ -38,8 +38,9 @@ export function NavigationBar({ active, onSelect, badges }: { active: string; on
           accessibilityState={{ selected }} onPress={() => onSelect(item.name)}
           style={({ pressed }) => ({ flex: largeText ? undefined : 1, width: largeText ? "50%" : undefined, flexDirection: largeText ? "row" : "column", minWidth: 0, minHeight: 54, alignItems: "center", justifyContent: "center",
             paddingVertical: 5, paddingHorizontal: 2, gap: 3, borderRadius: 20, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
-          <View style={[{ width: 52, height: 32, borderRadius: 16, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: selected ? colors.accent : "transparent" },
-            selected ? { boxShadow: "0px 4px 10px rgba(36, 87, 245, 0.35)" } : null]}>
+          <View style={{ width: 52, height: 32, alignItems: "center", justifyContent: "center" }}>
+            {/* Always mounted so Android keeps the rounded clip; only opacity changes on selection. */}
+            <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width: 52, height: 32, borderRadius: 16, overflow: "hidden", backgroundColor: colors.accent, opacity: selected ? 1 : 0 }} />
             <Ionicons size={21} name={selected ? item.activeIcon : item.icon} color={selected ? colors.onAccent : colors.mutedText} />
             {badge ? <View style={{ position: "absolute", top: -5, right: -2, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.dangerFill, borderWidth: 2, borderColor: colors.navBackground }}>
               <Text style={[font(800), { fontSize: 10, lineHeight: 13, color: colors.onAccent }]}>{badge.label}</Text>
