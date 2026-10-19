@@ -31,7 +31,8 @@ RequireDirectory("docs/runbooks");
 RequireDirectory("infra/docker");
 RequireDirectory("infra/env");
 RequireDirectory("legacy");
-RequireDirectory("legacy/territory-patrol-panel");
+RequireDirectory("docs/archive");
+RequireDirectory("tools/Patrol360.InventoryMigration");
 RequireDirectory("tests");
 RequireDirectory("tests/Patrol360.Domain.Tests");
 RequireDirectory("tests/Patrol360.Application.Tests");
@@ -64,7 +65,19 @@ RequireFile("docs/runbooks/test-artifacts.md");
 RequireFile("infra/README.md");
 RequireFile("infra/env/.env.example");
 RequireFile("legacy/README.md");
-RequireFile("legacy/territory-patrol-panel/README.md");
+RequireFile("docs/archive/README.md");
+RequireFile("docs/archive/territory-patrol-panel.zip");
+RequireFile("tools/Patrol360.InventoryMigration/Patrol360.InventoryMigration.csproj");
+RequireFile("apps/web/src/features/inventory/PpeIssueDocumentConstructor.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/DocumentEmployee.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/DocumentKit.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/DocumentActions.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/DocumentReview.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/LegacyIssueDraftNotice.tsx");
+AssertFileContains("apps/web/src/features/inventory/PpeIssueDocumentConstructor.tsx", "from \"./ppe/DocumentEmployee\"");
+AssertFileContains("apps/web/src/features/inventory/PpeIssueDocumentConstructor.tsx", "from \"./ppe/DocumentKit\"");
+AssertFileContains("apps/web/src/features/inventory/PpeIssueDocumentConstructor.tsx", "from \"./ppe/DocumentActions\"");
+AssertFileContains("apps/web/src/features/inventory/PpeIssueDocumentConstructor.tsx", "from \"./ppe/DocumentReview\"");
 RequireFile("tools/Verify-TextEncoding.ps1");
 RequireFile("apps/api/Authorization/SiteBearerAuthenticationHandler.cs");
 RequireFile("tools/Clean-Workspace.ps1");
@@ -78,32 +91,18 @@ RequireFile("apps/web/src/features/README.md");
 RequireFile("libs/infrastructure/Persistence/Configurations/README.md");
 RequireFile("libs/README.md");
 RequireFile("apps/web/src/features/inventory/styles/inventory-ppe-industrial-calm.css");
-RequireFile("apps/web/src/features/inventory/ppe/EmployeeStep.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/CardParamsStep.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/IssueChecklistStep.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PrintPreviewStep.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpeIssueLineEditor.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePrintValidationPanel.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/WizardLinesTable.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpeManualNormForm.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePickerCatalogGrid.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePickerSelectedItems.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePickerReferenceList.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePickerSummary.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePickerTabs.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpePositionNormList.tsx");
-RequireFile("apps/web/src/features/inventory/ppe/PpeDrawerTables.tsx");
 
 AssertFileLineCountAtMost("apps/web/src/styles.css", 28029);
 AssertFileLineCountAtMost("libs/infrastructure/Persistence/Patrol360DbContext.cs", 2274);
-AssertFileLineCountAtMost("apps/web/src/hooks/useEmuWorkspace.ts", 2031);
+AssertFileLineCountAtMost("apps/web/src/hooks/useEmuWorkspace.ts", 850);
 AssertFileLineCountAtMost("apps/web/src/repositories/mockInventoryRepository.ts", 2114);
-AssertFileLineCountAtMost("apps/web/src/features/perco/PercoIntegrationScreen.tsx", 2040);
-AssertFileLineCountAtMost("apps/web/src/features/patrol/AssignmentScreen.tsx", 2016);
+AssertFileLineCountAtMost("apps/web/src/features/perco/PercoIntegrationScreen.tsx", 850);
+AssertFileLineCountAtMost("apps/web/src/features/patrol/AssignmentScreen.tsx", 950);
+AssertFileLineCountAtMost("apps/web/src/features/patrol/results/ResultsWorkspace.tsx", 820);
+RequireFile("apps/web/src/features/patrol/results/resultJournalModel.ts");
+RequireFile("apps/web/src/features/patrol/results/useResultPreview.ts");
 RequireFile("apps/web/src/features/inventory/ppe/ppeFormatters.ts");
 RequireFile("apps/web/src/features/inventory/ppe/ppePrintMapping.ts");
-RequireFile("apps/web/src/features/inventory/ppe/ppeWizardDomain.ts");
 RequireFile("apps/web/src/features/patrol/assignments/AssignmentIcons.tsx");
 RequireFile("apps/web/src/features/patrol/assignments/assignmentDateUtils.ts");
 RequireFile("apps/web/src/features/patrol/assignments/assignmentStorage.ts");
@@ -112,31 +111,12 @@ RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowServic
 RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs");
 RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.History.cs");
 RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Validation.cs");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./EmployeeStep\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./CardParamsStep\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./IssueChecklistStep\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./PrintPreviewStep\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./WizardLinesTable\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./ppeWizardDomain\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "export { PpeItemPickerModal } from \"./PpeItemPickerModal\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/WizardLinesTable.tsx", "from \"./PpeIssueLineEditor\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./ppeWizardDomain\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerContent\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerDatalists\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerFilters\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerFooterActions\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerSelectedPanel\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerSummary\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerTabs\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpePickerSelectedPanel.tsx", "from \"./PpePickerSelectedItems\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpePickerContent.tsx", "from \"./PpePickerReferenceList\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpePickerContent.tsx", "from \"./PpeManualNormForm\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpePickerContent.tsx", "from \"./PpePickerCatalogGrid\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/PpePickerContent.tsx", "from \"./PpePositionNormList\"");
-AssertFileContains("apps/web/src/features/inventory/ppe/ppeDrawer.tsx", "from \"./PpeDrawerTables\"");
 AssertFileContains("apps/web/src/features/inventory/ppe/ppeCommon.tsx", "from \"./ppeFormatters\"");
 AssertFileContains("apps/web/src/features/inventory/ppe/ppeCommon.tsx", "from \"./ppePrintMapping\"");
-AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/AssignmentIcons\"");
+AssertFileContains("apps/web/src/features/patrol/assignments/AssignmentPanels.tsx", "from \"./AssignmentIcons\"");
+AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/AssignmentPanels\"");
+AssertFileContains("apps/web/src/features/perco/PercoIntegrationScreen.tsx", "from \"./PercoTabs\"");
+AssertFileContains("apps/web/src/hooks/useEmuWorkspace.ts", "from \"../domain/emuLocalWorkspace\"");
 AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/assignmentDateUtils\"");
 AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/assignmentStorage\"");
 AssertFileContains("libs/infrastructure/Persistence/EfInventoryExportService.cs", "internal sealed partial class EfInventoryExportService");
@@ -542,16 +522,14 @@ string NormalizePath(string path)
 
 static string FindRepoRoot(string startPath)
 {
-    var current = new DirectoryInfo(startPath);
-
-    while (current is not null)
+    foreach (var candidate in new[] { startPath, Directory.GetCurrentDirectory() }.Distinct())
     {
-        if (File.Exists(Path.Combine(current.FullName, "Patrol360.slnx")))
+        var current = new DirectoryInfo(candidate);
+        while (current is not null)
         {
-            return current.FullName;
+            if (File.Exists(Path.Combine(current.FullName, "Patrol360.slnx"))) return current.FullName;
+            current = current.Parent;
         }
-
-        current = current.Parent;
     }
 
     throw new InvalidOperationException("Cannot find repository root with Patrol360.slnx.");
