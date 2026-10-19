@@ -117,7 +117,13 @@ function Merge-PreviousWebAssets {
         Write-Host "Retained $retained previous-generation web assets for open browser tabs."
     }
     finally {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $resolvedTempRoot = [System.IO.Path]::GetFullPath($tempRoot)
+        $resolvedTempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedTempRoot.StartsWith($resolvedTempBase, [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not ([System.IO.Path]::GetFileName($resolvedTempRoot)).StartsWith('patrol360-web-assets-', [System.StringComparison]::Ordinal)) {
+            throw "Refusing cleanup outside the web asset temporary directory: $resolvedTempRoot"
+        }
+        Remove-Item -LiteralPath $resolvedTempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -143,13 +149,14 @@ if ($webConfig -match "depends_on:") {
 }
 
 if (-not $SkipNpmBuild) {
-    Invoke-ReleaseNative npm run build --prefix apps\web
+    Invoke-ReleaseNative -FilePath 'npm' -Arguments @('run', 'build', '--prefix', 'apps\web')
 }
 
 Merge-PreviousWebAssets -ContainerName "patrol360-web" -DistPath (Join-Path $repoRoot "apps\web\dist")
 
-Invoke-ReleaseNative docker compose @composeArgs build web
-Invoke-ReleaseNative docker compose @composeArgs up -d --no-deps web
+Invoke-ReleaseNative -FilePath 'docker' -Arguments (@('compose') + $composeArgs + @('build', 'web'))
+# Pass native flags as an explicit array so PowerShell cannot bind -d to -Debug.
+Invoke-ReleaseNative -FilePath 'docker' -Arguments (@('compose') + $composeArgs + @('up', '-d', '--no-deps', 'web'))
 
 Wait-Healthy -Name "patrol360-web"
 

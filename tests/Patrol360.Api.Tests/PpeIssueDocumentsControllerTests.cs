@@ -8,22 +8,19 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Patrol360.Api.Authorization;
 using Patrol360.Api.Controllers;
+using Patrol360.Application;
+using Patrol360.Contracts;
 
 namespace Patrol360.Api.Tests;
 
 public sealed class PpeIssueDocumentsControllerTests
 {
     [Fact]
-    public async Task DisabledFeatureDoesNotCallServices()
+    public void DisabledFeatureBlocksNewIssuance()
     {
-        var controller = new PpeIssueDocumentsController(null!, null!, new ConfigurationBuilder().Build());
-        Assert.IsType<NotFoundResult>(controller.List(null));
-        Assert.IsType<NotFoundResult>(controller.Journal(new()));
-        Assert.IsType<NotFoundResult>(controller.ExportJournal(new()));
-        Assert.IsType<NotFoundResult>(controller.Get(Guid.NewGuid()));
-        Assert.IsType<NotFoundResult>(controller.Create(null!));
-        Assert.IsType<NotFoundResult>(controller.Confirm(Guid.NewGuid(), null!));
-        Assert.IsType<NotFoundResult>(await controller.Print(Guid.NewGuid()));
+        var controller = new PpeIssueDocumentsController(DispatchProxy.Create<IPpeIssueDocumentService, MissingDocumentService>(), null!, new ConfigurationBuilder().Build());
+        Assert.IsType<ConflictObjectResult>(controller.Create(null!));
+        Assert.IsType<ConflictObjectResult>(controller.Confirm(Guid.NewGuid(), null!));
     }
 
     [Theory]
@@ -66,5 +63,13 @@ public sealed class PpeIssueDocumentsControllerTests
     {
         var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("permission", permission)], "test")) };
         return new(new ActionContext(http, new RouteData(), new ActionDescriptor()), []);
+    }
+
+    public class MissingDocumentService : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? method, object?[]? args) =>
+            method?.Name == nameof(IPpeIssueDocumentService.GetIssueDocument)
+                ? new InventoryCommandResult<PpeIssueDocumentDto>(null, new Dictionary<string, string[]> { ["id"] = ["Not found"] })
+                : throw new NotSupportedException(method?.Name);
     }
 }

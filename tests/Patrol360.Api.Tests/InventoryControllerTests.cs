@@ -9,6 +9,24 @@ namespace Patrol360.Api.Tests;
 
 public sealed class InventoryControllerTests
 {
+    [Fact]
+    public void OrdinaryApiCannotRunLegacyImportEvenAsDryRun()
+    {
+        var controller = CreateController();
+        Assert.Equal(StatusCodes.Status410Gone, Assert.IsType<ObjectResult>(controller.ImportLegacy(default).Result).StatusCode);
+        Assert.Equal(StatusCodes.Status410Gone, Assert.IsType<ObjectResult>(controller.DryRunLegacyImport(default).Result).StatusCode);
+    }
+
+    [Fact]
+    public void InitialStockEndpointIsGoneAndDoesNotCallTheCommandService()
+    {
+        var controller = CreateController();
+        var result = Assert.IsType<ObjectResult>(controller.SetInitialStock(
+            new InventoryInitialStockDto(Guid.NewGuid(), Guid.NewGuid(), 10)).Result);
+        Assert.Equal(StatusCodes.Status410Gone, result.StatusCode);
+        Assert.Equal(StatusCodes.Status410Gone, Assert.IsType<ProblemDetails>(result.Value).Status);
+    }
+
     [Theory]
     [InlineData("pdf", true)]
     [InlineData("docx", false)]
@@ -433,7 +451,7 @@ public sealed class InventoryControllerTests
         public InventoryCommandResult<InventoryItemDto> CreateItem(UpsertInventoryItemDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryItemDto> UpdateItem(Guid id, UpsertInventoryItemDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryStockBalanceDto> SetInitialStock(InventoryInitialStockDto request) => throw new NotImplementedException();
-        public InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request, Guid? actorUserId = null) => throw new NotImplementedException();
     }
 
     private class ThrowingInventoryWorkflowService : IInventoryWorkflowService

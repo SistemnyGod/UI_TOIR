@@ -184,15 +184,6 @@ internal static partial class PpeIssueDocumentDocxBuilder
         }
         return result;
     }
-
-    private static string CatalogLineDescription(PpeDocumentLineDto line)
-    {
-        var parts = new List<string> { "  " + line.ItemName, $"дата выдачи {line.IssueDate:dd.MM.yyyy}" };
-        if (!string.IsNullOrWhiteSpace(line.BrandModelArticle)) parts.Add(line.BrandModelArticle.Trim());
-        if (line.Standards is { Count: > 0 }) parts.Add(string.Join(", ", line.Standards.Select(StandardText)));
-        if (!string.IsNullOrWhiteSpace(line.SizeText)) parts.Add("размер " + line.SizeText.Trim());
-        return string.Join("; ", parts);
-    }
     private static string CatalogProductDetails(PpeDocumentLineDto line) => string.Join("; ",
         new[] { line.BrandModelArticle, line.Standards is { Count: > 0 } ? string.Join(", ", line.Standards.Select(StandardText)) : "" }
             .Where(value => !string.IsNullOrWhiteSpace(value)));

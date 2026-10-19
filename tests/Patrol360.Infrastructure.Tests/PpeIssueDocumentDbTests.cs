@@ -327,7 +327,7 @@ public sealed partial class PpeIssueDocumentDbTests(ITestOutputHelper output)
         {
             Id = Guid.NewGuid(), DepartmentName = employee.Department, PositionName = employee.Position,
             PositionAliasesJson = "[\"Оператор\"]", ScopeConfirmed = true, VersionName = "test-1",
-            SourceName = "synthetic", Status = "active", Version = 1, CreatedAt = now, UpdatedAt = now
+            SourceName = "synthetic", EffectiveFrom = Today.AddYears(-1), Status = "active", Version = 1, CreatedAt = now, UpdatedAt = now
         };
         var row = new InventoryPpeNormRowEntity
         {

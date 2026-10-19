@@ -10,7 +10,7 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    public EmuCommandResult<EmuWorkSessionDto> PauseWorkSession(Guid id, EmuPauseWorkSessionDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> PauseWorkSessionCore(Guid id, EmuPauseWorkSessionDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
@@ -52,7 +52,7 @@ internal sealed partial class EfEmuService
             return Failure<EmuWorkSessionDto>("startedAt", "Время паузы не может быть позже серверного времени больше чем на 2 минуты");
         }
 
-        if (startedAt < participants.Min(row => row.ArrivedAt))
+        if (participants.Any(row => startedAt < row.ArrivedAt))
         {
             return Failure<EmuWorkSessionDto>("startedAt", "Время паузы не может быть раньше времени прихода");
         }
@@ -105,9 +105,8 @@ internal sealed partial class EfEmuService
         return Success(MapWorkSession(RecalculateSession(LoadSession(entity.Id)!, now)));
     }
 
-    public EmuCommandResult<EmuWorkSessionDto> ResumeWorkSession(Guid id, EmuResumeWorkSessionDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> ResumeWorkSessionCore(Guid id, EmuResumeWorkSessionDto request, Guid? actorUserId, string actorName)
     {
-        using var transaction = BeginActiveParticipationMutation();
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
         {
@@ -149,7 +148,7 @@ internal sealed partial class EfEmuService
             return Failure<EmuWorkSessionDto>("resumedAt", "Время возврата не может быть позже серверного времени больше чем на 2 минуты");
         }
 
-        if (resumedAt < participants.Min(row => row.ArrivedAt))
+        if (participants.Any(row => resumedAt < row.ArrivedAt))
         {
             return Failure<EmuWorkSessionDto>("resumedAt", "Время возврата не может быть раньше времени прихода");
         }
@@ -197,7 +196,6 @@ internal sealed partial class EfEmuService
             InsertParticipationInterval(entity.Id, participant.Id, participant.EmployeeId, EmployeeWorking, resumedAt, request.Comment, actorUserId, actorName, now);
         }
 
-        transaction.Commit();
         return Success(MapWorkSession(RecalculateSession(LoadSession(entity.Id)!, now)));
     }
 }

@@ -1,15 +1,217 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using System.Security.Cryptography;
+using System.Text;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence;
+using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Tests;
 
 [Collection("Postgres integration")]
 public sealed class MobilePushDeliveryDbIntegrationTests
 {
+    [DbIntegrationFact]
+    public async Task BacklogIsNotLeasedWhileAnotherNotificationIsBeingDelivered()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender();
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        for (var index = 0; index < 51; index++)
+            await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        sender.BeforeSend = async () =>
+        {
+            using var check = provider.CreateScope();
+            var db = check.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            Assert.Equal(1, await db.MobileNotifications.CountAsync(row => row.PushStatus == "sending"));
+            var active = await db.MobileNotifications.SingleAsync(row => row.PushStatus == "sending");
+            Assert.True(active.PushClaimedAt > DateTimeOffset.UtcNow.AddSeconds(-5));
+            Assert.True(await db.MobileNotifications.AnyAsync(row => row.PushStatus == "queued" && row.PushAttemptCount == 0));
+        };
+        Assert.Equal(50, await SendQueuedAsync(provider));
+        sender.BeforeSend = null;
+        Assert.Equal(1, await SendQueuedAsync(provider));
+        Assert.Equal(51, sender.Sent.Select(message => message.Data["notificationId"]).Distinct().Count());
+    }
+
+    [DbIntegrationFact]
+    public async Task SendsToEveryActiveDeviceAndContinuesAfterOneDeviceFails()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender { FailToken = "fcm-token" };
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            db.MobileAccountSessions.AddRange(
+                Session(accountId, "second-phone"), Session(accountId, "second-phone"),
+                Session(accountId, "revoked", revoked: true), Session(accountId, "expired", expired: true));
+            await db.SaveChangesAsync();
+        }
+        var notificationId = await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Equal(2, sender.SendAttempts);
+        Assert.Equal("second-phone", Assert.Single(sender.Sent).Token);
+        Assert.Equal("queued", (await ReadNotificationAsync(database.ConnectionString, notificationId)).PushStatus);
+
+        // Each retry uses a new scoped service/DbContext, like a restarted worker.
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Equal(4, sender.SendAttempts); // failing device: 3, successful device: 1
+        Assert.Single(sender.Sent);
+        Assert.Equal("failed", (await ReadNotificationAsync(database.ConnectionString, notificationId)).PushStatus);
+    }
+
+    [DbIntegrationFact]
+    public async Task RetriesOnlyTheFailedDeviceThenCompletesDelivery()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender { FailToken = "fcm-token" };
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            db.MobileAccountSessions.Add(Session(accountId, "second-phone"));
+            await db.SaveChangesAsync();
+        }
+        var id = await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        sender.FailToken = null;
+        Assert.Equal(1, await SendQueuedAsync(provider));
+        Assert.Equal(3, sender.SendAttempts);
+        Assert.Equal(2, sender.Sent.Count);
+        Assert.Single(sender.Sent, message => message.Token == "second-phone");
+        var row = await ReadNotificationAsync(database.ConnectionString, id);
+        Assert.Equal("sent", row.PushStatus);
+        using var check = provider.CreateScope();
+        var stored = await check.ServiceProvider.GetRequiredService<Patrol360DbContext>().MobileNotifications.FindAsync(id);
+        Assert.Equal(2, stored!.PushDeliveredTokenHashes.Length);
+        Assert.All(stored.PushDeliveredTokenHashes, hash => Assert.Equal(64, hash.Length));
+        Assert.All(sender.Sent, message =>
+        {
+            Assert.Equal(id.ToString(), message.Data["tag"]);
+            Assert.Equal("Test message", message.Data["message"]);
+            Assert.Equal("patrol360", message.Data["channelId"]);
+        });
+    }
+
+    [DbIntegrationFact]
+    public async Task UnregisteredDeviceDoesNotRepeatPushOnHealthyDevice()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender { RejectToken = "fcm-token" };
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            db.MobileAccountSessions.Add(Session(accountId, "second-phone"));
+            await db.SaveChangesAsync();
+        }
+        var id = await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        Assert.Equal(1, await SendQueuedAsync(provider));
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Single(sender.Sent);
+        Assert.Equal("sent", (await ReadNotificationAsync(database.ConnectionString, id)).PushStatus);
+        using var check = provider.CreateScope();
+        var revoked = check.ServiceProvider.GetRequiredService<Patrol360DbContext>().MobileAccountSessions
+            .Single(session => session.PushToken == "fcm-token");
+        Assert.NotNull(revoked.PushTokenRevokedAt);
+    }
+
+    [DbIntegrationFact]
+    public async Task OnlyUnregisteredDevicesLeaveNotificationAvailableForSync()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender { RejectToken = "fcm-token" };
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        var id = await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Equal(1, sender.SendAttempts);
+        var row = await ReadNotificationAsync(database.ConnectionString, id);
+        Assert.Equal("waitingSync", row.PushStatus);
+        Assert.Equal(0, row.PushAttemptCount);
+        using var check = provider.CreateScope();
+        Assert.False(check.ServiceProvider.GetRequiredService<Patrol360DbContext>().Database.HasPendingModelChanges());
+    }
+
+    [DbIntegrationFact]
+    public async Task DoesNotUseSnapshotTokenAfterTheSessionWasRevoked()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender();
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            foreach (var session in db.MobileAccountSessions.Where(row => row.MobileAccountId == accountId)) session.RevokedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+        var notificationId = await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        Assert.Equal(0, await SendQueuedAsync(provider));
+        Assert.Empty(sender.Sent);
+        Assert.Equal("waitingSync", (await ReadNotificationAsync(database.ConnectionString, notificationId)).PushStatus);
+    }
+
+    [DbIntegrationFact]
+    public async Task ConcurrentWorkersDoNotSendTheSameNotificationTwice()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender();
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        await InsertNotificationAsync(database.ConnectionString, accountId, "queued", 0);
+        var results = await Task.WhenAll(SendQueuedAsync(provider), SendQueuedAsync(provider));
+        Assert.Equal(1, results.Sum());
+        Assert.Single(sender.Sent);
+    }
+
+    [DbIntegrationFact]
+    public async Task StaleWorkerClaimRetainsReceiptsAndSendsOnlyToRemainingDevices()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        var sender = new RecordingPushSender();
+        using var provider = BuildProvider(database.ConnectionString, sender);
+        await provider.InitializePatrolDatabaseAsync();
+        var accountId = CreateMobileAccount(provider);
+        var id = await InsertNotificationAsync(database.ConnectionString, accountId, "sending", 1,
+            DateTimeOffset.UtcNow.AddMinutes(-10));
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            var row = await db.MobileNotifications.FindAsync(id);
+            row!.PushDeliveredTokenHashes = [Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("fcm-token")))];
+            db.MobileAccountSessions.Add(Session(accountId, "second-phone"));
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(1, await SendQueuedAsync(provider));
+        Assert.Equal("second-phone", Assert.Single(sender.Sent).Token);
+        Assert.Equal("sent", (await ReadNotificationAsync(database.ConnectionString, id)).PushStatus);
+    }
+
+    private static MobileAccountSessionEntity Session(Guid accountId, string token, bool revoked = false, bool expired = false) => new()
+    {
+        Id = Guid.NewGuid(), MobileAccountId = accountId, DeviceId = Guid.NewGuid().ToString(), PushToken = token,
+        CreatedAt = DateTimeOffset.UtcNow, LastSeenAt = DateTimeOffset.UtcNow,
+        ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), RefreshExpiresAt = DateTimeOffset.UtcNow.AddDays(expired ? -1 : 30),
+        RevokedAt = revoked ? DateTimeOffset.UtcNow : null
+    };
     [DbIntegrationFact]
     public async Task QueuedNotificationIsClaimedAndSentOnce()
     {
@@ -143,6 +345,9 @@ public sealed class MobilePushDeliveryDbIntegrationTests
 
         Assert.True(created.Succeeded);
         Assert.NotNull(created.Account);
+        var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        db.MobileAccountSessions.Add(Session(created.Account!.Id, "fcm-token"));
+        db.SaveChanges();
         return created.Account!.Id;
     }
 
@@ -248,21 +453,25 @@ public sealed class MobilePushDeliveryDbIntegrationTests
         public bool IsConfigured => true;
 
         public bool ThrowOnSend { get; init; }
+        public string? FailToken { get; set; }
+        public string? RejectToken { get; init; }
+        public Func<Task>? BeforeSend { get; set; }
 
         public int SendAttempts { get; private set; }
 
         public List<MobilePushMessage> Sent { get; } = [];
 
-        public Task SendAsync(MobilePushMessage message, CancellationToken cancellationToken)
+        public async Task SendAsync(MobilePushMessage message, CancellationToken cancellationToken)
         {
+            if (BeforeSend is not null) await BeforeSend();
             SendAttempts += 1;
-            if (ThrowOnSend)
+            if (message.Token == RejectToken) throw new MobilePushTokenRejectedException("NotRegistered");
+            if (ThrowOnSend || message.Token == FailToken)
             {
                 throw new InvalidOperationException("FCM failed");
             }
 
             Sent.Add(message);
-            return Task.CompletedTask;
         }
     }
 

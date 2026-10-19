@@ -12,6 +12,7 @@ internal sealed partial class EfEmuService
 {
     public EmuListResponseDto<EmuWorkSessionDto> GetWorkSessions(EmuWorkSessionQueryDto query)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         var paging = NormalizePaging(query.Page, query.PageSize);
         var rowsQuery = BuildWorkSessionQuery(query);
         var total = rowsQuery.Count();
@@ -30,6 +31,6 @@ internal sealed partial class EfEmuService
             .ToList();
         RecalculateSessions(rows, DateTimeOffset.UtcNow, save: false);
 
-        return ToList(MapWorkSessions(rows), total, paging);
+        return ToList(MapWorkSessions(rows), total, paging) with { ServerTime = startedAt };
     }
 }

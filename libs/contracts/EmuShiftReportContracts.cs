@@ -5,7 +5,7 @@ public sealed record EmuSetShiftReportEmployeeCategoryDto(string? WorkerCategory
 public sealed record EmuShiftReportShiftOptionDto(string ShiftType, string Name, TimeOnly StartTime, TimeOnly EndTime, bool CrossesMidnight);
 public sealed record EmuShiftReportOptionsDto(IReadOnlyList<EmuShiftReportEmployeeOptionDto> Employees, IReadOnlyList<EmuReferenceDto> Sections, IReadOnlyList<EmuShiftReportShiftOptionDto> Shifts);
 public sealed record EmuCreateShiftReportLineDto(string WorkDescription, int DurationMinutes, Guid? SectionId, string? Note);
-public sealed record EmuCreateShiftReportDto(DateOnly ReportDate, string ShiftType, string WorkerCategory, Guid EmployeeId, IReadOnlyList<EmuCreateShiftReportLineDto> Lines);
+public sealed record EmuCreateShiftReportDto(DateOnly ReportDate, string ShiftType, string WorkerCategory, Guid EmployeeId, IReadOnlyList<EmuCreateShiftReportLineDto> Lines, string? EditorInstanceId = null, long? ExpectedDraftVersion = null);
 public sealed record EmuSaveShiftReportDraftDto(DateOnly ReportDate, string ShiftType, string WorkerCategory, Guid EmployeeId, string EditorInstanceId, long? ExpectedVersion, string PayloadJson);
 public sealed record EmuReleaseShiftReportDraftDto(DateOnly ReportDate, string ShiftType, Guid EmployeeId, string EditorInstanceId);
 public sealed record EmuShiftReportDraftDto(Guid Id, DateOnly ReportDate, string ShiftType, string WorkerCategory, Guid EmployeeId, string EditorInstanceId, Guid? EditorUserId, string EditorName, long Version, string PayloadJson, DateTimeOffset UpdatedAt, DateTimeOffset LeaseExpiresAt);

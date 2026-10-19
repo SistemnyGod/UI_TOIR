@@ -19,8 +19,17 @@ public sealed class PatrolRequestsController(IPatrolRequestService patrolRequest
         [FromQuery] string? status = null,
         [FromQuery] DateOnly? dateFrom = null,
         [FromQuery] DateOnly? dateTo = null,
-        [FromQuery] string? query = null) =>
-        Ok(patrolRequestService.GetRequests(page, pageSize, new PatrolRequestFilterDto(employeeId, routeId, status, dateFrom, dateTo, query)));
+        [FromQuery] string? query = null,
+        [FromQuery] string? statusGroup = null) =>
+        Ok(patrolRequestService.GetRequests(page, pageSize, new PatrolRequestFilterDto(employeeId, routeId, status, dateFrom, dateTo, query, StatusGroup: statusGroup)));
+
+    [HttpGet("{id:guid}")]
+    [RequirePermission("requests.read")]
+    public ActionResult<PatrolRequestDto> Get(Guid id)
+    {
+        var request = patrolRequestService.GetRequests(1, 1, new PatrolRequestFilterDto(Id: id)).SingleOrDefault();
+        return request is null ? NotFound() : Ok(request);
+    }
 
     [HttpPost]
     [RequirePermission("requests.write")]

@@ -43,7 +43,7 @@ public sealed class MobileSyncController(IMobileSyncAdminService syncAdminServic
     }
 
     [HttpPost("conflicts/{mobileAccountId:guid}/{clientOperationId}/resolution")]
-    [RequirePermission("results.read")]
+    [RequirePermission("mobile_accounts.write")]
     public ActionResult<MobileSyncConflictResolutionDto> Resolve(
         Guid mobileAccountId,
         string clientOperationId,

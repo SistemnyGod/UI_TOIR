@@ -211,7 +211,7 @@ public sealed class InventoryPpeNormImportDbTests(ITestOutputHelper output)
         var norm = new InventoryPpeNormSetEntity
         {
             Id = Guid.NewGuid(), DepartmentName = "Конкурентный цех", PositionName = "Конкурентный оператор",
-            PositionAliasesJson = "[]", ScopeConfirmed = true, VersionName = versionName, SourceName = "synthetic",
+            PositionAliasesJson = "[\"Конкурентный оператор\"]", ScopeConfirmed = true, EffectiveFrom = DateOnly.FromDateTime(now.UtcDateTime), VersionName = versionName, SourceName = "synthetic",
             Status = "draft", RequiresReview = true, Version = 1, CreatedAt = now, UpdatedAt = now
         };
         norm.Rows.Add(new InventoryPpeNormRowEntity
@@ -220,7 +220,10 @@ public sealed class InventoryPpeNormImportDbTests(ITestOutputHelper output)
             NormPoint = "п. 1", IssuePeriodText = "1 шт. на 12 мес.", Quantity = 1, QuantityText = "1 шт.",
             UnitSymbol = "шт.", PeriodMonths = 12, RequirementKey = Guid.NewGuid()
         });
-        context.InventoryPpeNormSets.Add(norm);
+        var unit = new InventoryUnitEntity { Id = Guid.NewGuid(), Name = $"Единица {Guid.NewGuid()}", Symbol = $"t-{Guid.NewGuid():N}"[..20] };
+        var item = new InventoryItemEntity { Id = Guid.NewGuid(), Name = $"Тестовый товар {Guid.NewGuid()}", Sku = $"test-{Guid.NewGuid()}", UnitId = unit.Id, ItemKind = "ppe", IsActive = true, CreatedAt = now };
+        norm.Rows.First().Mappings.Add(new InventoryPpeNormCatalogMappingEntity { Id = Guid.NewGuid(), NormRowId = norm.Rows.First().Id, ItemId = item.Id, IsApproved = true, ApprovalEvidence = "synthetic reviewed fixture", NormUnitsPerItem = 1, CreatedAt = now, UpdatedAt = now });
+        context.AddRange(unit, item, norm);
         context.SaveChanges();
         return norm.Id;
     }

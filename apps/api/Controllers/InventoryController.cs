@@ -355,11 +355,13 @@ public sealed class InventoryController(
         ToActionResult(inventoryWorkflowService.UpdatePpeCardNormRows(id, request));
 
     [HttpPost("ppe/cards/{id:guid}/issues")]
+    [PpeIssuanceEnabled]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid id, CreateInventoryPpeIssueDto request) =>
         ToActionResult(inventoryWorkflowService.CreatePpeIssue(id, request));
 
     [HttpPost("ppe/cards/{id:guid}/issues/batch")]
+    [PpeIssuanceEnabled]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request)
     {
@@ -440,16 +442,19 @@ public sealed class InventoryController(
         ToActionResult(inventoryWorkflowService.ArchivePpeCard(id));
 
     [HttpPost("ppe/cards/{id:guid}/lines")]
+    [PpeIssuanceEnabled]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid id, UpsertInventoryPpeCardLineDto request) =>
         ToActionResult(inventoryWorkflowService.AddPpeCardLine(id, request));
 
     [HttpPut("ppe/cards/{id:guid}/lines/{lineId:guid}")]
+    [PpeIssuanceEnabled]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> UpdatePpeCardLine(Guid id, Guid lineId, UpsertInventoryPpeCardLineDto request) =>
         ToActionResult(inventoryWorkflowService.UpdatePpeCardLine(id, lineId, request));
 
     [HttpPatch("ppe/cards/{id:guid}/lines/{lineId:guid}/status")]
+    [PpeIssuanceEnabled(allowClosingStatus: true)]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatus(Guid id, Guid lineId, UpdateInventoryStatusDto request) =>
         ToActionResult(inventoryWorkflowService.UpdatePpeCardLineStatus(id, lineId, request));
@@ -625,6 +630,13 @@ public sealed class InventoryController(
             Status: status,
             Department: department,
             EmployeeGroup: employeeGroup)));
+
+    [HttpGet("employees/{id:guid}")]
+    public ActionResult<InventoryEmployeeDto> Employee(Guid id)
+    {
+        var employee = inventoryWorkflowService.GetEmployees(new InventoryListQuery(EmployeeId: id)).Rows.FirstOrDefault();
+        return employee is null ? NotFound() : Ok(employee);
+    }
 
     [HttpPost("employees/import/preview")]
     [RequirePermission("inventory.import")]
@@ -816,22 +828,36 @@ public sealed class InventoryController(
     [HttpPost("stock/initial")]
     [RequirePermission("inventory.items.manage")]
     public ActionResult<InventoryStockBalanceDto> SetInitialStock(InventoryInitialStockDto request) =>
-        ToActionResult(inventoryCatalogCommandService.SetInitialStock(request));
+        new ObjectResult(new ProblemDetails
+        {
+            Title = "Складской учёт остатков отключён",
+            Detail = "Используйте учёт выдачи, возврата и списания. История прежних операций сохранена.",
+            Status = StatusCodes.Status410Gone
+        })
+        { StatusCode = StatusCodes.Status410Gone };
 
     [HttpPost("documents")]
     [RequirePermission("inventory.issue.manage")]
     public ActionResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request) =>
-        ToActionResult(inventoryCatalogCommandService.CreateOperation(request));
+        ToActionResult(inventoryCatalogCommandService.CreateOperation(request, authenticatedUserContext.User?.Id));
 
     [HttpPost("legacy/import")]
     [RequirePermission("inventory.import")]
-    public async Task<ActionResult<InventoryLegacyImportRunDto>> ImportLegacy(CancellationToken cancellationToken) =>
-        ToActionResult(await inventoryLegacyImportService.ImportAsync(new InventoryLegacyImportRequestDto(false), cancellationToken));
+    public ActionResult<InventoryLegacyImportRunDto> ImportLegacy(CancellationToken cancellationToken) =>
+        LegacyImportRetired();
 
     [HttpPost("legacy/import/dry-run")]
     [RequirePermission("inventory.import")]
-    public async Task<ActionResult<InventoryLegacyImportRunDto>> DryRunLegacyImport(CancellationToken cancellationToken) =>
-        ToActionResult(await inventoryLegacyImportService.ImportAsync(new InventoryLegacyImportRequestDto(true), cancellationToken));
+    public ActionResult<InventoryLegacyImportRunDto> DryRunLegacyImport(CancellationToken cancellationToken) =>
+        LegacyImportRetired();
+
+    private static ObjectResult LegacyImportRetired() => new(new ProblemDetails
+    {
+        Title = "Разовый импорт вынесен из рабочего API",
+        Detail = "Используйте tools/Prepare-InventoryMigrationDatabase.ps1 с отдельной восстановленной БД. История прогонов доступна для просмотра.",
+        Status = StatusCodes.Status410Gone
+    })
+    { StatusCode = StatusCodes.Status410Gone };
 
     [HttpGet("legacy/import-runs/{id:guid}")]
     [RequirePermission("inventory.import")]

@@ -158,6 +158,9 @@ internal sealed partial class EfInventoryWorkflowService
     }
 
     public InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid cardId, UpsertInventoryPpeCardLineDto request)
+        => ExecuteLegacyPpeWrite(() => AddPpeCardLineCore(cardId, request));
+
+    private InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLineCore(Guid cardId, UpsertInventoryPpeCardLineDto request)
     {
         var card = dbContext.InventoryPpeCards.FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
         if (card is null)
@@ -172,6 +175,18 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         var item = dbContext.InventoryItems.First(row => row.Id == request.ItemId);
+        var issueStatus = NormalizePpeStatus(request.Status);
+        if (PpeIssueStatusCatalog.IsClosedStatus(issueStatus))
+            return Failure<InventoryPpeCardLineDto>("status", "Возврат или списание доступны только для существующей выданной позиции");
+        PpeDocumentContentDto? validatedIssue = null;
+        if (IsPpeSignatureLineStatus(issueStatus))
+        {
+            var validated = ValidateLegacyPpeIssuance(cardId, [new(request.CardNormRowId ?? Guid.Empty, request.ItemId,
+                request.IssuedAt ?? DateTimeOffset.UtcNow, request.Quantity, request.UnitPriceMinor,
+                NormalizeOptional(request.SizeText), string.IsNullOrWhiteSpace(request.IssueMethod) ? "personal" : NormalizeStatus(request.IssueMethod))]);
+            if (!validated.Succeeded) return new(null, validated.Errors);
+            validatedIssue = validated.Value;
+        }
         var isSectionTitle = IsPpeSectionTitle(request);
         var quantityText = NormalizeOptional(request.QuantityText);
         var line = new InventoryPpeCardLineEntity
@@ -179,7 +194,7 @@ internal sealed partial class EfInventoryWorkflowService
             Id = Guid.NewGuid(),
             CardId = card.Id,
             ItemId = request.ItemId,
-            WarehouseId = request.WarehouseId,
+            WarehouseId = null,
             Quantity = request.Quantity,
             UnitPriceMinor = NormalizeUnitPriceMinor(request.UnitPriceMinor, request.ItemId),
             Status = NormalizePpeStatus(request.Status) is { Length: > 0 } status ? status : PpeIssueStatusCatalog.NotIssued,
@@ -202,6 +217,9 @@ internal sealed partial class EfInventoryWorkflowService
         if (IsPpeSignatureLineStatus(line.Status))
         {
             line.IssuedAt = request.IssuedAt ?? DateTimeOffset.UtcNow;
+            line.UnitPriceMinor = validatedIssue!.Lines[0].UnitPriceMinor;
+            StampLegacyPpeFact(line, validatedIssue!);
+            card.Version += 1;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -219,7 +237,6 @@ internal sealed partial class EfInventoryWorkflowService
             AddPpeLineSystemLog(line, "issued", "Создан факт выдачи", now);
         }
 
-        AddPpeStockMoveIfNeeded(line, string.Empty, line.Status, now);
         dbContext.SaveChanges();
 
         return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
@@ -239,6 +256,13 @@ internal sealed partial class EfInventoryWorkflowService
                 "status",
                 "Строка СИЗ из подтверждённого документа выдачи защищена от редактирования.");
         }
+
+        if (!string.IsNullOrWhiteSpace(request.Status) && NormalizePpeStatus(request.Status) != line.Status)
+            return Failure<InventoryPpeCardLineDto>("status", "Изменяйте состояние позиции отдельной операцией статуса");
+        if ((IsPpeSignatureLineStatus(line.Status) || PpeIssueStatusCatalog.IsClosedStatus(line.Status))
+            && ((request.CardNormRowId.HasValue && request.CardNormRowId != line.CardNormRowId)
+                || (request.IssuedAt.HasValue && request.IssuedAt != line.IssuedAt)))
+            return Failure<InventoryPpeCardLineDto>("status", "У выданной позиции нельзя менять строку нормы или дату выдачи");
 
         var validation = ValidatePpeLine(request);
         if (validation is not null)
@@ -262,7 +286,7 @@ internal sealed partial class EfInventoryWorkflowService
         var isSectionTitle = IsPpeSectionTitle(request);
         var quantityText = NormalizeOptional(request.QuantityText);
         line.ItemId = request.ItemId;
-        line.WarehouseId = request.WarehouseId;
+        // Preserve historical links; new PPE operations do not use a warehouse.
         line.Quantity = request.Quantity;
         line.UnitPriceMinor = NormalizeUnitPriceMinor(request.UnitPriceMinor, request.ItemId);
         line.DueAt = request.DueAt;
@@ -280,7 +304,7 @@ internal sealed partial class EfInventoryWorkflowService
         line.ReturnedQuantity = request.ReturnedQuantity;
         line.WriteOffActDate = request.WriteOffActDate;
         line.WriteOffActNumber = NormalizeOptional(request.WriteOffActNumber);
-        if (IsPpeSignatureLineStatus(NormalizePpeStatus(request.Status)))
+        if (IsPpeSignatureLineStatus(line.Status))
         {
             line.IssuedAt = request.IssuedAt ?? line.IssuedAt ?? DateTimeOffset.UtcNow;
         }
@@ -344,20 +368,6 @@ internal sealed partial class EfInventoryWorkflowService
                 .ThenInclude(item => item.Unit)
             .Include(line => line.Warehouse)
             .FirstOrDefault(line => line.Id == id);
-
-    private static InventoryPpeCardDto MapPpeCard(InventoryPpeCardEntity card)
-    {
-        var lines = card.Lines.Where(line => line.Status != "archived").ToList();
-        return new(
-            card.Id,
-            card.EmployeeId,
-            card.Employee.FullName,
-            card.Position,
-            card.Status,
-            lines.Count,
-            lines.Sum(line => (line.UnitPriceMinor ?? line.Item.DefaultUnitPriceMinor ?? 0) * line.Quantity),
-            lines.Count(line => (line.UnitPriceMinor ?? line.Item.DefaultUnitPriceMinor ?? 0) == 0));
-    }
     private static IQueryable<InventoryPpeCardEntity> ApplyPpeCardFilters(
         IQueryable<InventoryPpeCardEntity> query,
         InventoryListQuery filters)

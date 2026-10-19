@@ -34,7 +34,7 @@ internal sealed partial class EfEmuService
 
     public EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id)
     {
-        var entity = LoadSession(id);
+        var entity = LoadSessions(asNoTracking: true).FirstOrDefault(row => row.Id == id);
         return entity is null
             ? Failure<EmuWorkSessionDto>("id", "Работа не найдена")
             : Success(MapWorkSession(RecalculateSession(entity, DateTimeOffset.UtcNow)));

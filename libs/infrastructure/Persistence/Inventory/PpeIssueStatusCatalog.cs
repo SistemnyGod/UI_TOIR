@@ -5,6 +5,7 @@ internal static class PpeIssueStatusCatalog
     public const string Active = "active";
     public const string Archived = "archived";
     public const string Issued = "issued";
+    public const string Defective = "defective";
     public const string IssueLater = "issue_later";
     public const string Issuing = "issuing";
     public const string Lost = "lost";
@@ -22,7 +23,7 @@ internal static class PpeIssueStatusCatalog
         return value switch
         {
             NotIssued or Issuing or IssueLater or Issued or Partial or NoStock or Replacement
-                or Returned or Reissued or Lost or WrittenOff => value,
+                or Returned or Reissued or Lost or WrittenOff or Defective => value,
             "write_off" => WrittenOff,
             _ => string.Empty
         };
@@ -33,8 +34,8 @@ internal static class PpeIssueStatusCatalog
         {
             NotIssued or Issuing or IssueLater or Partial or NoStock =>
                 Normalize(nextStatus) is NotIssued or Issuing or IssueLater or Partial or NoStock or Replacement or Issued,
-            Issued or Replacement or Reissued =>
-                Normalize(nextStatus) is Returned or WrittenOff or Lost,
+            Issued or Replacement or Reissued or Defective =>
+                Normalize(nextStatus) is Returned or WrittenOff or Lost or Defective,
             Returned or WrittenOff or Lost or Archived => false,
             _ => Normalize(nextStatus) is NotIssued or Issuing or IssueLater or Issued or Partial or NoStock or Replacement
         };
@@ -46,13 +47,14 @@ internal static class PpeIssueStatusCatalog
         Normalize(status) is NotIssued or Issuing;
 
     public static bool IsSignatureStatus(string status) =>
-        Normalize(status) is Issued or Partial or Replacement or Reissued or Returned or WrittenOff;
+        Normalize(status) is Issued or Partial or Replacement or Reissued or Returned or WrittenOff or Defective;
 
     public static string Label(string status) => Normalize(status) switch
     {
         Active => "Активна",
         Archived => "Архив",
         Issued => "Выдано",
+        Defective => "Неисправно",
         IssueLater => "Выдать позже",
         Issuing => "К выдаче",
         Lost => "Утеряно",

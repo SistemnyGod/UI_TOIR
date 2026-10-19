@@ -13,6 +13,9 @@ internal sealed partial class EfInventoryWorkflowService
 {
 
     public InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatus(Guid cardId, Guid lineId, UpdateInventoryStatusDto request)
+        => ExecuteLegacyPpeWrite(() => UpdatePpeCardLineStatusCore(cardId, lineId, request));
+
+    private InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatusCore(Guid cardId, Guid lineId, UpdateInventoryStatusDto request)
     {
         var line = dbContext.InventoryPpeCardLines
             .Include(row => row.Card)
@@ -55,13 +58,18 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("status", "PPE section title cannot be issued.");
         }
 
-        var stockValidation = ValidatePpeStatusStockTransition(line, oldStatus, nextStatus);
-        if (stockValidation is not null)
-        {
-            return stockValidation;
-        }
+        if (nextStatus is "returned" or "written_off")
+            return ApplyPpeLineAction(cardId, lineId, new ApplyInventoryPpeLineActionDto(nextStatus, DateTimeOffset.UtcNow, Comment: request.Comment));
 
         var now = DateTimeOffset.UtcNow;
+        if (IsPpeSignatureLineStatus(nextStatus) && !IsPpeSignatureLineStatus(oldStatus))
+        {
+            var validated = ValidateLegacyPpeIssuance(cardId, [new(line.CardNormRowId ?? Guid.Empty, line.ItemId,
+                line.IssuedAt ?? now, line.Quantity, line.UnitPriceMinor, line.SizeText, line.IssueMethod)], line.Id);
+            if (!validated.Succeeded) return new(null, validated.Errors);
+            StampLegacyPpeFact(line, validated.Value!);
+            line.Card.Version += 1;
+        }
         if (line.IssueDocumentId is null
             && IsPpeSignatureLineStatus(nextStatus)
             && !IsPpeSignatureLineStatus(oldStatus))
@@ -75,7 +83,6 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         line.Status = nextStatus;
-        AddPpeStockMoveIfNeeded(line, oldStatus, nextStatus, now);
         var eventType = ToPpeHistoryAction(oldStatus, nextStatus);
         AddPpeEvent(line.Id, eventType, oldStatus, nextStatus, request.Comment, now);
         AddPpeLineSystemLog(line, eventType, request.Comment, now);
@@ -100,43 +107,37 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("conflict", "PPE card was changed by another user");
         }
 
+        var oldStatus = line.Status;
+        var remaining = line.Quantity - (line.ReturnedQuantity ?? 0m);
+        if (remaining <= 0 || (PpeIssueStatusCatalog.IsClosedStatus(oldStatus) && !(oldStatus == "returned" && remaining > 0)))
+            return Failure<InventoryPpeCardLineDto>("status", "Позиция уже полностью возвращена, списана или закрыта");
+        if (!IsPpeSignatureLineStatus(oldStatus))
+            return Failure<InventoryPpeCardLineDto>("status", "Действие доступно только для ранее выданной позиции");
         if (action == "returned")
         {
-            var quantity = request.Quantity ?? line.Quantity;
-            if (quantity <= 0 || quantity > line.Quantity)
-            {
-                return Failure<InventoryPpeCardLineDto>("quantity", "Returned quantity must be greater than zero and not exceed issued quantity");
-            }
+            var quantity = request.Quantity ?? remaining;
+            if (quantity <= 0 || quantity > remaining)
+                return Failure<InventoryPpeCardLineDto>("quantity", $"Количество возврата должно быть положительным и не превышать остаток {remaining}");
             line.ReturnedAt = request.OccurredAt.ToUniversalTime();
-            line.ReturnedQuantity = quantity;
+            line.ReturnedQuantity = (line.ReturnedQuantity ?? 0m) + quantity;
+            line.Status = line.ReturnedQuantity == line.Quantity ? "returned" : "issued";
         }
         else if (action == "written_off")
         {
             line.WriteOffActDate = (request.WriteOffActDate ?? request.OccurredAt).ToUniversalTime();
             line.WriteOffActNumber = NormalizeOptional(request.WriteOffActNumber);
+            line.Status = "written_off";
         }
-
+        else line.Status = "defective";
         line.Card.Version += 1;
-        InventoryCommandResult<InventoryPpeCardLineDto> result;
-        try
-        {
-            result = UpdatePpeCardLineStatus(cardId, lineId, new UpdateInventoryStatusDto(action, request.Comment));
-        }
+        var details = action == "returned" ? $"{request.Comment} Возвращено всего {line.ReturnedQuantity} из {line.Quantity}." : request.Comment;
+        AddPpeEvent(line.Id, action, oldStatus, line.Status, details, request.OccurredAt.ToUniversalTime());
+        AddPpeLineSystemLog(line, action, details, request.OccurredAt.ToUniversalTime());
+        try { dbContext.SaveChanges(); }
         catch (DbUpdateConcurrencyException)
         {
+            dbContext.ChangeTracker.Clear();
             return Failure<InventoryPpeCardLineDto>("conflict", "PPE card was changed by another user");
-        }
-        if (!result.Succeeded) return result;
-
-        var latestEvent = dbContext.InventoryPpeCardLineEvents
-            .Where(row => row.LineId == lineId && row.ToStatus == action)
-            .OrderByDescending(row => row.CreatedAt)
-            .ThenByDescending(row => row.Id)
-            .FirstOrDefault();
-        if (latestEvent is not null)
-        {
-            latestEvent.CreatedAt = request.OccurredAt.ToUniversalTime();
-            dbContext.SaveChanges();
         }
 
         return Success(MapPpeCardLine(LoadPpeLine(lineId)!));
@@ -159,7 +160,7 @@ internal sealed partial class EfInventoryWorkflowService
                 "Строка СИЗ из подтверждённого документа выдачи защищена от архивирования.");
         }
 
-        if (line.Status == PpeIssueStatusCatalog.Issued)
+        if (IsPpeSignatureLineStatus(line.Status) && !PpeIssueStatusCatalog.IsClosedStatus(line.Status))
         {
             return Failure<InventoryPpeCardLineDto>(
                 "status",
@@ -246,99 +247,6 @@ internal sealed partial class EfInventoryWorkflowService
 
         return ToListResponse(rows, total, paging);
     }
-
-    private void AddPpeStockMoveIfNeeded(
-        InventoryPpeCardLineEntity line,
-        string oldStatus,
-        string nextStatus,
-        DateTimeOffset now)
-    {
-        if (line.WarehouseId is null)
-        {
-            return;
-        }
-
-        string moveType;
-        decimal quantityDelta;
-        if (IsPpeSignatureLineStatus(nextStatus) && !IsPpeSignatureLineStatus(oldStatus))
-        {
-            moveType = "ppe_issue";
-            quantityDelta = -line.Quantity;
-        }
-        else if (IsPpeSignatureLineStatus(oldStatus) && nextStatus == PpeIssueStatusCatalog.Returned)
-        {
-            moveType = "ppe_return";
-            quantityDelta = line.ReturnedQuantity ?? line.Quantity;
-        }
-        else if (IsPpeSignatureLineStatus(oldStatus) && nextStatus == PpeIssueStatusCatalog.WrittenOff)
-        {
-            moveType = "ppe_write_off";
-            quantityDelta = 0;
-        }
-        else
-        {
-            return;
-        }
-
-        var alreadyRecorded = dbContext.InventoryStockMoves.Any(move =>
-            move.PpeCardLineId == line.Id &&
-            move.MoveType == moveType);
-        if (alreadyRecorded)
-        {
-            return;
-        }
-
-        var documentId = moveType == "ppe_issue"
-            ? line.CardId
-            : Guid.NewGuid();
-
-        dbContext.InventoryStockMoves.Add(new InventoryStockMoveEntity
-        {
-            Id = Guid.NewGuid(),
-            ItemId = line.ItemId,
-            WarehouseId = line.WarehouseId.Value,
-            EmployeeId = line.Card?.EmployeeId ?? dbContext.InventoryPpeCards
-                .Where(card => card.Id == line.CardId)
-                .Select(card => card.EmployeeId)
-                .First(),
-            QuantityDelta = quantityDelta,
-            MovedAt = now,
-            MoveType = moveType,
-            ReferenceType = moveType == "ppe_issue" ? "ppe_card_line" : moveType,
-            ReferenceId = documentId,
-            PpeCardLineId = line.Id
-        });
-    }
-
-    private decimal GetAvailableStock(Guid itemId, Guid warehouseId)
-    {
-        var physical = 0m;
-        var reserved = 0m;
-
-        foreach (var move in dbContext.InventoryStockMoves
-            .Where(row => row.ItemId == itemId && row.WarehouseId == warehouseId)
-            .Select(row => new { row.MoveType, row.QuantityDelta }))
-        {
-            if (IsAccountingOnlyMoveType(move.MoveType))
-            {
-                continue;
-            }
-
-            if (ReservationMoveTypes.Contains(move.MoveType))
-            {
-                reserved += move.QuantityDelta < 0 ? -move.QuantityDelta : move.QuantityDelta;
-            }
-            else
-            {
-                physical += move.QuantityDelta;
-            }
-        }
-
-        return Math.Max(0m, physical - reserved);
-    }
-
-    private static bool IsAccountingOnlyMoveType(string moveType) =>
-        moveType is "ppe_issue" or "ppe_return" or "ppe_write_off" or "custody_issue" or "custody_return";
 
     private static InventoryPpeMovementDto MapPpeMovement(
         InventoryPpeCardLineEntity line,

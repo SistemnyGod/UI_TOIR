@@ -16,8 +16,15 @@ internal sealed partial class EfInventoryWorkflowService
             || request.PositionAliases is null || request.PositionAliases.Count == 0 || request.PositionAliases.Count > 100
             || request.PositionAliases.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 500))
             return Failure<InventoryPpeNormSetDto>("scope", "Укажите подразделение и отдельные применимые должности");
+        if (request.UpdateDates && (!request.EffectiveFrom.HasValue || request.EffectiveTo < request.EffectiveFrom))
+            return Failure<InventoryPpeNormSetDto>("dates", "Укажите начало действия и проверьте порядок дат нормы");
         norm.DepartmentName = request.DepartmentName.Trim();
         norm.PositionAliasesJson = JsonSerializer.Serialize(request.PositionAliases.Select(x => x.Trim()).Distinct().ToArray());
+        if (request.UpdateDates)
+        {
+            norm.EffectiveFrom = request.EffectiveFrom;
+            norm.EffectiveTo = request.EffectiveTo;
+        }
         norm.ScopeConfirmed = true;
         return SaveNormApproval(norm, "scope_confirmed", actor);
     }
@@ -30,6 +37,9 @@ internal sealed partial class EfInventoryWorkflowService
         if (norm.Version != request.ExpectedVersion) return Failure<InventoryPpeNormSetDto>("conflict", "Норма изменена другим пользователем");
         if (string.IsNullOrWhiteSpace(request.UnitSymbol) || request.UnitSymbol.Length > 40
             || request.PeriodMonths is <= 0 or > 1200 || request.LifeMonths is <= 0 or > 1200
+            || request.Quantity is <= 0 or > 999999999.999m || (request.Quantity.HasValue && decimal.Round(request.Quantity.Value, 3) != request.Quantity)
+            || request.NormPoint?.Length > 4000 || request.NormItemName?.Length > 4000
+            || (request.NormItemName is not null && string.IsNullOrWhiteSpace(request.NormItemName))
             || request.AlternativeGroup is null || request.AlternativeGroup.Length > 120)
             return Failure<InventoryPpeNormSetDto>("rules", "Проверьте единицу и сроки: допускается от 1 до 1200 месяцев либо пустое значение");
         var key = row.RequirementKey == Guid.Empty ? row.Id : row.RequirementKey;
@@ -50,11 +60,15 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeNormSetDto>("requirement", "Одно историческое требование нельзя учитывать дважды в одном наборе норм");
         var alternative = request.AlternativeGroup.Trim();
         if (alternative.Length > 0 && norm.Rows.Any(x => x.Id != row.Id && x.AlternativeGroup == alternative
-            && (x.Quantity != row.Quantity || x.PeriodMonths != request.PeriodMonths || NormalizePpeUnit(x.UnitSymbol) != NormalizePpeUnit(request.UnitSymbol))))
+            && (x.Quantity != (request.Quantity ?? row.Quantity) || x.PeriodMonths != request.PeriodMonths || NormalizePpeUnit(x.UnitSymbol) != NormalizePpeUnit(request.UnitSymbol))))
             return Failure<InventoryPpeNormSetDto>("alternativeGroup", "У альтернатив должны совпадать количество, единица и период нормы");
-        if (NormalizePpeUnit(row.UnitSymbol) != NormalizePpeUnit(request.UnitSymbol))
+        if (NormalizePpeUnit(row.UnitSymbol) != NormalizePpeUnit(request.UnitSymbol)
+            || (request.NormItemName is not null && NormalizeNormLookupText(row.NormItemName) != NormalizeNormLookupText(request.NormItemName)))
             foreach (var mapping in row.Mappings) mapping.IsApproved = false;
         row.UnitSymbol = request.UnitSymbol.Trim();
+        if (request.Quantity.HasValue) { row.Quantity = request.Quantity.Value; row.QuantityText = $"{row.Quantity:0.###} {row.UnitSymbol}"; }
+        if (request.NormPoint is not null) row.NormPoint = request.NormPoint.Trim();
+        if (request.NormItemName is not null) row.NormItemName = request.NormItemName.Trim();
         row.PeriodMonths = request.PeriodMonths;
         row.LifeMonths = request.LifeMonths;
         row.RequirementKey = key;
@@ -105,7 +119,7 @@ internal sealed partial class EfInventoryWorkflowService
         norm.Version++;
         norm.UpdatedAt = DateTimeOffset.UtcNow;
         AddNormAudit(norm.Id, action, actor, $"version={norm.Version}");
-        try { dbContext.SaveChanges(); return Success(MapNormSet(norm)); }
+        try { dbContext.SaveChanges(); return Success(MapReviewedNormSet(norm)); }
         catch (DbUpdateConcurrencyException)
         {
             dbContext.ChangeTracker.Clear();

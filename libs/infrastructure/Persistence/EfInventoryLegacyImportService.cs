@@ -23,6 +23,11 @@ internal sealed class EfInventoryLegacyImportService(
         InventoryLegacyImportRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        if (!string.Equals(configuration["InventoryLegacy:MigrationMode"], "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure<InventoryLegacyImportRunDto>("migrationMode", "Разовый импорт доступен только в отдельной миграционной утилите.");
+        }
+
         var connectionString = configuration["InventoryLegacy:ConnectionString"]
             ?? Environment.GetEnvironmentVariable("INVENTORY_LEGACY_CONNECTION_STRING");
         if (string.IsNullOrWhiteSpace(connectionString))

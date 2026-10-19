@@ -9,6 +9,17 @@ $excludedSegments = @(
     "\node_modules\",
     "\obj\",
     "\output\"
+    "\.git\"
+    "\.agents\"
+    "\.codex\"
+    "\.aws\"
+    "\.codex-tmp\"
+    "\TestResults\"
+    "\test-results\"
+    "\playwright-report\"
+    "\artifacts\"
+    "\audit-output\"
+    "\backups\"
 )
 $textExtensions = @(
     ".cs",
@@ -53,7 +64,21 @@ $invalidUtf8 = New-Object System.Collections.Generic.List[string]
 $utf8Bom = New-Object System.Collections.Generic.List[string]
 $checkedCount = 0
 
-Get-ChildItem -LiteralPath $root -Recurse -File |
+function Get-ProjectTextCandidates([string]$directory) {
+    foreach ($entry in Get-ChildItem -LiteralPath $directory -Force) {
+        if ($entry.PSIsContainer) {
+            # Skip generated trees before traversal, including inaccessible converter/cache directories.
+            if (-not (Test-IsExcluded ($entry.FullName + '\')) -and $entry.Name -notlike 'build-output*') {
+                Get-ProjectTextCandidates $entry.FullName
+            }
+        }
+        else {
+            $entry
+        }
+    }
+}
+
+Get-ProjectTextCandidates $root |
     Where-Object { (Test-IsTextFile $_) -and -not (Test-IsExcluded $_.FullName) } |
     ForEach-Object {
         $checkedCount += 1

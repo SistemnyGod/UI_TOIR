@@ -616,59 +616,34 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
 
     public InventoryCommandResult<InventoryStockBalanceDto> SetInitialStock(InventoryInitialStockDto request)
     {
-        if (request.Quantity < 0)
-        {
-            return Failure<InventoryStockBalanceDto>("quantity", "Остаток не может быть отрицательным");
-        }
-
-        var item = dbContext.InventoryItems
-            .Include(row => row.Unit)
-            .FirstOrDefault(row => row.Id == request.ItemId);
-        if (item is null)
-        {
-            return Failure<InventoryStockBalanceDto>("itemId", "Позиция не найдена");
-        }
-
-        var warehouse = dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId);
-        if (warehouse is null)
-        {
-            return Failure<InventoryStockBalanceDto>("warehouseId", "Склад не найден");
-        }
-
-        var current = GetStockByItemAndWarehouse(request.ItemId, request.WarehouseId);
-        var delta = request.Quantity - current.Physical;
-        if (delta != 0)
-        {
-            dbContext.InventoryStockMoves.Add(new InventoryStockMoveEntity
-            {
-                Id = Guid.NewGuid(),
-                ItemId = item.Id,
-                WarehouseId = warehouse.Id,
-                QuantityDelta = delta,
-                MovedAt = request.MovedAt ?? DateTimeOffset.UtcNow,
-                MoveType = "initial_balance",
-                ReferenceType = string.IsNullOrWhiteSpace(request.Note) ? "manual" : request.Note.Trim()
-            });
-            dbContext.SaveChanges();
-        }
-
-        var stock = GetStockByItemAndWarehouse(request.ItemId, request.WarehouseId);
-        return Success(new InventoryStockBalanceDto(
-            item.Id,
-            item.Name,
-            warehouse.Id,
-            warehouse.Name,
-            stock.Available,
-            stock.Physical,
-            stock.Reserved,
-            stock.Available,
-            item.Unit?.Symbol ?? item.Unit?.Name ?? string.Empty,
-            stock.Status));
+        // Retain the contract for old callers, but never create a warehouse balance.
+        return Failure<InventoryStockBalanceDto>("stockAccounting", "Складской учёт остатков отключён. Доступен учёт выдачи, возврата и списания.");
     }
 
-    public InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request)
+    public InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request, Guid? actorUserId = null)
     {
         var type = NormalizeOperationType(request.Type);
+        if (request.ClientOperationId == Guid.Empty)
+            return Failure<InventoryDocumentDto>("clientOperationId", "Идентификатор операции не может быть пустым");
+        using var transaction = dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null
+            ? dbContext.Database.BeginTransaction() : null;
+        string? payloadHash = null;
+        if (request.ClientOperationId is Guid clientId)
+        {
+            if (dbContext.Database.IsNpgsql())
+            {
+                var key = $"inventory-operation:{clientId:N}";
+                dbContext.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))");
+            }
+            payloadHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+                JsonSerializer.Serialize(new { Type = type, request.ItemId, Quantity = request.Quantity.ToString("G29", System.Globalization.CultureInfo.InvariantCulture), request.EmployeeId,
+                    MovedAt = request.MovedAt?.ToUniversalTime(), Comment = NormalizeOptional(request.Comment) }))));
+            var receipt = dbContext.InventoryOperationReceipts.AsNoTracking().SingleOrDefault(row => row.Id == clientId);
+            if (receipt is not null)
+                return receipt.AuthorUserId != actorUserId || receipt.PayloadHash != payloadHash
+                    ? Failure<InventoryDocumentDto>("conflict", "Этот идентификатор уже использован для другой операции или пользователя")
+                    : Success(JsonSerializer.Deserialize<InventoryDocumentDto>(receipt.ResponseJson)!);
+        }
         if (type.Length == 0)
         {
             return Failure<InventoryDocumentDto>("type", "Выберите тип операции");
@@ -687,14 +662,8 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             return Failure<InventoryDocumentDto>("itemId", "Позиция не найдена");
         }
 
-        var hasExplicitWarehouse = request.WarehouseId is not null;
-        var warehouse = hasExplicitWarehouse
-            ? dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId!.Value)
-            : EnsureAccountingMovementWarehouse();
-        if (warehouse is null)
-        {
-            return Failure<InventoryDocumentDto>("warehouseId", "Склад не найден");
-        }
+        // WarehouseId remains in the wire contract only for compatibility.
+        var warehouse = EnsureAccountingMovementWarehouse();
 
         EmployeeEntity? employee = null;
         if (request.EmployeeId is not null)
@@ -707,15 +676,6 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         }
 
         var quantityDelta = ToQuantityDelta(type, request.Quantity);
-        if (hasExplicitWarehouse && quantityDelta < 0)
-        {
-            var stock = GetStockByItemAndWarehouse(item.Id, warehouse.Id);
-            if (stock.Available < Math.Abs(quantityDelta))
-            {
-                return Failure<InventoryDocumentDto>("quantity", "Недостаточно доступного остатка на складе");
-            }
-        }
-
         var documentId = Guid.NewGuid();
         var movedAt = request.MovedAt ?? DateTimeOffset.UtcNow;
         var move = new InventoryStockMoveEntity
@@ -732,9 +692,8 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         };
 
         dbContext.InventoryStockMoves.Add(move);
-        dbContext.SaveChanges();
 
-        return Success(new InventoryDocumentDto(
+        var document = new InventoryDocumentDto(
             documentId,
             $"INV-{movedAt:yyyyMMdd}-{documentId.ToString("N")[..6].ToUpperInvariant()}",
             type,
@@ -742,10 +701,19 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             "posted",
             movedAt.UtcDateTime,
             item.Name,
-            hasExplicitWarehouse ? warehouse.Name : string.Empty,
+            string.Empty,
             quantityDelta,
             item.Unit?.Symbol ?? item.Unit?.Name ?? string.Empty,
-            move.ReferenceType));
+            move.ReferenceType);
+        if (request.ClientOperationId is Guid operationId)
+            dbContext.InventoryOperationReceipts.Add(new InventoryOperationReceiptEntity
+            {
+                Id = operationId, AuthorUserId = actorUserId, PayloadHash = payloadHash!,
+                ResponseJson = JsonSerializer.Serialize(document), CreatedAt = DateTimeOffset.UtcNow
+            });
+        dbContext.SaveChanges();
+        transaction?.Commit();
+        return Success(document);
     }
 
     private InventoryWarehouseEntity EnsureAccountingMovementWarehouse()
@@ -877,12 +845,6 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
     private StockTotals GetStockByItem(Guid itemId) =>
         BuildStockTotals(dbContext.InventoryStockMoves
             .Where(move => move.ItemId == itemId)
-            .Select(move => new MoveSummary(move.MoveType, move.QuantityDelta))
-            .ToList());
-
-    private StockTotals GetStockByItemAndWarehouse(Guid itemId, Guid warehouseId) =>
-        BuildStockTotals(dbContext.InventoryStockMoves
-            .Where(move => move.ItemId == itemId && move.WarehouseId == warehouseId)
             .Select(move => new MoveSummary(move.MoveType, move.QuantityDelta))
             .ToList());
 

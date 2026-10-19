@@ -7,6 +7,23 @@ namespace Patrol360.Infrastructure.Persistence.Inventory;
 
 internal sealed class EfPpeKitTemplateService(Patrol360DbContext db) : IPpeKitTemplateService
 {
+    public IReadOnlyList<PpeKitTemplateDto> GetLegacy() => db.InventoryPpeIssueTemplates.AsNoTracking().Include(x => x.Lines)
+        .Where(x => !x.IsArchived && x.OwnerUserId == Guid.Empty).OrderBy(x => x.Name).Select(Map).ToList();
+
+    public InventoryCommandResult<PpeKitTemplateDto> BindLegacy(Guid id, BindLegacyPpeKitTemplateDto request, Guid userId, string userName)
+    {
+        var entity = db.InventoryPpeIssueTemplates.Include(x => x.Lines).FirstOrDefault(x => x.Id == id && !x.IsArchived);
+        if (entity is null) return Error("id", "Наследованный шаблон не найден");
+        if (entity.OwnerUserId != Guid.Empty || entity.Version != request.ExpectedVersion) return Error("conflict", "Шаблон уже привязан или изменён другим пользователем");
+        if (userId == Guid.Empty) return Error("owner", "Не удалось определить владельца");
+        var invalid = Validate(entity.Name, request.NormSetId, request.IsShared, request.Lines, true);
+        if (invalid is not null) return invalid;
+        var norm = db.InventoryPpeNormSets.Include(x => x.Rows).ThenInclude(x => x.Mappings).FirstOrDefault(x => x.Id == request.NormSetId && x.ArchivedAt == null);
+        if (norm is null || request.Lines.Any(line => !norm.Rows.Any(row => row.Id == line.NormRowId && row.Mappings.Any(mapping => mapping.ItemId == line.ItemId && mapping.ArchivedAt == null))))
+            return Error("lines", "Каждую позицию необходимо явно связать со строкой выбранной нормы и сопоставленным товаром");
+        entity.NormSetId = norm.Id; entity.OwnerUserId = userId; entity.OwnerName = userName; entity.IsShared = request.IsShared;
+        ReplaceLines(entity, request.Lines); Touch(entity); return Save(entity);
+    }
     public IReadOnlyList<PpeKitTemplateDto> Get(Guid userId) => db.InventoryPpeIssueTemplates.AsNoTracking().Include(x => x.Lines)
         .Where(x => !x.IsArchived && (x.OwnerUserId == userId || x.IsShared)).OrderByDescending(x => x.UpdatedAt).Select(Map).ToList();
 
@@ -67,7 +84,7 @@ internal sealed class EfPpeKitTemplateService(Patrol360DbContext db) : IPpeKitTe
                 return Error("mapping", "В шаблоне есть товар, соответствие которого текущей норме больше не утверждено");
             if (!mapping.Item.IsActive || !IsPpe(mapping.Item)) return Error("itemId", "Выбранная номенклатура СИЗ больше недоступна");
             var unit = mapping.Item.Unit?.Symbol?.Trim() ?? string.Empty;
-            if (unit.Length == 0 || NormalizeUnit(unit) != NormalizeUnit(mapping.NormRow.UnitSymbol)) return Error("mapping", "Единицы товара и нормы не совпадают");
+            if (unit.Length == 0 || string.IsNullOrWhiteSpace(mapping.NormRow.UnitSymbol)) return Error("mapping", "Укажите единицы товара и нормы и подтвердите коэффициент пересчёта");
             current.Add(new(line.NormRowId, line.ItemId, mapping.Item.Name, unit, line.Quantity, line.LifeMonths, line.UnitPriceMinor));
         }
         return Ok(new(entity.Id, entity.Name, entity.NormSetId, entity.OwnerUserId, entity.OwnerName, entity.IsShared, entity.Version, entity.UpdatedAt, current));
@@ -112,7 +129,6 @@ internal sealed class EfPpeKitTemplateService(Patrol360DbContext db) : IPpeKitTe
     }
     private static void SetLine(InventoryPpeIssueTemplateLineEntity entity, SavePpeKitTemplateLineDto line) { entity.NormRowId = line.NormRowId; entity.ItemId = line.ItemId; entity.ItemName = (line.ItemName ?? "").Trim(); entity.UnitSymbol = (line.UnitSymbol ?? "").Trim(); entity.Quantity = line.Quantity; entity.LifeMonths = line.LifeMonths; entity.UnitPriceMinor = line.UnitPriceMinor; }
     private static void Touch(InventoryPpeIssueTemplateEntity entity) { entity.Version++; entity.UpdatedAt = DateTimeOffset.UtcNow; }
-    private static string NormalizeUnit(string value) => value.Trim().TrimEnd('.').ToLowerInvariant() switch { "штука" or "штук" or "шт" => "шт", "пара" or "пар" => "пар", var unit => unit };
     private static bool IsPpe(InventoryItemEntity item) { var value = $"{item.ItemKind} {item.Category?.Name}".ToLowerInvariant(); return value.Contains("ppe") || value.Contains("siz") || value.Contains("сиз") || value.Contains("спец"); }
     private InventoryCommandResult<PpeKitTemplateDto> Save(InventoryPpeIssueTemplateEntity entity) { try { db.SaveChanges(); return Ok(Map(entity)); } catch (DbUpdateConcurrencyException) { return Error("conflict", "Шаблон уже изменён другим пользователем"); } }
     private static PpeKitTemplateDto Map(InventoryPpeIssueTemplateEntity x) => new(x.Id, x.Name, x.NormSetId, x.OwnerUserId, x.OwnerName, x.IsShared, x.Version, x.UpdatedAt, x.Lines.Select(line => new PpeKitTemplateLineDto(line.NormRowId, line.ItemId, line.ItemName, line.UnitSymbol, line.Quantity, line.LifeMonths, line.UnitPriceMinor)).ToList());

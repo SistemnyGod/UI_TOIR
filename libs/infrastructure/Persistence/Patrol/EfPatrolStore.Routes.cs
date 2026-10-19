@@ -126,7 +126,8 @@ internal sealed partial class EfPatrolStore
 
     public UpdateRouteResult UpdateRoute(Guid id, UpdateRouteDto request)
     {
-        var route = dbContext.Routes.Include(item => item.Points).FirstOrDefault(item => item.Id == id);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, id, includePoints: true);
         if (route is null)
         {
             return new UpdateRouteResult(null, new Dictionary<string, string[]> { ["route"] = ["Маршрут не найден."] });
@@ -157,13 +158,15 @@ internal sealed partial class EfPatrolStore
         route.VersionNo += 1;
 
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return new UpdateRouteResult(MapRoute(route), new Dictionary<string, string[]>());
     }
 
     public bool DeleteRoute(Guid id)
     {
-        var route = dbContext.Routes.FirstOrDefault(item => item.Id == id);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, id, includePoints: true);
         if (route is null)
         {
             return false;
@@ -173,13 +176,15 @@ internal sealed partial class EfPatrolStore
         route.IsArchived = true;
         route.VersionNo += 1;
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return true;
     }
 
     public CreateRoutePointResult CreateRoutePoint(Guid routeId, CreateRoutePointDto request)
     {
-        var route = dbContext.Routes.Include(item => item.Points).FirstOrDefault(item => item.Id == routeId);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, routeId, includePoints: true);
         if (route is null)
         {
             return new CreateRoutePointResult(null, null, new Dictionary<string, string[]> { ["route"] = ["Маршрут не найден."] });
@@ -214,13 +219,15 @@ internal sealed partial class EfPatrolStore
         dbContext.RoutePoints.Add(point);
         route.VersionNo += 1;
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return new CreateRoutePointResult(MapRoute(route), MapRoutePoint(point), new Dictionary<string, string[]>());
     }
 
     public UpdateRoutePointResult UpdateRoutePoint(Guid routeId, Guid pointId, UpdateRoutePointDto request)
     {
-        var route = dbContext.Routes.Include(item => item.Points).FirstOrDefault(item => item.Id == routeId);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, routeId, includePoints: true);
         var point = route?.Points.FirstOrDefault(item => item.Id == pointId);
         if (route is null || point is null)
         {
@@ -249,13 +256,15 @@ internal sealed partial class EfPatrolStore
         route.VersionNo += 1;
 
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return new UpdateRoutePointResult(MapRoute(route), MapRoutePoint(point), new Dictionary<string, string[]>());
     }
 
     public bool DeleteRoutePoint(Guid routeId, Guid pointId)
     {
-        var route = dbContext.Routes.Include(item => item.Points).FirstOrDefault(item => item.Id == routeId);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, routeId, includePoints: true);
         var point = route?.Points.FirstOrDefault(item => item.Id == pointId);
         if (route is null || point is null)
         {
@@ -267,13 +276,15 @@ internal sealed partial class EfPatrolStore
         route.VersionNo += 1;
         ReorderPoints(route.Points.OrderBy(item => item.SequenceNo));
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return true;
     }
 
     public UpdateRoutePointResult ReorderRoutePoint(Guid routeId, Guid pointId, ReorderRoutePointDto request)
     {
-        var route = dbContext.Routes.Include(item => item.Points).FirstOrDefault(item => item.Id == routeId);
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, routeId, includePoints: true);
         var point = route?.Points.FirstOrDefault(item => item.Id == pointId);
         if (route is null || point is null)
         {
@@ -293,6 +304,7 @@ internal sealed partial class EfPatrolStore
         ReorderPoints(ordered);
         route.VersionNo += 1;
         SaveChangesAndInvalidateDashboardSummary();
+        transaction.Commit();
 
         return new UpdateRoutePointResult(MapRoute(route), MapRoutePoint(point), new Dictionary<string, string[]>());
     }
@@ -405,7 +417,7 @@ internal sealed partial class EfPatrolStore
             NormalizeOptionalText(point.Status, point.IsRequired ? "Активна" : "Черновик"),
             point.NfcCode,
             point.IsRequired,
-            point.RequiresPhoto,
+            false,
             NormalizeOptionalText(point.Description),
             NormalizeOptionalText(point.Instruction));
 

@@ -130,7 +130,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         {
             var attachmentCount = row.Attachments.Count;
             var photoCount = Math.Max(row.Photos, attachmentCount);
-            var requiresPhoto = row.RoutePoint?.RequiresPhoto ?? false;
+            const bool requiresPhoto = false;
             builder.AppendLine(string.Join(';', [
                 EscapeCsv(row.AssignmentId?.ToString() ?? string.Empty),
                 EscapeCsv(row.Status),

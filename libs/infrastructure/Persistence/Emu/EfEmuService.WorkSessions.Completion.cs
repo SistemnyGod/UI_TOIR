@@ -10,10 +10,10 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    public EmuCommandResult<EmuWorkSessionDto> CompleteWorkSession(Guid id, EmuCompleteWorkSessionDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> CompleteWorkSessionCore(Guid id, EmuCompleteWorkSessionDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
-        if (entity is null || entity.DeletedAt is not null)
+        if (entity is null)
         {
             return Failure<EmuWorkSessionDto>("id", "Работа не найдена");
         }
@@ -21,6 +21,11 @@ internal sealed partial class EfEmuService
         if (entity.RowVersion != request.RowVersion)
         {
             return Failure<EmuWorkSessionDto>("rowVersion", "Карточка была изменена другим пользователем");
+        }
+
+        if (entity.DeletedAt is not null)
+        {
+            return Failure<EmuWorkSessionDto>("id", "Работа не найдена");
         }
 
         if (entity.CompletedAt is not null)
@@ -62,7 +67,7 @@ internal sealed partial class EfEmuService
             return Failure<EmuWorkSessionDto>("completedAt", "Время окончания не может быть позже серверного времени больше чем на 2 минуты");
         }
 
-        if (completedAt < participants.Min(row => row.ArrivedAt))
+        if (participants.Any(row => completedAt < row.ArrivedAt))
         {
             return Failure<EmuWorkSessionDto>("completedAt", "Время окончания не может быть раньше времени прихода");
         }

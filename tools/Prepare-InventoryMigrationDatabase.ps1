@@ -1,7 +1,6 @@
 param(
-  [string]$TargetConnectionString = "Host=localhost;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev",
+  [string]$TargetConnectionString = "",
   [string]$LegacyConnectionString = "",
-  [string]$ApiBaseUrl = "http://127.0.0.1:5080",
   [switch]$StartPostgres,
   [switch]$ApplyMigrations,
   [switch]$DryRunImport,
@@ -14,6 +13,13 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Push-Location $RepoRoot
 try {
+  if ([string]::IsNullOrWhiteSpace($TargetConnectionString)) { throw "An explicit restored-copy TargetConnectionString is required." }
+  $targetBuilder = [System.Data.Common.DbConnectionStringBuilder]::new()
+  $targetBuilder.ConnectionString = $TargetConnectionString
+  if (-not $targetBuilder.ContainsKey('Database') -or $targetBuilder.ContainsKey('Initial Catalog') -or [string]$targetBuilder['Database'] -notmatch '^patrol360_migration_[a-zA-Z0-9_]+$') {
+    throw "Target database must be named patrol360_migration_*. Production import is disabled. Use the Database connection-string key."
+  }
+  if ($DryRunImport -and $RunImport) { throw "Choose either -DryRunImport or -RunImport." }
   if ($RunImport -and -not $IUnderstandThisIsCopy) {
     throw "Refusing to run real legacy import without -IUnderstandThisIsCopy. Use only a restored copy/staging database."
   }
@@ -44,14 +50,17 @@ try {
       throw "LegacyConnectionString is required for import dry-run or import."
     }
 
+    $previousTarget = $env:INVENTORY_MIGRATION_TARGET
+    $env:INVENTORY_MIGRATION_TARGET = $TargetConnectionString
     $previousLegacy = $env:INVENTORY_LEGACY_CONNECTION_STRING
     $env:INVENTORY_LEGACY_CONNECTION_STRING = $LegacyConnectionString
     try {
-      $endpoint = if ($DryRunImport) { "$ApiBaseUrl/api/v1/inventory/legacy/import/dry-run" } else { "$ApiBaseUrl/api/v1/inventory/legacy/import" }
-      Write-Host "Calling $endpoint"
-      Invoke-RestMethod -Method Post -Uri $endpoint | ConvertTo-Json -Depth 20
+      $mode = if ($DryRunImport) { "--dry-run" } else { "--import" }
+      dotnet run --project .\tools\Patrol360.InventoryMigration\Patrol360.InventoryMigration.csproj -- $mode
+      if ($LASTEXITCODE -ne 0) { throw "Isolated legacy import failed." }
     }
     finally {
+      if ($null -eq $previousTarget) { Remove-Item Env:\INVENTORY_MIGRATION_TARGET -ErrorAction SilentlyContinue } else { $env:INVENTORY_MIGRATION_TARGET = $previousTarget }
       if ($null -eq $previousLegacy) {
         Remove-Item Env:\INVENTORY_LEGACY_CONNECTION_STRING -ErrorAction SilentlyContinue
       }

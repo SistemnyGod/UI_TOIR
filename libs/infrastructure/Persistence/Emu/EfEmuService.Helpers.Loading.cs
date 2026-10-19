@@ -14,19 +14,43 @@ internal sealed partial class EfEmuService
 
     private ActiveParticipationMutation BeginActiveParticipationMutation()
     {
-        var transaction = dbContext.Database.CurrentTransaction is null
-            ? dbContext.Database.BeginTransaction()
-            : null;
-        dbContext.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock({0})", ActiveParticipationLockKey);
-        return new ActiveParticipationMutation(transaction);
+        var owned = dbContext.Database.CurrentTransaction is null ? dbContext.Database.BeginTransaction() : null;
+        var current = dbContext.Database.CurrentTransaction!;
+        var savepoint = owned is null ? "emu_" + Guid.NewGuid().ToString("N") : null;
+        if (savepoint is not null) current.CreateSavepoint(savepoint);
+        var mutation = new ActiveParticipationMutation(owned, current, savepoint);
+        try
+        {
+            dbContext.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock({0})", ActiveParticipationLockKey);
+            return mutation;
+        }
+        catch { mutation.Dispose(); throw; }
     }
 
     private sealed class ActiveParticipationMutation(
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction) : IDisposable
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? owned,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction current,
+        string? savepoint) : IDisposable
     {
-        public void Commit() => transaction?.Commit();
-
-        public void Dispose() => transaction?.Dispose();
+        private bool finished;
+        public void Commit()
+        {
+            if (owned is not null) owned.Commit();
+            else current.ReleaseSavepoint(savepoint!);
+            finished = true;
+        }
+        public void Rollback()
+        {
+            if (finished) return;
+            if (owned is not null) owned.Rollback();
+            else { current.RollbackToSavepoint(savepoint!); current.ReleaseSavepoint(savepoint!); }
+            finished = true;
+        }
+        public void Dispose()
+        {
+            try { if (!finished) Rollback(); }
+            finally { owned?.Dispose(); }
+        }
     }
 
     private IQueryable<EmuWorkSessionEntity> LoadSessions(

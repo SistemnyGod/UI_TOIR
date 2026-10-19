@@ -1,0 +1,19 @@
+services:
+  api:
+    image: patrol360-api:ppe-20261004
+    environment:
+      Features__PpeIssueDocuments: "false"
+      Features__PpeMinimumReadyNormSets: "34"
+      Gotenberg__BaseUrl: http://gotenberg:3000
+  web:
+    image: patrol360-web:ppe-20261004
+  gotenberg:
+    image: patrol360-ppe-gotenberg:8.37.0
+    mem_limit: 1g
+    cpus: 2
+
+networks:
+  default:
+    external: true
+    name: docker_default
+    ipam: !reset null

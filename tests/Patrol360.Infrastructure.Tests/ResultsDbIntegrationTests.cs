@@ -172,7 +172,7 @@ public sealed class ResultsDbIntegrationTests
         using var provider = BuildProvider(database.ConnectionString);
 
         await provider.InitializePatrolDatabaseAsync();
-        var actualAt = DateTimeOffset.UtcNow.AddDays(45);
+        var actualAt = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(45).AddHours(12), TimeSpan.Zero);
         await InsertManyPatrolResultsAsync(database.ConnectionString, "export-cap", actualAt, MaxExportRows + 5);
         var actualDate = DateOnly.FromDateTime(actualAt.UtcDateTime);
 

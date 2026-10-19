@@ -12,6 +12,7 @@ internal sealed partial class EfEmuService
 {
     public EmuListResponseDto<EmuPlanTaskDto> GetPlanTasks(DateOnly? weekStart = null, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         var query = ApplyPlanSectionScope(dbContext.EmuWorkPlanTasks.AsNoTracking(), allowedSectionIds)
             .Include(row => row.Section)
             .Include(row => row.Employees)
@@ -23,7 +24,7 @@ internal sealed partial class EfEmuService
         }
 
         var rows = query.OrderBy(row => row.CreatedAt).Select(MapPlanTask).ToList();
-        return ToList(rows, rows.Count, new Paging(1, Math.Max(1, rows.Count)));
+        return ToList(rows, rows.Count, new Paging(1, Math.Max(1, rows.Count))) with { ServerTime = startedAt };
     }
 
     public EmuPlanTaskChangesDto GetPlanTaskChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null)
@@ -40,7 +41,7 @@ internal sealed partial class EfEmuService
         return new EmuPlanTaskChangesDto(now, rows, []);
     }
 
-    public EmuCommandResult<EmuPlanTaskDto> CreatePlanTask(EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuPlanTaskDto> CreatePlanTaskCore(EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName)
     {
         var sectionId = ResolvePlanSectionId(request.SectionId);
         if (sectionId is not null && !dbContext.EmuWorkSections.Any(row => row.Id == sectionId && row.IsActive))
@@ -79,7 +80,7 @@ internal sealed partial class EfEmuService
         return Success(MapPlanTask(LoadPlanTask(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuPlanTaskDto> UpdatePlanTask(Guid id, EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
+    private EmuCommandResult<EmuPlanTaskDto> UpdatePlanTaskCore(Guid id, EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var entity = dbContext.EmuWorkPlanTasks.Include(row => row.Employees).FirstOrDefault(row => row.Id == id);
         if (entity is null)
@@ -137,7 +138,7 @@ internal sealed partial class EfEmuService
         return Success(MapPlanTask(LoadPlanTask(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuPlanTaskDto> ReschedulePlanTask(Guid id, EmuReschedulePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
+    private EmuCommandResult<EmuPlanTaskDto> ReschedulePlanTaskCore(Guid id, EmuReschedulePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var entity = dbContext.EmuWorkPlanTasks.FirstOrDefault(row => row.Id == id);
         if (entity is null)
@@ -182,7 +183,7 @@ internal sealed partial class EfEmuService
         return Success(MapPlanTask(LoadPlanTask(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuPlanTaskDto> ApprovePlanTask(Guid id, EmuApprovePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
+    private EmuCommandResult<EmuPlanTaskDto> ApprovePlanTaskCore(Guid id, EmuApprovePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var entity = dbContext.EmuWorkPlanTasks.FirstOrDefault(row => row.Id == id);
         if (entity is null)
@@ -218,7 +219,7 @@ internal sealed partial class EfEmuService
         return Success(MapPlanTask(LoadPlanTask(entity.Id)!));
     }
 
-    public EmuCommandResult<IReadOnlyList<EmuPlanTaskDto>> ApproveWeek(EmuApproveWeekDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
+    private EmuCommandResult<IReadOnlyList<EmuPlanTaskDto>> ApproveWeekCore(EmuApproveWeekDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var comment = NormalizeRequired(request.Comment);
         if (comment.Length == 0)

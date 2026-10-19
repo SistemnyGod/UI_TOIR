@@ -29,14 +29,14 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $connection = "Host=$DatabaseHost;Port=$DatabasePort;Database=$DatabaseName;Username=$DatabaseUser;Password=$DatabasePassword;Include Error Detail=false"
 $baseUrl = "http://127.0.0.1:$ApiPort"
 $apiProcess = $null
-$environmentNames = @('ConnectionStrings__Patrol360','Patrol360__BootstrapAdminPassword','Patrol360__SeedDemoData','Features__PpeIssueDocuments','ASPNETCORE_ENVIRONMENT','ASPNETCORE_URLS','PATROL360_PPE_SMOKE_CONNECTION','PATROL360_PPE_SMOKE_FIXTURE')
+$environmentNames = @('ConnectionStrings__Patrol360','Patrol360__BootstrapAdminPassword','Patrol360__SeedDemoData','Features__PpeIssueDocuments','Features__PpeMinimumReadyNormSets','ASPNETCORE_ENVIRONMENT','ASPNETCORE_URLS','PATROL360_PPE_SMOKE_CONNECTION','PATROL360_PPE_SMOKE_FIXTURE')
 $previousEnvironment = @{}
 foreach ($environmentName in $environmentNames) { $previousEnvironment[$environmentName] = [Environment]::GetEnvironmentVariable($environmentName, 'Process') }
 
 function Invoke-CheckedJson([string]$Method, [string]$Path, $Body, [string]$Token = "") {
   $headers = @{}; if ($Token) { $headers.Authorization = "Bearer $Token" }
   $parameters = @{ Method = $Method; Uri = "$baseUrl$Path"; Headers = $headers }
-  if ($null -ne $Body) { $parameters.ContentType = "application/json"; $parameters.Body = ($Body | ConvertTo-Json -Depth 12) }
+  if ($null -ne $Body) { $parameters.ContentType = "application/json; charset=utf-8"; $parameters.Body = ($Body | ConvertTo-Json -Depth 12) }
   Invoke-RestMethod @parameters
 }
 
@@ -46,21 +46,27 @@ try {
   $env:Patrol360__BootstrapAdminPassword = $BootstrapPassword
   $env:Patrol360__SeedDemoData = "false"
   $env:Features__PpeIssueDocuments = "true"
+  $env:Features__PpeMinimumReadyNormSets = "1"
   $env:ASPNETCORE_ENVIRONMENT = "Development"
   $env:ASPNETCORE_URLS = $baseUrl
 
-  & dotnet build apps/api/Patrol360.Api.csproj --no-restore -m:1 --disable-build-servers
+  & dotnet build apps/api/Patrol360.Api.csproj --no-restore -m:1 --disable-build-servers -p:UseSharedCompilation=false
   if ($LASTEXITCODE -ne 0) { throw "API build failed." }
   & dotnet run --project apps/api/Patrol360.Api.csproj --no-build -- --migrate
   if ($LASTEXITCODE -ne 0) { throw "Isolated database migration failed." }
 
   $env:PATROL360_PPE_SMOKE_CONNECTION = $connection
   $env:PATROL360_PPE_SMOKE_FIXTURE = $fixturePath
-  & dotnet run --project tools/PpeSmokeFixture/PpeSmokeFixture.csproj --disable-build-servers
+  & dotnet build tools/PpeSmokeFixture/PpeSmokeFixture.csproj --no-restore -m:1 --disable-build-servers -p:UseSharedCompilation=false
+  if ($LASTEXITCODE -ne 0) { throw "Fixture build failed." }
+  & dotnet run --project tools/PpeSmokeFixture/PpeSmokeFixture.csproj --no-build
   if ($LASTEXITCODE -ne 0) { throw "Synthetic fixture seed failed." }
   $fixture = Get-Content -Raw $fixturePath | ConvertFrom-Json
 
-  $apiDll = Join-Path $repoRoot "apps\api\bin\Debug\net10.0\Patrol360.Api.dll"
+  $runtimeDirectory = Join-Path $outputDir ("api-runtime-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $runtimeDirectory | Out-Null
+  Copy-Item -Path (Join-Path $repoRoot "apps\api\bin\Debug\net10.0\*") -Destination $runtimeDirectory -Recurse
+  $apiDll = Join-Path $runtimeDirectory "Patrol360.Api.dll"
   $apiProcess = Start-Process dotnet -ArgumentList ('"' + $apiDll + '"') -PassThru -WindowStyle Hidden -RedirectStandardOutput $apiLog -RedirectStandardError (Join-Path $outputDir "api-error.log")
   $deadline = (Get-Date).AddSeconds(45)
   do { try { Invoke-RestMethod "$baseUrl/health/live" | Out-Null; break } catch { Start-Sleep -Milliseconds 500 } } while ((Get-Date) -lt $deadline)
@@ -80,8 +86,10 @@ try {
 
   $today = Get-Date -Format "yyyy-MM-dd"
   $lineId = [guid]::NewGuid().ToString()
-  $draftBody = @{ employeeId=$fixture.employeeId; normSetId=$fixture.normId; documentDate=$today; responsibleName="Синтетический ответственный"; basis="HTTP smoke"; employeeDetails=@{}; lines=@(@{ id=$lineId; normRowId=$fixture.rowId; itemId=$fixture.itemId; issueDate=$today; quantity=1; unitPriceMinor=12345; sizeText="58"; exceptionReason=""; manualControlConfirmed=$false }) }
+  $draftBody = @{ clientDocumentId=[guid]::NewGuid().ToString(); employeeId=$fixture.employeeId; normSetId=$fixture.normId; documentDate=$today; responsibleName="Синтетический ответственный"; basis="HTTP smoke"; employeeDetails=@{}; lines=@(@{ id=$lineId; normRowId=$fixture.rowId; itemId=$fixture.itemId; issueDate=$today; quantity=1; unitPriceMinor=12345; sizeText="58"; exceptionReason=""; manualControlConfirmed=$false }) }
   $draft = Invoke-CheckedJson POST "/api/v1/inventory/ppe/issue-documents" $draftBody $token
+  $replayed = Invoke-CheckedJson POST "/api/v1/inventory/ppe/issue-documents" $draftBody $token
+  if ($replayed.id -ne $draft.id -or $replayed.version -ne $draft.version) { throw "Creation replay was not idempotent." }
   $validated = Invoke-CheckedJson POST "/api/v1/inventory/ppe/issue-documents/$($draft.id)/validate" @{} $token
 
   $previewPath = Join-Path $outputDir "issue-preview.docx"
@@ -97,7 +105,7 @@ try {
   if ($confirmed.id -ne $repeated.id -or $confirmed.version -ne $repeated.version) { throw "Idempotent confirm returned different documents or versions." }
   if ($reopened.status -ne "confirmed" -or @($history).Count -lt 1) { throw "Reopen/history verification failed." }
   if ((Get-Item $previewPath).Length -lt 1000 -or (Get-Item $legacyPath).Length -lt 1000) { throw "DOCX output is unexpectedly small." }
-  $report = [ordered]@{ succeeded=$true; generatedAt=(Get-Date).ToString("o"); baseUrl=$baseUrl; login="admin"; fixture=$fixture; documentId=$draft.id; confirmedVersion=$confirmed.version; historyCount=@($history).Count; issuePreviewDocx=$previewPath; legacyCardDocx=$legacyPath; apiLog=$apiLog }
+  $report = [ordered]@{ succeeded=$true; generatedAt=(Get-Date).ToString("o"); baseUrl=$baseUrl; login="admin"; fixture=$fixture; documentId=$draft.id; confirmedVersion=$confirmed.version; historyCount=@($history).Count; issuePreviewDocx=$previewPath; legacyCardDocx=$legacyPath; apiLog=$apiLog; apiProcessId=$apiProcess.Id; apiRuntime=$runtimeDirectory }
   $report | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $reportPath
   Write-Host "PPE API smoke passed. Report: $reportPath"
   Write-Host "API URL: $baseUrl"

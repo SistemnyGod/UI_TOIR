@@ -77,6 +77,8 @@ public sealed class EmuShiftReportsController(
             problem.Extensions["existingReportId"] = existingId;
             return Conflict(problem);
         }
+        if (result.Errors.TryGetValue("conflict", out var conflict) || result.Errors.TryGetValue("version", out conflict))
+            return Conflict(new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Публикация требует актуального черновика", Detail = conflict.FirstOrDefault() });
         return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(item => item.Key, item => item.Value)) { Title = "Проверьте данные сменного отчёта" });
     }
 

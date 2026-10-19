@@ -24,6 +24,11 @@ internal sealed partial class EfPatrolStore
             .Include(request => request.Assignment)
             .AsQueryable();
 
+        if (filter?.Id is not null)
+        {
+            query = query.Where(request => request.Id == filter.Id.Value);
+        }
+
         if (filter?.EmployeeId is not null)
         {
             query = query.Where(request => request.EmployeeId == filter.EmployeeId.Value);
@@ -41,6 +46,13 @@ internal sealed partial class EfPatrolStore
             query = statusCode is null
                 ? query.Where(request => request.Status == status)
                 : query.Where(request => request.StatusCode == statusCode || request.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter?.StatusGroup))
+        {
+            var codes = PatrolStatusCodeMapper.GetRequestGroupCodes(filter.StatusGroup.Trim().ToLowerInvariant());
+            var aliases = PatrolStatusCodeMapper.GetRequestCodeAliases(codes);
+            query = query.Where(request => codes.Contains(request.StatusCode!) || aliases.Contains(request.Status.Trim().ToLower()));
         }
 
         if (filter?.DateFrom is not null)
@@ -83,18 +95,28 @@ internal sealed partial class EfPatrolStore
 
     public CreatePatrolRequestResult Create(CreatePatrolRequestDto request)
     {
+        using var transaction = dbContext.Database.BeginTransaction();
+        if (request.ClientRequestId is Guid clientId)
+        {
+            if (clientId == Guid.Empty)
+                return RequestIdentityConflict();
+            var operationLock = $"patrol-request-create:{clientId}";
+            dbContext.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock(hashtextextended({operationLock}, 0))");
+            var existing = dbContext.PatrolRequests.AsNoTracking().Include(row => row.Assignment)
+                .SingleOrDefault(row => row.Id == clientId);
+            if (existing is not null)
+            {
+                if (!MatchesCreatedRequest(existing, request)) return RequestIdentityConflict();
+                return new CreatePatrolRequestResult(MapPatrolRequest(existing), new Dictionary<string, string[]>());
+            }
+        }
         var employee = ResolveEmployee(request);
         var route = ResolveRoute(request);
         var sourceResultExists = request.SourceResultId is null
             || dbContext.PatrolResults.Any(result => result.Id == request.SourceResultId.Value);
         var plannedAt = ResolveRequestPlannedAt(request);
         var requestedShift = NormalizeOptionalText(request.Shift, employee?.Shift ?? string.Empty);
-        using var employeeShiftTransaction = employee is not null
-            && plannedAt is not null
-            && !string.IsNullOrWhiteSpace(requestedShift)
-                ? dbContext.Database.BeginTransaction()
-                : null;
-        if (employeeShiftTransaction is not null)
+        if (employee is not null && plannedAt is not null && !string.IsNullOrWhiteSpace(requestedShift))
         {
             AcquireEmployeeShiftAssignmentLock(employee!.Id, plannedAt!.Value, requestedShift);
         }
@@ -107,9 +129,11 @@ internal sealed partial class EfPatrolStore
         }
 
         var now = DateTimeOffset.UtcNow;
+        var numberLockKey = $"patrol-request-number:{request.ScheduledDate:yyyyMMdd}";
+        dbContext.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock(hashtextextended({numberLockKey}, 0))");
         var requestEntity = new PatrolRequestEntity
         {
-            Id = Guid.NewGuid(),
+            Id = request.ClientRequestId ?? Guid.NewGuid(),
             Number = GenerateRequestNumber(request.ScheduledDate),
             EmployeeId = employee!.Id,
             EmployeeName = employee.FullName,
@@ -125,6 +149,7 @@ internal sealed partial class EfPatrolStore
             Description = NormalizeOptionalText(request.Description)
         };
 
+        var routeRevision = GetOrCreateCurrentRouteRevision(route);
         var assignmentEntity = new AssignmentEntity
         {
             Id = Guid.NewGuid(),
@@ -132,6 +157,8 @@ internal sealed partial class EfPatrolStore
             EmployeeId = employee.Id,
             RouteId = route.Id,
             RouteVersionNo = route.VersionNo,
+            RouteRevisionId = routeRevision.Id,
+            RouteRevision = routeRevision,
             Shift = requestedShift,
             Status = request.NotifyEmployee ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
             PlannedAt = plannedAt!.Value,
@@ -155,10 +182,23 @@ internal sealed partial class EfPatrolStore
                 $"patrol-request:{requestEntity.Id}");
 
         SaveChangesAndInvalidateDashboardSummary();
-        employeeShiftTransaction?.Commit();
+        transaction.Commit();
 
         return new CreatePatrolRequestResult(MapPatrolRequest(requestEntity), new Dictionary<string, string[]>());
     }
+
+    private static CreatePatrolRequestResult RequestIdentityConflict() => new(null,
+        new Dictionary<string, string[]> { ["clientRequestId"] = ["Идентификатор отправки уже использован для другой заявки. Откройте созданную заявку или начните новую."] });
+
+    private static bool MatchesCreatedRequest(PatrolRequestEntity existing, CreatePatrolRequestDto request) =>
+        (request.EmployeeId is not null ? existing.EmployeeId == request.EmployeeId : existing.EmployeeName == request.EmployeeName?.Trim())
+        && (request.RouteId is not null ? existing.RouteId == request.RouteId : existing.RouteName == request.RouteName?.Trim())
+        && existing.SourceResultId == request.SourceResultId && existing.ScheduledDate == request.ScheduledDate
+        && existing.ScheduledTime == request.ScheduledTime && existing.NotifyEmployee == request.NotifyEmployee
+        && existing.NotificationText == NormalizeOptionalText(request.NotificationText)
+        && existing.Description == NormalizeOptionalText(request.Description)
+        && (request.PlannedAt is null || existing.Assignment?.PlannedAt == request.PlannedAt)
+        && (string.IsNullOrWhiteSpace(request.Shift) || existing.Assignment?.Shift == request.Shift.Trim());
 
     private EmployeeEntity? ResolveEmployee(CreatePatrolRequestDto request)
     {
@@ -175,15 +215,12 @@ internal sealed partial class EfPatrolStore
 
     private RouteEntity? ResolveRoute(CreatePatrolRequestDto request)
     {
-        if (request.RouteId is not null)
-        {
-            return dbContext.Routes.FirstOrDefault(route => route.Id == request.RouteId.Value && !route.IsArchived);
-        }
-
-        var routeName = NormalizeOptionalText(request.RouteName);
-        return string.IsNullOrWhiteSpace(routeName)
-            ? null
-            : dbContext.Routes.FirstOrDefault(route => route.Name == routeName && !route.IsArchived);
+        var id = request.RouteId ?? dbContext.Routes.AsNoTracking()
+            .Where(route => route.Name == NormalizeOptionalText(request.RouteName) && !route.IsArchived)
+            .Select(route => (Guid?)route.Id).FirstOrDefault();
+        if (id is null) return null;
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, id.Value);
+        return route is { IsArchived: false } ? route : null;
     }
 
     private Dictionary<string, string[]> ValidateCreateRequest(
@@ -254,9 +291,15 @@ internal sealed partial class EfPatrolStore
 
     private string GenerateRequestNumber(DateOnly scheduledDate)
     {
-        var todayCount = dbContext.PatrolRequests.Count(request => request.ScheduledDate == scheduledDate);
-
-        return $"REQ-{scheduledDate:yyyyMMdd}-{todayCount + 1:0000}";
+        // The date lock is held until commit. MAX also handles gaps left by
+        // historical cleanup, where COUNT would reuse an existing number.
+        var next = dbContext.Database.SqlQuery<long>($$"""
+            SELECT COALESCE(MAX(regexp_replace(number, '^REQ-[0-9]{8}-', '')::bigint), 0) + 1 AS "Value"
+            FROM patrol_requests
+            WHERE scheduled_date = {{scheduledDate}}
+              AND number ~ '^REQ-[0-9]{8}-[0-9]{1,18}$'
+            """).Single();
+        return $"REQ-{scheduledDate:yyyyMMdd}-{next:0000}";
     }
 
     private DateTimeOffset CombinePlannedAt(DateOnly date, TimeOnly? time) =>

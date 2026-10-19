@@ -12,7 +12,8 @@ public sealed record CreatePatrolRequestDto(
     bool NotifyEmployee,
     string? NotificationText,
     string? Description,
-    DateTimeOffset? PlannedAt = null);
+    DateTimeOffset? PlannedAt = null,
+    Guid? ClientRequestId = null);
 
 public sealed record PatrolRequestDto(
     Guid Id,
@@ -48,4 +49,6 @@ public sealed record PatrolRequestFilterDto(
     string? Status = null,
     DateOnly? DateFrom = null,
     DateOnly? DateTo = null,
-    string? Query = null);
+    string? Query = null,
+    Guid? Id = null,
+    string? StatusGroup = null);

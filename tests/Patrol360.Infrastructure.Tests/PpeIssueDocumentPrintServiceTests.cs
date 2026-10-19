@@ -246,7 +246,7 @@ public sealed class PpeIssueDocumentPrintServiceTests
         var outputDirectory = Environment.GetEnvironmentVariable("PPE_TEST_PRINT_OUTPUT")
             ?? throw new InvalidOperationException("PPE_TEST_PRINT_OUTPUT is required.");
 
-        var document = Fixture(lines: 54);
+        var document = LongNormsFixture();
         using var runtime = new PpeIssueDocumentPrintRuntime();
         var printer = new PpeIssueDocumentPrintService(new Stub(document), new RealGotenbergHttpClientFactory(baseUrl), runtime);
 
@@ -259,8 +259,8 @@ public sealed class PpeIssueDocumentPrintServiceTests
 
         Assert.True(normsDocx.Succeeded);
         Assert.True(signatureDocx.Succeeded);
-        Assert.True(normsPdf.Succeeded);
-        Assert.True(signaturePdf.Succeeded);
+        Assert.True(normsPdf.Succeeded, string.Join("; ", normsPdf.Errors.SelectMany(x => x.Value)));
+        Assert.True(signaturePdf.Succeeded, string.Join("; ", signaturePdf.Errors.SelectMany(x => x.Value)));
         Assert.True(bothDocx.Succeeded);
         Assert.True(bothPdf.Succeeded);
         Directory.CreateDirectory(outputDirectory);
@@ -278,7 +278,7 @@ public sealed class PpeIssueDocumentPrintServiceTests
         var outputDirectory = Environment.GetEnvironmentVariable("PPE_TEST_PRINT_OUTPUT")
             ?? throw new InvalidOperationException("PPE_TEST_PRINT_OUTPUT is required.");
 
-        var document = Fixture(lines: 54);
+        var document = LongNormsFixture();
         using var runtime = new PpeIssueDocumentPrintRuntime();
         var printer = new PpeIssueDocumentPrintService(new Stub(document), new NeverUsedHttpClientFactory(), runtime);
         var norms = await printer.PrintAsync(document.Id, "norms", "docx", CancellationToken.None);
@@ -289,6 +289,22 @@ public sealed class PpeIssueDocumentPrintServiceTests
         Directory.CreateDirectory(outputDirectory);
         WriteOutput(outputDirectory, "ppe-issue-norms.docx", norms.Value!.Content);
         WriteOutput(outputDirectory, "ppe-issue-signature.docx", signature.Value!.Content);
+    }
+
+    private static PpeIssueDocumentDto LongNormsFixture()
+    {
+        var document = Fixture(54);
+        var original = document.Content.NormRows.First(x => x.RowType == "item");
+        var norms = Enumerable.Range(1, 54).Select(index => original with
+        {
+            Id = Guid.NewGuid(), SortOrder = index, RequirementKey = Guid.NewGuid(), NormPoint = $"Тестовый п. {index}",
+            NormItemName = $"Норма №{index}: длинное кириллическое наименование защиты для проверки многостраничной личной карточки"
+        }).ToList();
+        return document with { Content = document.Content with
+        {
+            NormRows = [document.Content.NormRows[0], .. norms],
+            Lines = document.Content.Lines.Select((line, index) => line with { NormRowId = norms[index].Id, NormPoint = norms[index].NormPoint }).ToList()
+        } };
     }
 
     private static PpeIssueDocumentDto Fixture(int lines)

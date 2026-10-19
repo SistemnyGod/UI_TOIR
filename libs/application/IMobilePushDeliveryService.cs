@@ -18,3 +18,6 @@ public sealed record MobilePushMessage(
     string Body,
     IReadOnlyDictionary<string, string> Data,
     string ChannelId);
+
+public sealed class MobilePushTokenRejectedException(string message, Exception? innerException = null)
+    : Exception(message, innerException);

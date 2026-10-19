@@ -840,6 +840,9 @@ internal sealed partial class EfInventoryWorkflowService
     }
 
     public InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid cardId, CreateInventoryPpeIssueDto request)
+        => ExecuteLegacyPpeWrite(() => CreatePpeIssueCore(cardId, request));
+
+    private InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssueCore(Guid cardId, CreateInventoryPpeIssueDto request)
     {
         var normRow = dbContext.InventoryPpeCardNormRows
             .Include(row => row.Card)
@@ -877,11 +880,11 @@ internal sealed partial class EfInventoryWorkflowService
         {
             return Failure<InventoryPpeCardLineDto>("normDate", "The issue date is outside the ATOM norm validity period");
         }
-        var entitlement = ResolvePpeEntitlement(normRow.Card.EmployeeId, normRow.SourceNormRowId, normRow.Quantity, normRow.IssuePeriodText, normRow.LifeMonths, issueDate);
-        if (entitlement.Status == "manual_control_required") return Failure<InventoryPpeCardLineDto>("entitlement", "The norm period requires manual control before issue");
-        if (request.Quantity > entitlement.AvailableQuantity) return Failure<InventoryPpeCardLineDto>("quantity", $"Available norm quantity is {entitlement.AvailableQuantity}");
         var issueMethod = NormalizeStatus(request.IssueMethod);
         if (issueMethod is not ("personal" or "dispenser")) return Failure<InventoryPpeCardLineDto>("issueMethod", "Unsupported issue method");
+        var validated = ValidateLegacyPpeIssuance(cardId, [new(request.CardNormRowId, request.ItemId, request.IssuedAt,
+            request.Quantity, request.UnitPriceMinor, NormalizeOptional(request.SizeText), issueMethod)]);
+        if (!validated.Succeeded) return new(null, validated.Errors);
 
         var line = new InventoryPpeCardLineEntity
         {
@@ -889,7 +892,7 @@ internal sealed partial class EfInventoryWorkflowService
             CardId = cardId,
             CardNormRowId = normRow.Id,
             ItemId = item.Id,
-            WarehouseId = request.WarehouseId,
+            WarehouseId = null,
             Quantity = request.Quantity,
             UnitPriceMinor = request.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor,
             Status = "issued",
@@ -906,6 +909,7 @@ internal sealed partial class EfInventoryWorkflowService
             SizeText = NormalizeOptional(request.SizeText),
             WriteOffActNumber = string.Empty
         };
+        StampLegacyPpeFact(line, validated.Value!);
         dbContext.InventoryPpeCardLines.Add(line);
         normRow.MappedItemId ??= item.Id;
         normRow.Card.Status = "active";
@@ -925,6 +929,9 @@ internal sealed partial class EfInventoryWorkflowService
     }
 
     public InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid cardId, CreateInventoryPpeIssueBatchDto request)
+        => ExecuteLegacyPpeWrite(() => CreatePpeIssueBatchCore(cardId, request));
+
+    private InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeIssueBatchCore(Guid cardId, CreateInventoryPpeIssueBatchDto request)
     {
         if (request.Lines.Count == 0) return Failure<InventoryPpeCardDetailDto>("lines", "At least one PPE issue line is required");
         if (request.Lines.Select(row => row.CardNormRowId).Distinct().Count() != request.Lines.Count)
@@ -953,7 +960,6 @@ internal sealed partial class EfInventoryWorkflowService
         var itemIds = request.Lines.Select(row => row.ItemId).Distinct().ToList();
         var items = dbContext.InventoryItems.Where(row => itemIds.Contains(row.Id) && row.IsActive).ToDictionary(row => row.Id);
         var prepared = new List<(CreateInventoryPpeIssueBatchLineDto Request, InventoryPpeCardNormRowEntity NormRow, InventoryItemEntity Item, string Method)>();
-        var requestedStock = new Dictionary<(Guid ItemId, Guid WarehouseId), decimal>();
         foreach (var requested in request.Lines)
         {
             if (!normRows.TryGetValue(requested.CardNormRowId, out var normRow) || normRow.RowType != "item")
@@ -965,7 +971,6 @@ internal sealed partial class EfInventoryWorkflowService
             if (RequiresPpeSize(item) && string.IsNullOrWhiteSpace(requested.SizeText)) return Failure<InventoryPpeCardDetailDto>("sizeText", "A size is required for this PPE item");
             var effectivePrice = requested.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor;
             if (effectivePrice is null || effectivePrice <= 0) return Failure<InventoryPpeCardDetailDto>("unitPriceMinor", "A positive unit price is required");
-            if (requested.WarehouseId is null || !dbContext.InventoryWarehouses.Any(row => row.Id == requested.WarehouseId.Value && !row.IsArchived)) return Failure<InventoryPpeCardDetailDto>("warehouseId", "An active warehouse is required");
             var method = NormalizeStatus(requested.IssueMethod);
             if (method is not ("personal" or "dispenser")) return Failure<InventoryPpeCardDetailDto>("issueMethod", "Unsupported issue method");
             var isAdditional = requested.IsAdditional;
@@ -999,35 +1004,20 @@ internal sealed partial class EfInventoryWorkflowService
                     return Failure<InventoryPpeCardDetailDto>("normDate", "The issue date is outside the ATOM norm validity period");
                 }
             }
-            var warehouseId = requested.WarehouseId.Value;
-            var stockKey = (item.Id, warehouseId);
-            var alreadyRequested = requestedStock.GetValueOrDefault(stockKey);
-            var availableStock = GetAvailableStock(item.Id, warehouseId);
-            if (requested.Quantity > availableStock - alreadyRequested)
-            {
-                return Failure<InventoryPpeCardDetailDto>("warehouseId", $"Insufficient stock for {item.Name}: available {Math.Max(0m, availableStock - alreadyRequested)}");
-            }
-            requestedStock[stockKey] = alreadyRequested + requested.Quantity;
             var allowedItemIds = normRow.SourceNormRow?.Mappings.Where(row => row.ArchivedAt == null).Select(row => row.ItemId).ToHashSet() ?? [];
             var hasResolvedMapping = normRow.MappedItemId == item.Id || allowedItemIds.Contains(item.Id);
             if (!isAdditional && !hasResolvedMapping)
             {
                 return Failure<InventoryPpeCardDetailDto>("itemId", "Selected PPE item is not allowed by the published norm mapping");
             }
-            var issueDate = DateOnly.FromDateTime(requested.IssuedAt.UtcDateTime);
-            var entitlement = ResolvePpeEntitlement(card.EmployeeId, normRow.SourceNormRowId, normRow.Quantity, normRow.IssuePeriodText, normRow.LifeMonths, issueDate);
-            if (!isAdditional && entitlement.Status == "manual_control_required")
-            {
-                return Failure<InventoryPpeCardDetailDto>("entitlement", "The norm period requires manual control before issue");
-            }
-            if (!isAdditional && requested.Quantity > entitlement.AvailableQuantity)
-            {
-                return Failure<InventoryPpeCardDetailDto>("quantity", $"Available norm quantity is {entitlement.AvailableQuantity}");
-            }
             prepared.Add((requested, normRow, item, method));
         }
 
         var now = DateTimeOffset.UtcNow;
+        var validatedBatch = ValidateLegacyPpeIssuance(cardId, prepared.Select(x => new LegacyPpeSelection(x.Request.CardNormRowId,
+            x.Request.ItemId, x.Request.IssuedAt, x.Request.Quantity, x.Request.UnitPriceMinor, NormalizeOptional(x.Request.SizeText), x.Method)).ToList());
+        if (!validatedBatch.Succeeded) return new(null, validatedBatch.Errors);
+        var factIndex = 0;
         foreach (var preparedLine in prepared)
         {
             var requested = preparedLine.Request;
@@ -1040,7 +1030,7 @@ internal sealed partial class EfInventoryWorkflowService
                 CardId = card.Id,
                 CardNormRowId = normRow.Id,
                 ItemId = item.Id,
-                WarehouseId = requested.WarehouseId,
+                WarehouseId = null,
                 Quantity = requested.Quantity,
                 UnitPriceMinor = requested.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor,
                 Status = "issued",
@@ -1057,8 +1047,8 @@ internal sealed partial class EfInventoryWorkflowService
                 SizeText = NormalizeOptional(requested.SizeText),
                 WriteOffActNumber = string.Empty
             };
+            StampLegacyPpeFact(line, validatedBatch.Value!, factIndex++);
             dbContext.InventoryPpeCardLines.Add(line);
-            AddPpeStockMoveIfNeeded(line, string.Empty, line.Status, now);
             normRow.MappedItemId ??= item.Id;
             if (requested.SaveMappingOnSuccess && !isAdditional && normRow.SourceNormRow is not null)
             {
@@ -1308,7 +1298,7 @@ internal sealed partial class EfInventoryWorkflowService
 
     private static InventoryPpeNormMappingDto MapNormMapping(InventoryPpeNormCatalogMappingEntity row) =>
         new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment,
-            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence, ReadItemStandards(row.Item.StandardsJson));
+            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence, ReadItemStandards(row.Item.StandardsJson), row.Item.Unit?.Symbol ?? "");
 
     private static InventoryPpeHistoryRowDto MapPpeHistoryRow(InventoryPpeCardLineEventEntity row)
     {

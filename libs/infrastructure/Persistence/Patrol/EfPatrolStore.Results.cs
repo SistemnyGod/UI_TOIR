@@ -107,6 +107,8 @@ internal sealed partial class EfPatrolStore
             .Where(IsRoutePointVisibleForCompletion)
             .OrderBy(point => point.SequenceNo)
             .ToDictionary(point => point.Id) ?? [];
+        var existingPointIds = dbContext.RoutePoints.AsNoTracking()
+            .Where(point => point.RouteId == assignment.RouteId).Select(point => point.Id).ToHashSet();
         foreach (var pointResult in request.PointResults ?? [])
         {
             routePoints.TryGetValue(pointResult.RoutePointId, out var selectedPoint);
@@ -121,7 +123,7 @@ internal sealed partial class EfPatrolStore
                 CreatedAt = operationAt,
                 EmployeeId = assignment.EmployeeId,
                 RouteId = assignment.RouteId,
-                RoutePointId = selectedPoint is not null && dbContext.RoutePoints.Any(point => point.Id == selectedPoint.Id)
+                RoutePointId = selectedPoint is not null && existingPointIds.Contains(selectedPoint.Id)
                     ? selectedPoint.Id
                     : null,
                 Status = status,
@@ -226,18 +228,6 @@ internal sealed partial class EfPatrolStore
             if (missingRequired.Count > 0)
             {
                 errors["pointResults"] = [$"Заполните все обязательные точки: {string.Join(", ", missingRequired)}."];
-            }
-
-            var missingRequiredPhotos = routePointList
-                .Where(point => point.RequiresPhoto)
-                .Join(request.PointResults, point => point.Id, pointResult => pointResult.RoutePointId, (point, pointResult) => new { point, pointResult })
-                .Where(item => RequiresPhotoForPointResult(item.pointResult)
-                    && item.pointResult.PhotoAttachments is not { Count: > 0 })
-                .Select(item => item.point.Name)
-                .ToList();
-            if (missingRequiredPhotos.Count > 0)
-            {
-                errors["photos"] = [$"Для точек с фотофиксацией прикрепите файлы фото: {string.Join(", ", missingRequiredPhotos)}."];
             }
 
             for (var index = 0; index < request.PointResults.Count; index += 1)
@@ -405,9 +395,6 @@ internal sealed partial class EfPatrolStore
             : value;
     }
 
-    private static bool RequiresPhotoForPointResult(CompleteAssignmentPointDto pointResult) =>
-        NormalizeResultStatus(pointResult.Status) == "Замечание"
-        || string.Equals(pointResult.Status, "skipped", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRoutePointVisibleForCompletion(RoutePointEntity point) =>
         !point.Status.Equals("Черновик", StringComparison.OrdinalIgnoreCase)

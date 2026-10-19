@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$ruleName = "Patrol360 Mobile API LAN 80 5173"
-$localPorts = "80,5173"
+$ruleName = "Patrol360 Mobile API LAN 80 443 5173"
+$legacyRuleName = "Patrol360 Mobile API LAN 80 5173"
+$localPorts = "80,443,5173"
 $remoteSubnet = "192.168.2.0/24"
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -12,20 +13,21 @@ if (-not $isAdmin) {
   throw "Run this script from PowerShell as Administrator."
 }
 
-netsh advfirewall firewall delete rule name="$ruleName" | Out-Null
-
-netsh advfirewall firewall add rule `
-  name="$ruleName" `
-  dir=in `
-  action=allow `
-  protocol=TCP `
-  localport=$localPorts `
-  remoteip=$remoteSubnet `
-  profile=any | Out-Null
+$existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+if ($existingRule) {
+  $existingRule | Set-NetFirewallRule -Enabled True -Direction Inbound -Action Allow -Profile Any
+  $existingRule | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol TCP -LocalPort $localPorts.Split(',')
+  $existingRule | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress $remoteSubnet
+} else {
+  New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow -Protocol TCP `
+    -LocalPort $localPorts.Split(',') -RemoteAddress $remoteSubnet -Profile Any | Out-Null
+}
+# Retire the old rule only after the complete replacement succeeds.
+Get-NetFirewallRule -DisplayName $legacyRuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 
 Write-Host "Firewall rule is ready:"
-netsh advfirewall firewall show rule name="$ruleName"
+Get-NetFirewallRule -DisplayName $ruleName | Get-NetFirewallPortFilter | Format-Table Protocol, LocalPort
 
 Write-Host ""
 Write-Host "Phone test URL:"
-Write-Host "http://192.168.2.194:5173/api/v1/mobile/health"
+Write-Host "https://192.168.2.194/api/v1/mobile/health"

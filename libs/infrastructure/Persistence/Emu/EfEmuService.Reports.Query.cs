@@ -31,6 +31,12 @@ internal sealed partial class EfEmuService
             rowsQuery = rowsQuery.Where(row => row.DeletedAt == null);
         }
 
+        if (query.BoardOnly)
+        {
+            var todayUtc = ToBusinessDateTimeOffset(GetBusinessDate(DateTimeOffset.UtcNow));
+            rowsQuery = rowsQuery.Where(row => row.CompletedAt == null || row.CompletedAt >= todayUtc);
+        }
+
         if (query.DateFrom is not null)
         {
             rowsQuery = rowsQuery.Where(row => row.WorkDate >= query.DateFrom);

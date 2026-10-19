@@ -769,6 +769,18 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void PatrolRequestDetailsQueriesOnlyTheRequestedIdAndReturnsNotFound()
+    {
+        var service = new FakePatrolRequestService();
+        var controller = new PatrolRequestsController(service);
+        var id = Guid.NewGuid();
+        Assert.IsType<NotFoundResult>(controller.Get(id).Result);
+        Assert.Equal(id, service.LastFilter!.Id);
+        Assert.Equal(1, service.LastPageSize);
+        AssertEndpointPermission(typeof(PatrolRequestsController), nameof(PatrolRequestsController.Get), "requests.read");
+    }
+
+    [Fact]
     public void ResultsControllerListReturnsResultsFromQuery()
     {
         var resultItem = CreateResultListItem();
@@ -1464,11 +1476,13 @@ public class ApiSmokeTests
         public int? LastPage { get; private set; }
 
         public int? LastPageSize { get; private set; }
+        public PatrolRequestFilterDto? LastFilter { get; private set; }
 
         public IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100, PatrolRequestFilterDto? filter = null)
         {
             LastPage = page;
             LastPageSize = pageSize;
+            LastFilter = filter;
             return requests ?? [];
         }
 

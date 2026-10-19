@@ -34,9 +34,9 @@ public static class PatrolStatusCodeMapper
         (Assignment.Assigned, ["Назначена", "Назначено", "assigned"]),
         (Assignment.Waiting, ["Ожидает", "Ожидает принятия", "waiting"]),
         (Assignment.Accepted, ["Принята", "Принято", "accepted"]),
-        (Assignment.InProgress, ["В пути", "В работе", "in_progress", "in progress"]),
+        (Assignment.InProgress, ["В пути", "В работе", "in_progress", "inprogress", "in progress"]),
         (Assignment.Paused, ["Приостановлена", "Приостановлено", "paused"]),
-        (Assignment.Completed, ["Завершено", "Завершена", "Выполнено", "completed", "closed"]),
+        (Assignment.Completed, ["Завершено", "Завершена", "Выполнено", "Выполнена", "Закрыта", "Закрыто", "Закрыт", "completed", "closed"]),
         (Assignment.Cancelled, ["Отменено", "Отменена", "cancelled", "canceled"]),
         (Assignment.DispatcherReview, ["Требует решения диспетчера", "dispatcher_review"]),
         (Assignment.Overdue, ["Просрочена", "Просрочено", "overdue"]),
@@ -87,6 +87,22 @@ public static class PatrolStatusCodeMapper
     public static string? ToRequestCode(string? value) => ToCode(RequestToCode, value);
 
     public static string? ToResultCode(string? value) => ToCode(ResultToCode, value);
+
+    // Display groups used by the web request history, without redefining the
+    // existing exact status filter used by other clients.
+    public static string[] GetRequestGroupCodes(string group) => group switch
+    {
+        "new" => [Request.New],
+        "assigned" => [Assignment.Assigned, Request.Dispatched, Assignment.Accepted, Assignment.Waiting],
+        "in_progress" => [Assignment.InProgress, Assignment.Paused, Assignment.Delayed, Assignment.Overdue, Assignment.DispatcherReview],
+        "completed" => [Assignment.Completed],
+        "cancelled" => [Assignment.Cancelled],
+        _ => [],
+    };
+
+    public static string[] GetRequestCodeAliases(string[] codes) => RequestToCode
+        .Where(pair => codes.Contains(pair.Value))
+        .Select(pair => pair.Key.Trim().ToLowerInvariant()).Distinct().ToArray();
 
     public static string? ToAssignmentLegacy(string? code) => ToLegacy(AssignmentLegacy, code);
 

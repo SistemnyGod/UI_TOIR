@@ -236,7 +236,12 @@ public sealed record MobilePatrolAssignmentDto(
     int RouteVersionNo)
 {
     public Guid? EmployeeId { get; init; }
+    public MobilePatrolAssignmentSnapshotDto? RouteSnapshot { get; init; }
 }
+
+public sealed record MobilePatrolAssignmentSnapshotDto(
+    MobilePatrolRouteDto Route,
+    IReadOnlyList<MobilePatrolPointDto> Points);
 
 public sealed record MobilePatrolRouteDto(
     Guid RouteId,

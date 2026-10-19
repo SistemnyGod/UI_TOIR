@@ -29,11 +29,6 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("status", "PPE section title cannot be issued.");
         }
 
-        if (request.WarehouseId is not null && !dbContext.InventoryWarehouses.Any(row => row.Id == request.WarehouseId.Value))
-        {
-            return Failure<InventoryPpeCardLineDto>("warehouseId", "Warehouse not found");
-        }
-
         if (request.UnitPriceMinor is < 0)
         {
             return Failure<InventoryPpeCardLineDto>("unitPriceMinor", "Unit price cannot be negative");
@@ -65,12 +60,6 @@ internal sealed partial class EfInventoryWorkflowService
             .Select(row => row.DefaultUnitPriceMinor)
             .FirstOrDefault();
     }
-
-    private InventoryCommandResult<InventoryPpeCardLineDto>? ValidatePpeStatusStockTransition(
-        InventoryPpeCardLineEntity line,
-        string oldStatus,
-        string nextStatus)
-        => null;
 
     private static string NormalizePrintField(string? value, string? fallback, int maxLength)
     {

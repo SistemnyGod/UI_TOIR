@@ -5,53 +5,8 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfPatrolStore
 {
-    private RouteRevisionEntity GetOrCreateCurrentRouteRevision(RouteEntity route)
-    {
-        var tracked = dbContext.RouteRevisions.Local
-            .FirstOrDefault(item => item.RouteId == route.Id && item.VersionNo == route.VersionNo);
-        var existing = tracked ?? dbContext.RouteRevisions
-            .Include(item => item.Points)
-            .FirstOrDefault(item => item.RouteId == route.Id && item.VersionNo == route.VersionNo);
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        var points = dbContext.RoutePoints
-            .Where(point => point.RouteId == route.Id)
-            .OrderBy(point => point.SequenceNo)
-            .ToList();
-        var revision = new RouteRevisionEntity
-        {
-            Id = Guid.NewGuid(),
-            RouteId = route.Id,
-            VersionNo = route.VersionNo,
-            Name = route.Name,
-            Territory = route.Territory,
-            AllowFreeOrder = route.AllowFreeOrder,
-            NfcEnabled = route.NfcEnabled,
-            QrFallbackEnabled = route.QrFallbackEnabled,
-            CreatedAt = DateTimeOffset.UtcNow,
-            Points = points.Select(point => new RouteRevisionPointEntity
-            {
-                Id = Guid.NewGuid(),
-                SourceRoutePointId = point.Id,
-                SequenceNo = point.SequenceNo,
-                Name = point.Name,
-                Zone = point.Zone,
-                Type = point.Type,
-                Tag = point.Tag,
-                Description = point.Description,
-                Instruction = point.Instruction,
-                NfcCode = point.NfcCode,
-                IsRequired = point.IsRequired,
-                RequiresPhoto = point.RequiresPhoto,
-                Status = point.Status
-            }).ToList()
-        };
-        dbContext.RouteRevisions.Add(revision);
-        return revision;
-    }
+    private RouteRevisionEntity GetOrCreateCurrentRouteRevision(RouteEntity route) =>
+        PatrolRouteRevisionStore.GetOrCreate(dbContext, route);
 
     private static IReadOnlyList<RoutePointEntity> GetCompletionRoutePoints(AssignmentEntity assignment)
     {

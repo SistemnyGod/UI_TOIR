@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence.Entities;
@@ -135,6 +136,9 @@ internal sealed partial class EfMobileAppService
     }
 
     public MobileAuthResult Refresh(MobileRefreshRequestDto request, string ipAddress)
+        => RefreshCore(request, ipAddress, allowConcurrentReplay: true);
+
+    private MobileAuthResult RefreshCore(MobileRefreshRequestDto request, string ipAddress, bool allowConcurrentReplay)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken) || string.IsNullOrWhiteSpace(request.DeviceId))
         {
@@ -369,6 +373,14 @@ internal sealed partial class EfMobileAppService
         catch (DbUpdateConcurrencyException)
         {
             return UnauthorizedResult("refresh_retry");
+        }
+        catch (DbUpdateException exception) when (allowConcurrentReplay
+            && exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_mobile_refresh_token_histories_token_hash" })
+        {
+            // Another request committed this rotation. Replay its stored response,
+            // checking operation id, device and session again with fresh entities.
+            dbContext.ChangeTracker.Clear();
+            return RefreshCore(request, ipAddress, allowConcurrentReplay: false);
         }
 
         return new MobileAuthResult(

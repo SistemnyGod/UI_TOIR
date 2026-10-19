@@ -11,7 +11,7 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfMobileAppService
 {
-    public MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false)
+    public MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false, bool assignmentSnapshots = false)
     {
         var session = FindActiveSession(accessToken);
         if (session?.MobileAccount is null)
@@ -29,6 +29,7 @@ internal sealed partial class EfMobileAppService
 
         var requestBoard = BuildRequestBoard(boundEmployeeIds);
         var assignments = BuildAssignments(boundEmployeeIds);
+        assignments = AttachAssignmentSnapshots(assignments);
         var cancelledAssignmentIds = BuildCancelledAssignmentIds(boundEmployeeIds);
         var conflictResolutions = BuildConflictResolutions(account.Id);
         var routeIds = requestBoard.Select(item => item.RouteId)
@@ -68,11 +69,22 @@ internal sealed partial class EfMobileAppService
                     point.NfcCode,
                     string.IsNullOrWhiteSpace(point.Tag) ? null : point.Tag,
                     point.IsRequired,
-                    point.RequiresPhoto,
+                    false,
                     route.VersionNo,
                     point.Description,
                     point.Instruction)))
             .ToArray();
+        // Legacy clients have one catalog entry per route. Prefer the oldest
+        // live assigned revision over an unrelated current directory revision.
+        // New clients use RouteSnapshot on each assignment, including accounts
+        // receiving several different revisions of the same route.
+        foreach (var assigned in assignments.Where(item => !assignmentSnapshots && item.RouteSnapshot is not null)
+                     .GroupBy(item => item.RouteId).Select(group => group.First()))
+        {
+            var frozen = assigned.RouteSnapshot!;
+            routeDtos = routeDtos.Where(item => item.RouteId != assigned.RouteId).Append(frozen.Route).ToArray();
+            pointDtos = pointDtos.Where(item => item.RouteId != assigned.RouteId).Concat(frozen.Points).ToArray();
+        }
         var snapshotManifests = routeDtos
             .Select(route => new MobilePatrolSnapshotManifestDto(
                 route.RouteId,
@@ -129,6 +141,28 @@ internal sealed partial class EfMobileAppService
             PatrolSnapshotManifests = snapshotManifests,
             PatrolAppeals = patrolAppealsPaging ? [] : appeals
         };
+    }
+
+    private IReadOnlyList<MobilePatrolAssignmentDto> AttachAssignmentSnapshots(IReadOnlyList<MobilePatrolAssignmentDto> assignments)
+    {
+        if (assignments.Count == 0) return assignments;
+        var ids = assignments.Select(item => item.AssignmentId).ToArray();
+        var entities = dbContext.Assignments.AsNoTracking()
+            .Include(item => item.RouteRevision)!.ThenInclude(item => item!.Points)
+            .Where(item => ids.Contains(item.Id)).ToDictionary(item => item.Id);
+        return assignments.Select(item =>
+        {
+            var revision = entities[item.AssignmentId].RouteRevision;
+            if (revision is null || revision.RouteId != item.RouteId || revision.VersionNo != item.RouteVersionNo) return item;
+            var points = revision.Points.Where(point => !string.Equals(point.Status, "Черновик", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(point.Status, "Draft", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(point => point.SequenceNo).Select(point => new MobilePatrolPointDto(
+                    point.SourceRoutePointId, item.RouteId, point.Name, point.SequenceNo, point.NfcCode,
+                    string.IsNullOrWhiteSpace(point.Tag) ? null : point.Tag, point.IsRequired, false,
+                    revision.VersionNo, point.Description, point.Instruction)).ToArray();
+            return item with { RouteSnapshot = new(new(item.RouteId, revision.Name, revision.VersionNo,
+                revision.AllowFreeOrder, revision.NfcEnabled, revision.QrFallbackEnabled), points) };
+        }).ToArray();
     }
 
     private IReadOnlyList<MobileBootstrapConflictResolutionDto> BuildConflictResolutions(Guid mobileAccountId)

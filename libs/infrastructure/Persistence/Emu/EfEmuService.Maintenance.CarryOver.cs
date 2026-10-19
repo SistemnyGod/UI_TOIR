@@ -12,15 +12,20 @@ internal sealed partial class EfEmuService
 {
     public int CarryOverForgottenWork(DateTimeOffset now)
     {
+        using var mutation = BeginActiveParticipationMutation();
         var today = GetBusinessDate(now);
         var operationAt = now.ToUniversalTime();
         var forgotten = dbContext.EmuWorkSessions
             .Where(row => row.DeletedAt == null && row.CompletedAt == null && row.WorkDate < today)
             .ToList();
 
+        var forgottenIds = forgotten.Select(row => row.Id).ToArray();
+        var alreadyCarried = dbContext.EmuWorkSessionCarryOvers.AsNoTracking()
+            .Where(row => row.ToDate == today && forgottenIds.Contains(row.WorkSessionId))
+            .Select(row => row.WorkSessionId).ToHashSet();
         foreach (var session in forgotten)
         {
-            if (dbContext.EmuWorkSessionCarryOvers.Any(row => row.WorkSessionId == session.Id && row.ToDate == today))
+            if (alreadyCarried.Contains(session.Id))
             {
                 continue;
             }
@@ -42,6 +47,7 @@ internal sealed partial class EfEmuService
         }
 
         dbContext.SaveChanges();
+        mutation.Commit();
         return forgotten.Count(row => row.WorkDate == today);
     }
 }

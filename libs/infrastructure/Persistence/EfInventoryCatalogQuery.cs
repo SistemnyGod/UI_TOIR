@@ -789,12 +789,6 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         public decimal Available => Math.Max(0m, Physical - Reserved);
     }
 
-    private sealed record StockAggregateRow(
-        Guid ItemId,
-        decimal Physical,
-        decimal Reserved,
-        bool IsTracked);
-
     private sealed record StockTotals(decimal Physical, decimal Reserved, bool IsTracked)
     {
         public static readonly StockTotals Empty = new(0m, 0m, false);

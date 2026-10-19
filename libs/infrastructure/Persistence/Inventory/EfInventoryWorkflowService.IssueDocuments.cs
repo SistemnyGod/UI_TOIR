@@ -39,11 +39,11 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
     {
         var employee = dbContext.Employees.AsNoTracking().FirstOrDefault(x => x.Id == employeeId);
         if (employee is null) return [];
-        return dbContext.InventoryPpeNormSets.AsNoTracking().Include(x => x.Rows)
+        return NormsWithReadinessData().AsNoTracking()
             .Where(x => x.Status == "active" && !x.RequiresReview && x.ScopeConfirmed && x.ArchivedAt == null
                 && (!x.EffectiveFrom.HasValue || x.EffectiveFrom <= date)
                 && (!x.EffectiveTo.HasValue || x.EffectiveTo >= date))
-            .ToList().Where(x => PpeScopeMatches(x, employee)).Select(MapNormSet).ToList();
+            .ToList().Where(x => PpeScopeMatches(x, employee) && CheckNormReadiness(x).IsReady).Select(MapReviewedNormSet).ToList();
     }
 
     private static bool PpeScopeMatches(InventoryPpeNormSetEntity norm, EmployeeEntity employee) =>
@@ -53,6 +53,15 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
 
     public InventoryCommandResult<PpeIssueDocumentDto> SaveIssueDocument(Guid? id, SavePpeIssueDocumentDto request, string actor)
     {
+        if (request.ClientDocumentId == Guid.Empty)
+            return Failure<PpeIssueDocumentDto>("clientDocumentId", "Идентификатор черновика не может быть пустым");
+        if (id.HasValue && request.ClientDocumentId.HasValue && request.ClientDocumentId != id)
+            return Failure<PpeIssueDocumentDto>("conflict", "Идентификатор черновика не совпадает с документом");
+        if (!id.HasValue && request.ClientDocumentId.HasValue)
+        {
+            var existing = dbContext.Set<PpeIssueDocumentEntity>().AsNoTracking().FirstOrDefault(x => x.Id == request.ClientDocumentId);
+            if (existing is not null) return ReplayCreatedDocument(existing, request, actor);
+        }
         var document = id.HasValue ? dbContext.Set<PpeIssueDocumentEntity>().FirstOrDefault(x => x.Id == id.Value) : null;
         if (id.HasValue && document is null) return Failure<PpeIssueDocumentDto>("id", "Документ не найден");
         if (document is not null && (document.Status != "draft" || document.Version != request.ExpectedVersion))
@@ -77,6 +86,9 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
             return Failure<PpeIssueDocumentDto>("employeeId", "Выберите действующего сотрудника");
         if (norm is null || norm.Status != "active" || norm.ArchivedAt != null || norm.RequiresReview || !PpeScopeMatches(norm, employee))
             return Failure<PpeIssueDocumentDto>("normSetId", "Норма не опубликована или её применимость к сотруднику не подтверждена");
+        var readiness = CheckNormReadiness(norm);
+        if (!readiness.IsReady)
+            return Failure<PpeIssueDocumentDto>(readiness.Blockers.Any(x => x.Code == "mapping") ? "mapping" : "readiness", string.Join("; ", readiness.Blockers.Select(x => x.Message)));
         if (!NormDateContains(norm, request.DocumentDate)) return Failure<PpeIssueDocumentDto>("documentDate", "Редакция нормы не действует на дату документа");
         if (document is not null)
         {
@@ -129,15 +141,26 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
             norm.Rows.OrderBy(x => x.SortOrder).Select(x => new PpeDocumentNormDto(x.Id, x.ParentRowId, x.RowType, x.SortOrder,
                 x.NormItemName, pointOverrides.GetValueOrDefault(x.Id, x.NormPoint), x.Quantity, x.UnitSymbol, x.QuantityText, x.IssuePeriodText,
                 x.PeriodMonths, x.LifeMonths, x.RequirementKey, x.AlternativeGroup)).ToList(), selected);
-        document ??= new PpeIssueDocumentEntity { Id = Guid.NewGuid(), EmployeeId = employee.Id, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = actor };
+        document ??= new PpeIssueDocumentEntity { Id = request.ClientDocumentId ?? Guid.NewGuid(), EmployeeId = employee.Id, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = actor };
         document.NormSetId = norm.Id;
         document.Version++;
         document.ContentJson = JsonSerializer.Serialize(content, DocumentJson);
         document.ValidationJson = JsonSerializer.Serialize(ValidateDocumentContent(content, false), DocumentJson);
         if (!id.HasValue) dbContext.Set<PpeIssueDocumentEntity>().Add(document);
         AddDocumentAudit(document, id.HasValue ? "draft_updated" : "draft_created", actor);
-        return SaveDocumentChanges(document);
+        try { return SaveDocumentChanges(document); }
+        catch (Exception exception) when (!id.HasValue && request.ClientDocumentId.HasValue && IsDocumentWriteConflict(exception))
+        {
+            dbContext.ChangeTracker.Clear();
+            var existing = dbContext.Set<PpeIssueDocumentEntity>().AsNoTracking().FirstOrDefault(x => x.Id == request.ClientDocumentId);
+            return existing is null ? Failure<PpeIssueDocumentDto>("conflict", "Повторите сохранение черновика с тем же идентификатором") : ReplayCreatedDocument(existing, request, actor);
+        }
     }
+
+    private static InventoryCommandResult<PpeIssueDocumentDto> ReplayCreatedDocument(PpeIssueDocumentEntity document, SavePpeIssueDocumentDto request, string actor) =>
+        document.CreatedBy == actor && document.EmployeeId == request.EmployeeId && document.NormSetId == request.NormSetId
+            ? Success(MapDocument(document))
+            : Failure<PpeIssueDocumentDto>("conflict", "Идентификатор черновика уже относится к другой операции");
 
     private static IReadOnlyList<InventoryItemStandardDto> ReadItemStandards(string json)
     {
@@ -145,25 +168,28 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
         catch (JsonException) { return []; }
     }
 
-    private InventoryPpeNormSetEntity? LoadDocumentNorm(Guid id) => dbContext.InventoryPpeNormSets
-        .Include(x => x.Rows).ThenInclude(x => x.Mappings).FirstOrDefault(x => x.Id == id);
+    private InventoryPpeNormSetEntity? LoadDocumentNorm(Guid id) => NormsWithReadinessData().FirstOrDefault(x => x.Id == id);
 
     private static bool NormDateContains(InventoryPpeNormSetEntity norm, DateOnly date) =>
         date != default && (!norm.EffectiveFrom.HasValue || norm.EffectiveFrom <= date)
         && (!norm.EffectiveTo.HasValue || norm.EffectiveTo >= date);
 
-    private PpeDocumentValidationDto ValidateDocumentContent(PpeDocumentContentDto content, bool confirming)
+    private PpeDocumentValidationDto ValidateDocumentContent(PpeDocumentContentDto content, bool confirming, Guid? excludeLineId = null)
     {
+        var planningStatuses = new[] { PpeIssueStatusCatalog.NotIssued, PpeIssueStatusCatalog.Issuing,
+            PpeIssueStatusCatalog.IssueLater, PpeIssueStatusCatalog.NoStock };
         var facts = dbContext.InventoryPpeCardLines.AsNoTracking().Include(x => x.CardNormRow).ThenInclude(x => x!.SourceNormRow)
             .Include(x => x.Item).ThenInclude(x => x.Unit)
-            .Where(x => x.Card.EmployeeId == content.Employee.Id && (x.IssuedAt != null || x.IssueDate != null))
+            .Where(x => x.Card.EmployeeId == content.Employee.Id && (x.IssuedAt != null || x.IssueDate != null)
+                && !planningStatuses.Contains(x.Status)
+                && (!excludeLineId.HasValue || x.Id != excludeLineId.Value))
             .ToList();
         var history = new List<PpeHistoricalIssue>();
         var unknown = false;
         var knownRequirements = content.NormRows.Select(x => x.RequirementKey).ToHashSet();
         foreach (var fact in facts)
         {
-            if (fact.IssueDocumentId.HasValue && fact.RequirementKey.HasValue && fact.IssueDate.HasValue)
+            if (fact.RequirementKey.HasValue && fact.IssueDate.HasValue)
             {
                 if (knownRequirements.Contains(fact.RequirementKey.Value))
                     history.Add(new(fact.RequirementKey.Value, fact.IssueDate.Value, fact.Quantity * fact.NormUnitsPerItem));
@@ -182,7 +208,7 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
         var validation = PpeDocumentRules.Validate(content, history, unknown, PpeClock.Today, confirming);
         var errors = validation.Errors.ToList();
         var live = LoadDocumentNorm(content.NormSetId);
-        if (live is null || live.Version != content.NormSetVersion || live.RequiresReview || live.Status != "active" || live.ArchivedAt != null)
+        if (live is null || live.Version != content.NormSetVersion || live.RequiresReview || live.Status != "active" || live.ArchivedAt != null || !CheckNormReadiness(live).IsReady)
             errors.Add(new(null, "norm_changed", "Норма изменена или снята с публикации: пересмотрите черновик"));
         else
         {

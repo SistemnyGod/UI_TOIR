@@ -142,8 +142,8 @@ internal sealed partial class EfMobileAppService
 
         var employeeId = patrolRequest.EmployeeId ?? selectedEmployeeId ?? boundEmployeeIds.OrderBy(id => id).First();
         var employee = dbContext.Employees.FirstOrDefault(item => item.Id == employeeId);
-        var route = dbContext.Routes.FirstOrDefault(item => item.Id == routeId.Value && !item.IsArchived);
-        if (employee is null || route is null)
+        var route = PatrolRouteRevisionStore.LoadForUpdate(dbContext, routeId.Value);
+        if (employee is null || route is null || route.IsArchived)
         {
             return Conflict(command.ClientOperationId, "Employee or route is no longer available.");
         }

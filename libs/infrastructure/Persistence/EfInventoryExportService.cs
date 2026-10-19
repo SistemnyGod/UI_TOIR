@@ -281,41 +281,9 @@ internal sealed partial class EfInventoryExportService(Patrol360DbContext dbCont
     private static long? PpeUnitPriceMinor(InventoryPpeCardLineEntity line) =>
         line.UnitPriceMinor ?? line.Item.DefaultUnitPriceMinor;
 
-    private static string ToPpeStatusLabel(string status) => PpeIssueStatusCatalog.Label(status);
-
     private static bool IsSectionTitle(string? printItemName) =>
         !string.IsNullOrWhiteSpace(printItemName) &&
         printItemName.Trim().EndsWith(':');
-
-    private static string PpePrintQuantityText(PpePrintLine line)
-    {
-        if (line.IsSectionTitle)
-        {
-            return string.Empty;
-        }
-
-        return string.IsNullOrWhiteSpace(line.QuantityText)
-            ? $"{line.Quantity:0.###} {line.Unit}"
-            : line.QuantityText;
-    }
-
-    private static string ToRussianPpeStatus(string status) => Normalize(status) switch
-    {
-        "active" => "Активна",
-        "archived" => "Архив",
-        "issued" => "Выдано",
-        "issue_later" => "Выдать позже",
-        "not_issued" => "Не выдано",
-        "no_stock" => "Нет на складе",
-        "returned" => "Возвращено",
-        "written_off" => "Списано",
-        "lost" => "Утеряно",
-        "reissued" => "Переоформлено",
-        "replacement" => "Заменено аналогом",
-        _ => status
-    };
-
-    private static bool IsOpenPpeLineForSignature(string status) => Normalize(status) is "issued" or "replacement" or "reissued";
 
     private static string SanitizeFileName(string value)
     {
@@ -1180,16 +1148,6 @@ internal static class PpeTemplateDocumentBuilder
         }
 
         SetParagraphText(paragraph, value, bold: true, center: true);
-    }
-
-    private static void InsertParagraphBefore(OpenXmlElement element, string value, bool bold, bool center = false)
-    {
-        element.InsertBeforeSelf(CreateParagraph(value, bold, center));
-    }
-
-    private static void InsertParagraphAfter(OpenXmlElement element, string value, bool bold, bool center = false)
-    {
-        element.InsertAfterSelf(CreateParagraph(value, bold, center));
     }
 
     private static void SetParagraphText(Paragraph paragraph, string value, bool bold, bool center)

@@ -39,6 +39,14 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Assignment does not belong to this mobile account.");
         }
 
+        var reportedRouteVersion = ReadLong(command.Payload, "routeVersionNo");
+        if (reportedRouteVersion is not null && reportedRouteVersion != assignment.RouteVersionNo)
+        {
+            return Conflict(command.ClientOperationId,
+                "Версия маршрута в отчёте не совпадает с выданным назначением. Сохранённые данные требуют проверки диспетчером.",
+                "routeVersion");
+        }
+
         var wasCancelledByDispatcher = assignment.Status == AssignmentStatusValues.Cancelled
             || assignment.PatrolRequest.Status == AssignmentStatusValues.Cancelled;
 
@@ -111,7 +119,7 @@ internal sealed partial class EfMobileAppService
                 return Rejected(command.ClientOperationId, "Point result status is not supported.");
             }
 
-            if (!routePointsByIdForValidation.TryGetValue(result.PointId, out var routePoint))
+            if (!routePointsByIdForValidation.ContainsKey(result.PointId))
             {
                 return Conflict(command.ClientOperationId, "Point result does not belong to assignment route.");
             }
@@ -133,13 +141,6 @@ internal sealed partial class EfMobileAppService
                 return Rejected(command.ClientOperationId, "Manual point result requires a reason.");
             }
 
-            var requiresPhoto = routePoint.RequiresPhoto
-                && (result.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(result));
-            if (requiresPhoto && result.PhotoClientFileIds.Count == 0)
-            {
-                return Rejected(command.ClientOperationId, "Required photo point result must include at least one photo.");
-            }
-
             var uploadedFilesForPoint = uploadedFilesByPoint.GetValueOrDefault(result.PointId, []);
             foreach (var clientFileId in result.PhotoClientFileIds)
             {
@@ -148,14 +149,6 @@ internal sealed partial class EfMobileAppService
                 {
                     return Rejected(command.ClientOperationId, "All attached photos must be uploaded before report submit.");
                 }
-            }
-
-            if (requiresPhoto
-                && !result.PhotoClientFileIds.Any(clientFileId => uploadedFilesForPoint.Any(file =>
-                    file.ClientFileId == clientFileId
-                    && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))))
-            {
-                return Rejected(command.ClientOperationId, "Required photo point result must include at least one image file.");
             }
         }
 
@@ -499,46 +492,6 @@ internal sealed partial class EfMobileAppService
                 ? "issue"
                 : "ok";
 
-    private static string BuildPersistedMobilePointComment(MobilePointResultPayload pointResult)
-    {
-        var comment = NormalizeOptionalText(pointResult.Comment);
-        if (IsSkippedPointResult(pointResult))
-        {
-            return string.IsNullOrWhiteSpace(comment)
-                ? "Метка недоступна"
-                : $"Метка недоступна: {comment}";
-        }
-
-        if (IsManualPointResult(pointResult))
-        {
-            if (!string.IsNullOrWhiteSpace(pointResult.ManualReason))
-                return $"Без NFC: {pointResult.ManualReason.Trim()}. {comment}".Trim();
-            return string.IsNullOrWhiteSpace(comment)
-                ? "Заполнено вручную без сканирования"
-                : $"Заполнено вручную без сканирования: {comment}";
-        }
-
-        return string.IsNullOrWhiteSpace(comment) ? "-" : comment;
-    }
-
-    private static string BuildPersistedMobilePointIssueType(MobilePointResultPayload pointResult)
-    {
-        if (IsSkippedPointResult(pointResult))
-        {
-            return "Метка недоступна";
-        }
-
-        return pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase)
-            ? NormalizeOptionalText(pointResult.IssueTypeId, "issue")
-            : "-";
-    }
-
-    private static string BuildPersistedMobilePointSeverity(MobilePointResultPayload pointResult) =>
-        (BuildPersistedMobilePointStatus(pointResult).Equals("issue", StringComparison.Ordinal)
-            || BuildPersistedMobilePointStatus(pointResult).Equals("skipped", StringComparison.Ordinal))
-            ? "medium"
-            : "-";
-
     private static string BuildMobilePointResultStatus(MobilePointResultPayload pointResult)
     {
         if (IsSkippedPointResult(pointResult))
@@ -570,14 +523,6 @@ internal sealed partial class EfMobileAppService
         string ConfirmationType,
         string NfcUidHash,
         IReadOnlyList<string> PhotoClientFileIds);
-
-    private sealed record CompletePointResultSnapshot(
-        Guid? PointId,
-        string Status,
-        string Comment,
-        string IssueType,
-        string Severity,
-        IReadOnlyList<string> AttachmentFileNames);
 }
 
 

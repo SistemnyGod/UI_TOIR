@@ -9,7 +9,7 @@ public sealed record SavePpeIssueDocumentDto(
     Guid EmployeeId, Guid NormSetId, DateOnly DocumentDate,
     string ResponsibleName, string Basis, InventoryPpeEmployeeDetailsDto? EmployeeDetails,
     IReadOnlyList<PpeIssueDocumentLineInput> Lines, long? ExpectedVersion = null,
-    bool AcceptNormChange = false);
+    bool AcceptNormChange = false, Guid? ClientDocumentId = null);
 
 public sealed record ConfirmPpeIssueDocumentDto(long ExpectedVersion, string IdempotencyKey);
 public sealed record CancelPpeIssueDocumentDto(long ExpectedVersion);
@@ -54,10 +54,11 @@ public sealed record PpeIssueDocumentSummaryDto(
     DateOnly DocumentDate, int LinesCount, long? TotalMinor, string Department = "", string PersonnelNo = "", bool HasOverdue = false);
 
 public sealed record PpeNormApprovalDto(
-    long ExpectedVersion, string DepartmentName, IReadOnlyList<string> PositionAliases);
+    long ExpectedVersion, string DepartmentName, IReadOnlyList<string> PositionAliases,
+    DateOnly? EffectiveFrom = null, DateOnly? EffectiveTo = null, bool UpdateDates = false);
 public sealed record PpeNormRowRulesDto(
     long ExpectedVersion, string UnitSymbol, int? PeriodMonths, int? LifeMonths,
-    Guid? PreviousRequirementRowId, string AlternativeGroup);
+    Guid? PreviousRequirementRowId, string AlternativeGroup, decimal? Quantity = null, string? NormPoint = null, string? NormItemName = null);
 public sealed record PpeMappingApprovalDto(
     long ExpectedNormVersion, Guid ItemId, decimal NormUnitsPerItem,
     string Evidence, string BrandModelArticle = "", long? DefaultUnitPriceMinor = null);

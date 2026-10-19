@@ -10,9 +10,8 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    public EmuCommandResult<EmuWorkSessionDto> AddWorkSessionEmployee(Guid id, EmuAddWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> AddWorkSessionEmployeeCore(Guid id, EmuAddWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
     {
-        using var transaction = BeginActiveParticipationMutation();
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
         {
@@ -83,11 +82,10 @@ internal sealed partial class EfEmuService
         dbContext.SaveChanges();
         InsertParticipationInterval(entity.Id, participant.Id, participant.EmployeeId, EmployeeWorking, startedAt, comment, actorUserId, actorName, now);
 
-        transaction.Commit();
         return Success(MapWorkSession(LoadSession(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuWorkSessionDto> FinishWorkSessionEmployee(Guid id, Guid employeeId, EmuFinishWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> FinishWorkSessionEmployeeCore(Guid id, Guid employeeId, EmuFinishWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
@@ -157,7 +155,7 @@ internal sealed partial class EfEmuService
         return Success(MapWorkSession(LoadSession(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuWorkSessionDto> MarkWorkSessionEmployeeMistaken(Guid id, Guid employeeId, EmuMarkMistakenWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> MarkWorkSessionEmployeeMistakenCore(Guid id, Guid employeeId, EmuMarkMistakenWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)

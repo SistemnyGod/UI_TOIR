@@ -217,6 +217,11 @@ public sealed partial class Patrol360DbContext
             entity.Property(notification => notification.PushStatus).HasColumnName("push_status").HasMaxLength(40).IsRequired();
             entity.Property(notification => notification.PushTokenSnapshot).HasColumnName("push_token_snapshot").HasMaxLength(512).IsRequired();
             entity.Property(notification => notification.PushAttemptCount).HasColumnName("push_attempt_count");
+            entity.Property(notification => notification.PushDeliveredTokenHashes)
+                .HasColumnName("push_delivered_token_hashes")
+                .HasColumnType("text[]")
+                .HasDefaultValueSql("ARRAY[]::text[]")
+                .IsRequired();
             entity.Property(notification => notification.PushLastError).HasColumnName("push_last_error").HasMaxLength(1200).IsRequired();
             entity.Property(notification => notification.PushSentAt).HasColumnName("push_sent_at");
             entity.Property(notification => notification.PushClaimedAt).HasColumnName("push_claimed_at");

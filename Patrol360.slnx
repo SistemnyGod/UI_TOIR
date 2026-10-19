@@ -38,4 +38,7 @@
   <Folder Name="/tests/Patrol360.Worker.Tests/">
     <Project Path="tests/Patrol360.Worker.Tests/Patrol360.Worker.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/Patrol360.InventoryMigration/">
+    <Project Path="tools/Patrol360.InventoryMigration/Patrol360.InventoryMigration.csproj" />
+  </Folder>
 </Solution>

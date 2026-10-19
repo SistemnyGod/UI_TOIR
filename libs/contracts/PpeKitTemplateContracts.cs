@@ -15,3 +15,5 @@ public sealed record RenamePpeKitTemplateDto(long ExpectedVersion, string Name);
 public sealed record CopyPpeKitTemplateDto(string? Name, bool IsShared = false);
 
 public sealed record ArchivePpeKitTemplateDto(long ExpectedVersion);
+
+public sealed record BindLegacyPpeKitTemplateDto(long ExpectedVersion, Guid NormSetId, bool IsShared, IReadOnlyList<SavePpeKitTemplateLineDto> Lines);

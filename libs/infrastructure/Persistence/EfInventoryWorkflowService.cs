@@ -26,14 +26,6 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
         new("system_log", "Системный журнал", "Аудит импорта, печати, настроек и операций", "xlsx")
     ];
 
-    private static readonly HashSet<string> ReservationMoveTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "reservation",
-        "reserve",
-        "ppe_reserve",
-        "ppe_reservation"
-    };
-
     public InventoryListResponseDto<InventoryCustodyRecordDto> GetCustodyRecords(InventoryListQuery query)
     {
         var paging = NormalizePaging(query);
@@ -459,6 +451,7 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
     {
         var paging = NormalizePaging(query);
         var rowsQuery = dbContext.Employees.AsNoTracking().AsQueryable();
+        if (query.EmployeeId.HasValue) rowsQuery = rowsQuery.Where(row => row.Id == query.EmployeeId.Value);
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
         {

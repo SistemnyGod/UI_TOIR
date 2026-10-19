@@ -148,6 +148,7 @@ internal sealed partial class EfPatrolStore
 
     public CreateAssignmentResult Create(CreateAssignmentDto request)
     {
+        using var employeeShiftTransaction = dbContext.Database.BeginTransaction();
         var patrolRequest = request.PatrolRequestId is null
             ? null
             : dbContext.PatrolRequests.FirstOrDefault(item => item.Id == request.PatrolRequestId.Value);
@@ -156,7 +157,8 @@ internal sealed partial class EfPatrolStore
             : dbContext.Employees.FirstOrDefault(item => item.Id == request.EmployeeId.Value);
         var route = request.RouteId is null
             ? null
-            : dbContext.Routes.FirstOrDefault(item => item.Id == request.RouteId.Value && !item.IsArchived);
+            : PatrolRouteRevisionStore.LoadForUpdate(dbContext, request.RouteId.Value);
+        if (route?.IsArchived == true) route = null;
         var existingAssignment = FindAssignmentByPatrolRequest(request.PatrolRequestId);
         if (existingAssignment is not null)
         {
@@ -164,13 +166,8 @@ internal sealed partial class EfPatrolStore
         }
 
         var requestedShift = string.IsNullOrWhiteSpace(request.Shift) ? employee?.Shift : request.Shift;
-        using var employeeShiftTransaction = employee is not null
-            && request.PlannedAt is not null
-            && request.PlannedAt != default
-            && !string.IsNullOrWhiteSpace(requestedShift)
-                ? dbContext.Database.BeginTransaction()
-                : null;
-        if (employeeShiftTransaction is not null)
+        if (employee is not null && request.PlannedAt is not null && request.PlannedAt != default
+            && !string.IsNullOrWhiteSpace(requestedShift))
         {
             AcquireEmployeeShiftAssignmentLock(employee!.Id, request.PlannedAt!.Value, requestedShift!);
         }

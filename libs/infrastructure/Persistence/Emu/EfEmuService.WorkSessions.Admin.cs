@@ -10,7 +10,7 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    public EmuCommandResult<EmuWorkSessionDto> DeleteWorkSession(Guid id, EmuDeleteWorkSessionDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> DeleteWorkSessionCore(Guid id, EmuDeleteWorkSessionDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
@@ -41,7 +41,7 @@ internal sealed partial class EfEmuService
         return Success(MapWorkSession(LoadSession(entity.Id)!));
     }
 
-    public EmuCommandResult<EmuWorkSessionDto> CarryOverWorkSession(Guid id, EmuCarryOverWorkSessionDto request, Guid? actorUserId, string actorName)
+    private EmuCommandResult<EmuWorkSessionDto> CarryOverWorkSessionCore(Guid id, EmuCarryOverWorkSessionDto request, Guid? actorUserId, string actorName)
     {
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)

@@ -5,7 +5,8 @@ public sealed record EmuListResponseDto<T>(
     int Total,
     int Page,
     int PageSize,
-    int PageCount);
+    int PageCount,
+    DateTimeOffset? ServerTime = null);
 
 public sealed record EmuCommandResult<T>(
     T? Value,
@@ -366,7 +367,8 @@ public sealed record EmuWorkSessionQueryDto(
     string? ShiftType = null,
     string? EmployeeSearch = null,
     IReadOnlyList<Guid>? AllowedSectionIds = null,
-    Guid? CreatedByUserId = null);
+    Guid? CreatedByUserId = null,
+    bool BoardOnly = false);
 
 public sealed record EmuWorkHistoryReportDto(
     EmuWorkSessionQueryDto AppliedQuery,

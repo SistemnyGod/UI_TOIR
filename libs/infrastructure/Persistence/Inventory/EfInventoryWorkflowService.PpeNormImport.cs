@@ -13,8 +13,7 @@ internal sealed partial class EfInventoryWorkflowService
     public InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query)
     {
         var paging = NormalizePaging(query);
-        var rowsQuery = dbContext.InventoryPpeNormSets.AsNoTracking()
-            .Include(row => row.Rows)
+        var rowsQuery = NormsWithReadinessData().AsNoTracking()
             .Where(row => row.ArchivedAt == null || row.Status == "archived");
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
@@ -52,18 +51,14 @@ internal sealed partial class EfInventoryWorkflowService
             .Skip((paging.Page - 1) * paging.PageSize)
             .Take(paging.PageSize)
             .ToList()
-            .Select(MapNormSet)
+            .Select(MapReviewedNormSet)
             .ToList();
         return ToListResponse(rows, total, paging);
     }
 
     public InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId)
     {
-        var normSet = dbContext.InventoryPpeNormSets
-            .AsNoTracking()
-            .Include(row => row.Rows)
-                .ThenInclude(row => row.Mappings)
-                    .ThenInclude(mapping => mapping.Item)
+        var normSet = NormsWithReadinessData().AsNoTracking()
             .FirstOrDefault(row => row.Id == normSetId && row.ArchivedAt == null);
         if (normSet is null)
         {
@@ -73,7 +68,7 @@ internal sealed partial class EfInventoryWorkflowService
         var itemRows = normSet.Rows.Where(row => row.RowType == "item").ToList();
         var mappedRows = itemRows.Count(row => row.Mappings.Any(mapping => mapping.ArchivedAt == null));
         return Success(new InventoryPpeNormSetDetailDto(
-            MapNormSet(normSet),
+            MapReviewedNormSet(normSet),
             normSet.Rows.OrderBy(row => row.SortOrder).Select(MapNormRow).ToList(),
             itemRows.Count,
             mappedRows,
@@ -224,7 +219,7 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         using var publication = dbContext.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
-        var normSet = dbContext.InventoryPpeNormSets.Include(row => row.Rows)
+        var normSet = NormsWithReadinessData()
             .FirstOrDefault(row => row.Id == normSetId && row.Status == "draft" && row.ArchivedAt == null);
         if (normSet is null) return Failure<InventoryPpeNormSetDto>("normSetId", "Draft PPE norm set not found");
         if (normSet.Version != request.ExpectedVersion) return Failure<InventoryPpeNormSetDto>("conflict", "PPE norm set was changed by another user");
@@ -238,6 +233,10 @@ internal sealed partial class EfInventoryWorkflowService
         {
             return Failure<InventoryPpeNormSetDto>("scopeConfirmed", "PPE norm scope must be confirmed before publishing");
         }
+
+        var readiness = CheckNormReadiness(normSet);
+        if (!readiness.IsReady)
+            return Failure<InventoryPpeNormSetDto>("readiness", string.Join(" ", readiness.Blockers.Select(x => x.Message)));
 
         foreach (var active in dbContext.InventoryPpeNormSets.Where(row =>
             row.Id != normSet.Id

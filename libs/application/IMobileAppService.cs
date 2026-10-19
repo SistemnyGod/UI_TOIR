@@ -17,7 +17,7 @@ public interface IMobileAppService
 
     bool Logout(string accessToken);
 
-    MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false);
+    MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false, bool assignmentSnapshots = false);
 
     MobilePatrolReportPageDto? GetPatrolReports(string accessToken, int page, int pageSize, string? cursor = null);
 

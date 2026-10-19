@@ -46,5 +46,5 @@ public interface IInventoryCatalogCommandService
 
     InventoryCommandResult<InventoryStockBalanceDto> SetInitialStock(InventoryInitialStockDto request);
 
-    InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request);
+    InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request, Guid? actorUserId = null);
 }

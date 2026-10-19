@@ -87,10 +87,11 @@ public sealed class MobileController(
     [HttpGet("bootstrap")]
     public ActionResult<MobileBootstrapDto> Bootstrap()
     {
-        var pagingAppeals = Request.Headers["X-Patrol360-Mobile-Features"].ToString()
-            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Contains("patrolAppealsPaging", StringComparer.OrdinalIgnoreCase);
-        var bootstrap = mobileAppService.GetBootstrap(MobileAccessToken, pagingAppeals);
+        var features = Request.Headers["X-Patrol360-Mobile-Features"].ToString()
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var pagingAppeals = features.Contains("patrolAppealsPaging", StringComparer.OrdinalIgnoreCase);
+        var snapshots = features.Contains("assignmentSnapshots", StringComparer.OrdinalIgnoreCase);
+        var bootstrap = mobileAppService.GetBootstrap(MobileAccessToken, pagingAppeals, snapshots);
         return bootstrap is null ? Unauthorized() : Ok(bootstrap);
     }
 

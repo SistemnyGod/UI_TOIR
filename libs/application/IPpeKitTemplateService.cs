@@ -5,6 +5,8 @@ namespace Patrol360.Application;
 public interface IPpeKitTemplateService
 {
     IReadOnlyList<PpeKitTemplateDto> Get(Guid userId);
+    IReadOnlyList<PpeKitTemplateDto> GetLegacy();
+    InventoryCommandResult<PpeKitTemplateDto> BindLegacy(Guid id, BindLegacyPpeKitTemplateDto request, Guid userId, string userName);
     InventoryCommandResult<PpeKitTemplateDto> Create(CreatePpeKitTemplateDto request, Guid userId, string userName, bool canManageShared);
     InventoryCommandResult<PpeKitTemplateDto> Update(Guid id, UpdatePpeKitTemplateDto request, Guid userId, bool canManageShared);
     InventoryCommandResult<PpeKitTemplateDto> Rename(Guid id, RenamePpeKitTemplateDto request, Guid userId, bool canManageShared);

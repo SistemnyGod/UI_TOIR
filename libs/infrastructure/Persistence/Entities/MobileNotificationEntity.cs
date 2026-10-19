@@ -28,6 +28,9 @@ internal sealed class MobileNotificationEntity
 
     public int PushAttemptCount { get; set; }
 
+    // Provider acknowledgements survive worker restarts. Store hashes, never raw tokens.
+    public string[] PushDeliveredTokenHashes { get; set; } = [];
+
     public string PushLastError { get; set; } = string.Empty;
 
     public DateTimeOffset? PushSentAt { get; set; }

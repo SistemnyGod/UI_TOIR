@@ -243,7 +243,8 @@ public sealed record CreateInventoryOperationDto(
     decimal Quantity,
     Guid? EmployeeId = null,
     DateTimeOffset? MovedAt = null,
-    string? Comment = null);
+    string? Comment = null,
+    Guid? ClientOperationId = null);
 
 public sealed record InventoryOperationsModuleOptionsDto(
     IReadOnlyList<InventoryEmployeeDto> Employees,
@@ -445,7 +446,12 @@ public sealed record InventoryPpeNormSetDto(
     int RowsCount,
     string DepartmentName = "",
     IReadOnlyList<string>? PositionAliases = null,
-    bool ScopeConfirmed = false);
+    bool ScopeConfirmed = false,
+    PpeNormReadinessDto? Readiness = null);
+
+public sealed record PpeNormReadinessDto(bool IsReady, int RequiredCount, int ApprovedCount,
+    IReadOnlyList<PpeNormReadinessBlockerDto> Blockers);
+public sealed record PpeNormReadinessBlockerDto(string Code, Guid? RowId, string Message);
 
 public sealed record InventoryPpeNormRowDto(
     Guid Id,
@@ -498,7 +504,8 @@ public sealed record InventoryPpeNormMappingDto(
     decimal NormUnitsPerItem = 1m,
     string ApprovedBy = "",
     string ApprovalEvidence = "",
-    IReadOnlyList<InventoryItemStandardDto>? Standards = null);
+    IReadOnlyList<InventoryItemStandardDto>? Standards = null,
+    string ItemUnitSymbol = "");
 
 public sealed record InventoryPpeNormCandidateDto(
     Guid NormRowId,

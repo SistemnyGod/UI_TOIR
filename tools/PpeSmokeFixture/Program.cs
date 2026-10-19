@@ -10,6 +10,12 @@ public static class Program
 
     public static void Main()
     {
+        var audit = Environment.GetEnvironmentVariable("PATROL360_PPE_AUDIT_CONNECTION");
+        if (!string.IsNullOrWhiteSpace(audit))
+        {
+            PpeCopyAudit.Run(audit, Environment.GetEnvironmentVariable("PATROL360_PPE_AUDIT_OUTPUT") ?? throw new InvalidOperationException("Set PATROL360_PPE_AUDIT_OUTPUT."));
+            return;
+        }
         var connection = Environment.GetEnvironmentVariable("PATROL360_PPE_SMOKE_CONNECTION");
         var output = Environment.GetEnvironmentVariable("PATROL360_PPE_SMOKE_FIXTURE");
         if (string.IsNullOrWhiteSpace(connection)) throw new InvalidOperationException("Set PATROL360_PPE_SMOKE_CONNECTION.");
@@ -34,7 +40,7 @@ public static class Program
             var unit = new InventoryUnitEntity { Id = unitId, Name = $"Штука smoke {unitId:N}", Symbol = "шт." };
             var employee = new EmployeeEntity { Id = employeeId, FullName = $"Синтетический СИЗ Smoke {employeeId.ToString("N")[..6]}", PersonnelNo = $"PPE-{employeeId:N}"[..20], Department = $"Синтетический цех {employeeId:N}", Position = "Испытатель СИЗ", Status = "active" };
             var item = new InventoryItemEntity { Id = itemId, Name = $"Каска smoke {itemId:N}", Sku = $"PPE-{itemId:N}"[..20], UnitId = unitId, ItemKind = "ppe", NormItemName = "Каска защитная", ActualItemName = "Каска smoke", DefaultUnitPriceMinor = 12345, IsActive = true, TrackingType = "quantity", CreatedAt = now };
-            var norm = new InventoryPpeNormSetEntity { Id = normId, DepartmentName = employee.Department, PositionName = employee.Position, PositionAliasesJson = "[\"Испытатель СИЗ\"]", ScopeConfirmed = true, VersionName = $"smoke-{normId:N}", SourceName = "synthetic-api-smoke", Status = "active", Version = 1, CreatedAt = now, UpdatedAt = now };
+            var norm = new InventoryPpeNormSetEntity { Id = normId, DepartmentName = employee.Department, PositionName = employee.Position, PositionAliasesJson = "[\"Испытатель СИЗ\"]", ScopeConfirmed = true, VersionName = $"smoke-{normId:N}", SourceName = "synthetic-api-smoke", EffectiveFrom = DateOnly.FromDateTime(now.UtcDateTime).AddYears(-1), Status = "active", Version = 1, CreatedAt = now, UpdatedAt = now };
             var row = new InventoryPpeNormRowEntity { Id = rowId, NormSetId = normId, RowType = "item", SortOrder = 0, NormItemName = "Каска защитная", NormPoint = "smoke п.1", IssuePeriodText = "1 шт. на 12 мес.", Quantity = 1, QuantityText = "1 шт.", PeriodMonths = 12, LifeMonths = 12, UnitSymbol = "шт.", RequirementKey = Guid.NewGuid() };
             row.Mappings.Add(new InventoryPpeNormCatalogMappingEntity { Id = Guid.NewGuid(), NormRowId = rowId, ItemId = itemId, IsDefault = true, IsApproved = true, NormUnitsPerItem = 1, ApprovedBy = "synthetic-smoke", ApprovalEvidence = "synthetic smoke fixture", BrandModelArticle = "SMOKE-HELMET-1", DefaultUnitPriceMinor = 12345, CreatedAt = now, UpdatedAt = now });
             norm.Rows.Add(row);

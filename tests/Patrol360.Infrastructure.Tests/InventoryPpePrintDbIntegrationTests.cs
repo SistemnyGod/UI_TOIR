@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence;
+using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Tests;
 
@@ -25,7 +26,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         var item = CreatePpeItem(provider, "Старая каска", "Тест");
         var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(employee.Id, "Старая карточка")));
         Assert.True(card.Succeeded);
-        var line = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(card.Value!.Id,
+        var line = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider, card.Value!.Id,
             new UpsertInventoryPpeCardLineDto(item.Id, null, 1, 1_000, "issued", null, "Сохранить факт",
                 NormPoint: "", PrintItemName: "Старая каска", IssuePeriodText: "12 месяцев", IssuedAt: DateTimeOffset.UtcNow)));
         Assert.True(line.Succeeded);
@@ -90,7 +91,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(card.Value);
         var cardId = card.Value!.Id;
 
-        var section = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var section = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 sectionItem.Id,
@@ -122,7 +123,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.False(rejectedIssuedSection.Succeeded);
         Assert.True(rejectedIssuedSection.Errors.ContainsKey("status"));
 
-        var helmet = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var helmet = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 helmetItem.Id,
@@ -139,7 +140,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-3))));
         Assert.True(helmet.Succeeded);
 
-        var suit = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var suit = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 suitItem.Id,
@@ -156,7 +157,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-2))));
         Assert.True(suit.Succeeded);
 
-        var jacket = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var jacket = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 jacketItem.Id,
@@ -173,7 +174,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-1))));
         Assert.True(jacket.Succeeded);
 
-        var notIssued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var notIssued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 raincoatItem.Id,
@@ -256,7 +257,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(card.Value);
         var cardId = card.Value!.Id;
 
-        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var issued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 issuedItem.Id,
@@ -292,14 +293,13 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 PrintItemName: issuedNorm,
                 NormPoint: "p. 1.3.1 Appendix 2 updated",
                 IssuePeriodText: "pcs., 3 years",
-                IssuedAt: DateTimeOffset.UtcNow.AddDays(-1),
                 BrandModelArticle: "SafeBrand H1 updated",
                 QuantityText: "1 custom pcs. updated",
                 IsSectionTitle: false)));
         Assert.True(updated.Succeeded);
         Assert.NotNull(updated.Value);
 
-        var section = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var section = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 sectionItem.Id,
@@ -402,7 +402,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(card.Value);
         var cardId = card.Value!.Id;
 
-        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var issued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 issuedItem.Id,
@@ -418,7 +418,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-2))));
         Assert.True(issued.Succeeded);
 
-        var replacement = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var replacement = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 replacementItem.Id,
@@ -435,7 +435,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-2).AddMinutes(5))));
         Assert.True(replacement.Succeeded);
 
-        var returned = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var returned = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 returnedItem.Id,
@@ -452,7 +452,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.True(returned.Succeeded);
         Assert.NotNull(returned.Value);
 
-        var notIssued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var notIssued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 notIssuedItem.Id,
@@ -556,7 +556,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.True(card.Succeeded);
         Assert.NotNull(card.Value);
 
-        var line = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var line = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             card.Value!.Id,
             new UpsertInventoryPpeCardLineDto(
                 item.Id,
@@ -597,7 +597,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.True(card.Succeeded);
         Assert.NotNull(card.Value);
 
-        var line = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var line = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             card.Value!.Id,
             new UpsertInventoryPpeCardLineDto(
                 item.Id,
@@ -631,7 +631,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
     }
 
     [DbIntegrationFact]
-    public async Task PpeIssueReturnAndWriteOffCreateMovementDocumentsWithoutRestocking()
+    public async Task PpeIssueReturnAndWriteOffPreserveHistoryWithoutStockDocuments()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -644,20 +644,14 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(warehouse.Value);
         var item = CreatePpeItem(provider, "Каска защитная от механических воздействий", brand: "СОМЗ");
 
-        var initialStock = UseCommand(provider, command => command.SetInitialStock(new InventoryInitialStockDto(
-            item.Id,
-            warehouse.Value!.Id,
-            3,
-            DateTimeOffset.UtcNow,
-            "PPE lifecycle test stock")));
-        Assert.True(initialStock.Succeeded);
+        SeedHistoricalStock(provider, item.Id, warehouse.Value!.Id, 3);
 
         var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(employee.Id, "PPE movement lifecycle test")));
         Assert.True(card.Succeeded);
         Assert.NotNull(card.Value);
         var cardId = card.Value!.Id;
 
-        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var issued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 item.Id,
@@ -688,6 +682,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
             issued.Value!.Id,
             new UpdateInventoryStatusDto("returned", "Returned from employee")));
         Assert.True(returned.Succeeded);
+        Assert.Equal(issued.Value!.Quantity, returned.Value!.ReturnedQuantity);
         Assert.Equal(3, GetStock(provider, item.Id, warehouse.Value!.Id).StockAvailable);
 
         var returnedMovement = UseWorkflow(provider, workflow => workflow.GetPpeMovements(
@@ -696,19 +691,10 @@ public sealed class InventoryPpePrintDbIntegrationTests
             item.Id)).Rows.Single(row => row.LineId == issued.Value!.Id);
         Assert.Equal("returned", returnedMovement.Status);
         Assert.NotNull(returnedMovement.ReturnedAt);
-        var returnDocument = UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(
-                PageSize: 10,
-                Status: "ppe_return")))
-            .Rows
-            .Single(row =>
-                row.ItemName == item.Name &&
-                row.EmployeeName == employee.FullName &&
-                row.Quantity == 1);
-        Assert.Equal("ppe_return", returnDocument.Type);
-        Assert.Equal("ppe_return", returnDocument.Comment);
-        Assert.NotEqual(cardId, returnDocument.Id);
+        Assert.Empty(UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(PageSize: 10, Status: "ppe_return"))).Rows);
+        Assert.Null(issued.Value.WarehouseId);
 
-        var writeOffLine = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var writeOffLine = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             cardId,
             new UpsertInventoryPpeCardLineDto(
                 item.Id,
@@ -740,21 +726,11 @@ public sealed class InventoryPpePrintDbIntegrationTests
             item.Id)).Rows.Single(row => row.LineId == writeOffLine.Value!.Id);
         Assert.Equal("written_off", writtenOffMovement.Status);
         Assert.NotNull(writtenOffMovement.WrittenOffAt);
-        var writeOffDocument = UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(
-                PageSize: 10,
-                Status: "ppe_write_off")))
-            .Rows
-            .Single(row =>
-                row.ItemName == item.Name &&
-                row.EmployeeName == employee.FullName &&
-                row.Quantity == 0);
-        Assert.Equal("ppe_write_off", writeOffDocument.Type);
-        Assert.Equal("ppe_write_off", writeOffDocument.Comment);
-        Assert.NotEqual(cardId, writeOffDocument.Id);
+        Assert.Empty(UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(PageSize: 10, Status: "ppe_write_off"))).Rows);
     }
 
     [DbIntegrationFact]
-    public async Task PartialPpeReturnUsesReturnedQuantityForMovementDocument()
+    public async Task PartialPpeReturnsAccumulateWithoutStockDocuments()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -767,19 +743,13 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(warehouse.Value);
         var item = CreatePpeItem(provider, "Каска для частичного возврата", brand: "СОМЗ");
 
-        var initialStock = UseCommand(provider, command => command.SetInitialStock(new InventoryInitialStockDto(
-            item.Id,
-            warehouse.Value!.Id,
-            4,
-            DateTimeOffset.UtcNow,
-            "PPE partial return stock")));
-        Assert.True(initialStock.Succeeded);
+        SeedHistoricalStock(provider, item.Id, warehouse.Value!.Id, 4);
 
         var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(employee.Id, "PPE partial return test")));
         Assert.True(card.Succeeded);
         Assert.NotNull(card.Value);
 
-        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+        var issued = UseWorkflow(provider, workflow => SeedHistoricalPpeLine(provider,
             card.Value!.Id,
             new UpsertInventoryPpeCardLineDto(
                 item.Id,
@@ -797,6 +767,13 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.True(issued.Succeeded);
         Assert.NotNull(issued.Value);
 
+        var defective = UseWorkflow(provider, workflow => workflow.ApplyPpeLineAction(card.Value!.Id, issued.Value!.Id,
+            new ApplyInventoryPpeLineActionDto("defective", DateTimeOffset.UtcNow, Comment: "Обнаружен дефект")));
+        Assert.True(defective.Succeeded);
+        Assert.Equal("defective", defective.Value!.Status);
+        Assert.Null(defective.Value.WriteOffActDate);
+        Assert.False(UseWorkflow(provider, workflow => workflow.ArchivePpeCardLine(card.Value!.Id, issued.Value!.Id)).Succeeded);
+
         var returned = UseWorkflow(provider, workflow => workflow.ApplyPpeLineAction(
             card.Value!.Id,
             issued.Value!.Id,
@@ -809,15 +786,25 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.NotNull(returned.Value);
         Assert.Equal(0.5m, returned.Value!.ReturnedQuantity);
 
-        var returnDocument = UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(
-                PageSize: 10,
-                Status: "ppe_return")))
-            .Rows
-            .Single();
-        Assert.Equal(0.5m, returnDocument.Quantity);
+        Assert.Equal("issued", returned.Value.Status);
+        Assert.Empty(UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(PageSize: 10, Status: "ppe_return"))).Rows);
+        var completed = UseWorkflow(provider, workflow => workflow.ApplyPpeLineAction(card.Value.Id, issued.Value.Id,
+            new ApplyInventoryPpeLineActionDto("returned", DateTimeOffset.UtcNow, Quantity: 1.5m)));
+        Assert.True(completed.Succeeded);
+        Assert.Equal(2m, completed.Value!.ReturnedQuantity);
+        Assert.Equal("returned", completed.Value.Status);
+        var duplicate = UseWorkflow(provider, workflow => workflow.ApplyPpeLineAction(card.Value.Id, issued.Value.Id,
+            new ApplyInventoryPpeLineActionDto("returned", DateTimeOffset.UtcNow, Quantity: 0.5m)));
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal(4m, GetStock(provider, item.Id, warehouse.Value.Id).StockAvailable);
     }
     [DbIntegrationFact]
-    public async Task InventoryIssueOperationCanBeRecordedWithoutUserWarehouse()
+    public Task InventoryIssueOperationCanBeRecordedWithoutUserWarehouse() => RecordIssueWithoutStock(null);
+
+    [DbIntegrationFact]
+    public Task ObsoleteWarehouseIdCannotEnableStockAccounting() => RecordIssueWithoutStock("0169c100-726b-490e-84b2-433a3b5cc074");
+
+    private static async Task RecordIssueWithoutStock(string? obsoleteWarehouseId)
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -830,7 +817,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         var created = UseCommand(provider, command => command.CreateOperation(new CreateInventoryOperationDto(
             "issue",
             item.Id,
-            WarehouseId: null,
+            WarehouseId: obsoleteWarehouseId is null ? null : Guid.Parse(obsoleteWarehouseId),
             Quantity: 2,
             EmployeeId: employee.Id,
             MovedAt: DateTimeOffset.UtcNow,
@@ -851,6 +838,40 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.Equal(item.Name, document.ItemName);
         Assert.Equal(-2, document.Quantity);
         Assert.Equal(string.Empty, document.WarehouseName);
+    }
+
+    [DbIntegrationFact]
+    public async Task InitialStockCommandCannotChangeHistoricalBalances()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        var item = CreatePpeItem(provider, "Проверка отключённого складского API", brand: "");
+        var warehouse = UseCommand(provider, command => command.CreateWarehouse(new CreateInventoryWarehouseDto("Исторический склад", true))).Value!;
+        SeedHistoricalStock(provider, item.Id, warehouse.Id, 3);
+        var result = UseCommand(provider, command => command.SetInitialStock(new InventoryInitialStockDto(item.Id, warehouse.Id, 100)));
+        Assert.False(result.Succeeded);
+        Assert.Contains("stockAccounting", result.Errors.Keys);
+        Assert.Equal(3, GetStock(provider, item.Id, warehouse.Id).StockPhysical);
+        using var scope = provider.CreateScope();
+        Assert.Single(scope.ServiceProvider.GetRequiredService<Patrol360DbContext>().InventoryStockMoves.Where(move => move.ItemId == item.Id));
+    }
+
+    private static void SeedHistoricalStock(ServiceProvider provider, Guid itemId, Guid warehouseId, decimal quantity)
+    {
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        db.InventoryStockMoves.Add(new InventoryStockMoveEntity
+        {
+            Id = Guid.NewGuid(),
+            ItemId = itemId,
+            WarehouseId = warehouseId,
+            QuantityDelta = quantity,
+            MovedAt = DateTimeOffset.UtcNow,
+            MoveType = "initial_balance",
+            ReferenceType = "historical_test_fixture"
+        });
+        db.SaveChanges();
     }
 
     private static ServiceProvider BuildProvider(string connectionString)
@@ -875,6 +896,35 @@ public sealed class InventoryPpePrintDbIntegrationTests
     {
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IInventoryWorkflowService>());
+    }
+
+    // Print/return tests exercise pre-existing legacy data, not permission to issue
+    // new PPE without reviewed norms. Seed the historical state directly in the test DB.
+    private static InventoryCommandResult<InventoryPpeCardLineDto> SeedHistoricalPpeLine(
+        ServiceProvider provider, Guid cardId, UpsertInventoryPpeCardLineDto request)
+    {
+        var historical = request.Status is "issued" or "partial" or "replacement" or "reissued" or "returned" or "written_off" or "defective";
+        var created = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(cardId,
+            historical ? request with { Status = "not_issued", IssuedAt = null } : request));
+        if (!created.Succeeded || !historical) return created;
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        var line = context.InventoryPpeCardLines.Single(x => x.Id == created.Value!.Id);
+        line.Status = request.Status!;
+        line.IssuedAt = request.IssuedAt ?? DateTimeOffset.UtcNow;
+        context.Set<Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEventEntity>().Add(new()
+        {
+            Id = Guid.NewGuid(),
+            LineId = line.Id,
+            EventType = "issued",
+            FromStatus = "not_issued",
+            ToStatus = line.Status,
+            Comment = "Historical test fixture",
+            CreatedAt = line.IssuedAt.Value
+        });
+        context.SaveChanges();
+        var card = scope.ServiceProvider.GetRequiredService<IInventoryWorkflowService>().GetPpeCard(cardId);
+        return new(card.Value!.Lines.Single(x => x.Id == line.Id), new Dictionary<string, string[]>());
     }
 
     private static InventoryItemDto CreatePpeItem(

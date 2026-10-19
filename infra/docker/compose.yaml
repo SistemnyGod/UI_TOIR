@@ -137,7 +137,7 @@ services:
       - ./certs/patrol360.local.crt:/etc/caddy/certs/patrol360.local.crt:ro
       - ./certs/patrol360.local.key:/etc/caddy/certs/patrol360.local.key:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider --max-redirect=0 http://127.0.0.1/health/ready"]
+      test: ["CMD-SHELL", "wget -q --spider -T 5 http://127.0.0.1/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 4

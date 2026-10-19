@@ -14,6 +14,25 @@ namespace Patrol360.Infrastructure.Tests;
 public sealed class PpeKitTemplateDbTests
 {
     [DbIntegrationFact]
+    public async Task LegacyTemplateRequiresExplicitBindingAndDoesNotApproveMapping()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        await using var context = Context(database.ConnectionString);
+        var fixture = SeedNorm(context); fixture.Mapping.IsApproved = false;
+        var legacy = new InventoryPpeIssueTemplateEntity { Id = Guid.NewGuid(), Name = "Наследованный комплект", Version = 1 };
+        context.Add(legacy); context.SaveChanges();
+        var service = new EfPpeKitTemplateService(context); var owner = Guid.NewGuid();
+        Assert.Single(service.GetLegacy()); Assert.Empty(service.Get(owner));
+        var lines = Request(fixture, legacy.Name, false).Lines;
+        var invalid = service.BindLegacy(legacy.Id, new(1, Guid.NewGuid(), false, lines), owner, "Проверяющий");
+        Assert.False(invalid.Succeeded);
+        var bound = service.BindLegacy(legacy.Id, new(1, fixture.Norm.Id, false, lines), owner, "Проверяющий");
+        Assert.True(bound.Succeeded); Assert.Equal(owner, bound.Value!.OwnerUserId); Assert.Equal(fixture.Norm.Id, bound.Value.NormSetId);
+        Assert.Empty(service.GetLegacy()); Assert.False(fixture.Mapping.IsApproved);
+        Assert.Contains("mapping", service.Apply(legacy.Id, fixture.Norm.Id, owner).Errors.Keys);
+        Assert.Contains("conflict", service.BindLegacy(legacy.Id, new(1, fixture.Norm.Id, false, lines), Guid.NewGuid(), "Другой").Errors.Keys);
+    }
+    [DbIntegrationFact]
     public async Task ExistingTemplateCanAddAndRemoveCompositionLines()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
