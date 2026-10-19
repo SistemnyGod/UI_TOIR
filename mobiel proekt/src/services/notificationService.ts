@@ -10,6 +10,7 @@ import { createNotificationIdWindow, readNotificationData } from "./notification
 import { createScopedSingleFlight } from "./scopedSingleFlight";
 import {
   listPendingNotificationReads,
+  markAllLocalNotificationsRead,
   markLocalNotificationRead,
   saveDevicePushToken,
   saveNotifications
@@ -119,6 +120,39 @@ export async function markMobileNotificationRead(notificationId: string) {
   const notification = await markNotificationRead(notificationId);
   await markLocalNotificationRead(notificationId, notification.readAt ?? localReadAt, false, context);
   return notification;
+}
+
+export type MarkAllNotificationsResult = { marked: number; delivered: number; pending: number };
+
+/**
+ * "Прочитать все". The server has no bulk endpoint, so every notification is
+ * acknowledged through the same per-item read endpoint as a single tap. The
+ * local read is committed first; reads that cannot be delivered stay
+ * read_sync_pending and are retried by syncMobileNotifications.
+ */
+export async function markAllMobileNotificationsRead(): Promise<MarkAllNotificationsResult> {
+  const context = await captureDataOwnerContext();
+  const localReadAt = new Date().toISOString();
+  const ids = await markAllLocalNotificationsRead(localReadAt, context);
+  await assertDataOwnerContext(context);
+  if (ids.length === 0) return { marked: 0, delivered: 0, pending: 0 };
+  emitSyncEvent({ acceptedOperationIds: [], completedAssignmentIds: [], refreshedZones: ['notifications'] });
+  let delivered = 0;
+  for (const notificationId of ids) {
+    await assertDataOwnerContext(context);
+    try {
+      const notification = await markNotificationRead(notificationId);
+      await markLocalNotificationRead(notificationId, notification.readAt ?? localReadAt, false, context);
+      delivered++;
+    } catch {
+      // Without a connection every further request would wait for its own
+      // timeout. Leave the rest pending for the next connected refresh, but
+      // do not report a changed session as a delivery problem.
+      await assertDataOwnerContext(context);
+      break;
+    }
+  }
+  return { marked: ids.length, delivered, pending: ids.length - delivered };
 }
 
 export function subscribeToMobilePushEvents({

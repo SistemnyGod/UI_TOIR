@@ -19,7 +19,8 @@ export function useKeyboardVisible() {
   }, []);
   return visible;
 }
-export function NavigationBar({ active, onSelect }: { active: string; onSelect: (name: typeof navigationItems[number]["name"]) => void }) {
+export type NavigationBadges = Partial<Record<typeof navigationItems[number]["name"], { label: string; accessibilityLabel: string } | null>>;
+export function NavigationBar({ active, onSelect, badges }: { active: string; onSelect: (name: typeof navigationItems[number]["name"]) => void; badges?: NavigationBadges }) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardVisible();
@@ -28,13 +29,16 @@ export function NavigationBar({ active, onSelect }: { active: string; onSelect: 
   if (keyboard) return null;
   return <View style={{ flexDirection: "row", flexWrap: largeText ? "wrap" : "nowrap", paddingHorizontal: 4, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8),
     borderTopWidth: 1, borderTopColor: colors.navBorder, backgroundColor: colors.navBackground }}>
-    {navigationItems.map(item => <Pressable key={item.name} accessibilityRole="tab" accessibilityLabel={item.label}
+    {navigationItems.map(item => { const badge = badges?.[item.name]; return <Pressable key={item.name} accessibilityRole="tab" accessibilityLabel={badge ? `${item.label}, ${badge.accessibilityLabel}` : item.label}
       accessibilityState={{ selected: active === item.name }} onPress={() => onSelect(item.name)}
       style={({ pressed }) => ({ flex: largeText ? undefined : 1, width: largeText ? "50%" : undefined, flexDirection: largeText ? "row" : "column", minWidth: 0, minHeight: 56, alignItems: "center", justifyContent: "center",
         paddingVertical: 8, paddingHorizontal: 2, gap: 4, borderRadius: 12, opacity: pressed ? 0.75 : 1,
         backgroundColor: active === item.name ? colors.backgroundAccent : "transparent" })}>
-      <Ionicons size={24} name={active === item.name ? item.activeIcon : item.icon} color={active === item.name ? colors.primary : colors.mutedText} />
+      <View><Ionicons size={24} name={active === item.name ? item.activeIcon : item.icon} color={active === item.name ? colors.primary : colors.mutedText} />
+        {badge ? <View style={{ position: "absolute", top: -6, left: 14, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary, borderWidth: 2, borderColor: colors.navBackground }}>
+          <Text style={{ fontSize: 11, lineHeight: 14, fontWeight: "700", color: colors.onPrimary }}>{badge.label}</Text>
+        </View> : null}</View>
       <Text style={{ flexShrink: 1, fontSize: 14, lineHeight: 20, textAlign: "center", fontWeight: "600", color: active === item.name ? colors.primary : colors.mutedText }}>{item.label}</Text>
-    </Pressable>)}
+    </Pressable>; })}
   </View>;
 }
