@@ -427,6 +427,8 @@ export function ScanNfcScreen() {
       {progress ? <ScanProgress routeName={routeName || 'Сканирование NFC'} completed={progress.completed} total={progress.total} nextPoint={nextPoint} /> : null}
       <ScanMessage
         hero
+        matrix
+        terminal='> NFC 13,56 МГц · ожидание метки'
         scanning={(status === 'reading' || status === 'retrying') && !actionsOpen}
         message={progressError ?? message}
         hint={progressError ? null : hint}
