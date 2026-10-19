@@ -20,6 +20,7 @@ import { ScreenList } from "@/ui/Screen";
 import { SelectionTabs } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
 import { Rise } from "@/ui/motion";
+import { EmptyState } from "@/ui/EmptyState";
 import { font } from "@/ui/typography";
 import { Ionicons } from "@expo/vector-icons";
 import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
@@ -203,10 +204,7 @@ export function RequestBoardScreen() {
           <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void handleRefresh()} variant="secondary" />
         </Card>
       ) : (
-        <Card>
-          <Text style={[font(800), styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
-          <Text style={[font(600), styles.text, { color: colors.mutedText }]}>Потяните экран вниз для обновления или выберите другую вкладку.</Text>
-        </Card>
+        <EmptyState icon="file-tray-outline" title="В этой вкладке пока пусто" text="Потяните экран вниз для обновления или выберите другую вкладку." />
       )}
       renderItem={renderItem}
       title={selectedRequestId ? "" : "Обход"}

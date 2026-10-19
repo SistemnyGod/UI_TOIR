@@ -31,6 +31,7 @@ import { repeatWorkDroppedNotice } from "@/domain/emu/repeatWorkPolicy";
 import { ActionSheet, type ActionSheetItem } from "@/ui/ActionSheet";
 
 import { Card } from "@/ui/Card";
+import { EmptyState } from "@/ui/EmptyState";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
@@ -787,16 +788,21 @@ export function WorkAccountingScreen() {
       bottomAction={<View style={{ alignItems: "center" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Создать работу или замечание"
           accessibilityState={{ disabled: loading }} disabled={loading} onPress={() => setCreateMenuOpen(true)}
-          style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-            backgroundColor: loading ? colors.disabled : pressed ? colors.primaryPressed : colors.primary })}>
-          <Ionicons name="add" size={28} color={loading ? colors.disabledText : colors.onPrimary} />
+          style={({ pressed }) => ({ height: 56, paddingHorizontal: 22, borderRadius: 20, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center",
+            backgroundColor: loading ? colors.disabled : pressed ? colors.accentPressed : colors.accent, transform: [{ scale: pressed ? 0.96 : 1 }],
+            boxShadow: loading ? undefined : "0px 10px 22px rgba(36, 87, 245, 0.38)" })}>
+          <Ionicons name="add" size={24} color={loading ? colors.disabledText : colors.onAccent} />
+          <Text style={{ fontFamily: "Manrope_800ExtraBold", fontSize: 16, color: loading ? colors.disabledText : colors.onAccent }}>Создать</Text>
         </Pressable>
       </View>}>
-      <View style={{ paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <Text style={styles.helperText}>{tab === "remarks" ? "Замечания" : taskFilter === "history" ? "История работ" : "Активные работы"}</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 4, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text accessibilityRole="header" style={{ fontFamily: "Manrope_800ExtraBold", fontSize: 30, lineHeight: 36, letterSpacing: -0.6, color: colors.text }}>Работы</Text>
+          <Text style={styles.helperText}>{tab === "remarks" ? "Замечания" : taskFilter === "history" ? "История работ" : "Активные работы"}</Text>
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Настроить фильтр" onPress={() => setFilterMenuOpen(true)}
-          style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name="options-outline" size={24} color={colors.primary} />
+          style={({ pressed }) => ({ width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+          <Ionicons name="options-outline" size={22} color={colors.primary} />
         </Pressable>
       </View>
       <FlatList<WorkItemDto | ShiftRemark>
@@ -954,11 +960,5 @@ export function WorkAccountingScreen() {
 }
 
 function EmptyCard({ text, title }: { text: string; title: string }) {
-  const styles = useWorkAccountingStyles();
-  return (
-    <Card>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.text}>{text}</Text>
-    </Card>
-  );
+  return <EmptyState icon={title === "Работ нет" ? "construct-outline" : "chatbox-ellipses-outline"} title={title} text={text} />;
 }

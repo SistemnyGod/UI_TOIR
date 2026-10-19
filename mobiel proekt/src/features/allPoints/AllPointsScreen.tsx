@@ -18,6 +18,7 @@ import { SelectionTabs } from "@/ui/SelectionTabs";
 import { retainEqualItems } from "@/sync/retainEqualItems";
 import { StatusPill } from "@/ui/StatusPill";
 import { font } from "@/ui/typography";
+import { Rise } from "@/ui/motion";
 
 type Filter = "all" | "attention" | "pending" | "deferred" | "issue" | "skipped";
 
@@ -112,12 +113,12 @@ export function AllPointsScreen() {
       : filtered;
   }, [filter, points, reasonsByPoint]);
 
-  const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
-      <PointRow
+  const renderItem: ListRenderItem<PointListItem> = ({ item, index }) => (
+      <Rise index={index}><PointRow
         onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}${filter === 'attention' && assignmentStatus === 'inProgress' ? '/fill' : ''}` as never)}
         point={item}
         reasons={reasonsByPoint.get(item.pointId)}
-      />
+      /></Rise>
   );
 
   return (

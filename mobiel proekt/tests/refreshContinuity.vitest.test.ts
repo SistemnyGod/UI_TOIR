@@ -38,7 +38,7 @@ it('a refresh failure produces one dismissible notice without duplicating it in 
   await act(async () => list().props.onRefresh());
   expect(list().props.floatingNotice.props.message).toBe('Сбой синхронизации');
   expect(screen!.root.findAllByType('Text' as any).some(node => node.children.includes('Сбой синхронизации'))).toBe(false);
-  expect(list().props.ListEmptyComponent.props.children[0].props.children).toBe('В этой вкладке пока пусто');
+  expect(list().props.ListEmptyComponent.props.title).toBe('В этой вкладке пока пусто');
 });
 let screen: ReactTestRenderer | undefined;
 const list = () => screen!.root.findByType('ScreenList' as any);

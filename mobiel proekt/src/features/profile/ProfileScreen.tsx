@@ -7,6 +7,7 @@ import { useConnectionStatus } from "@/core/connectionStatus";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
+import { Rise } from "@/ui/motion";
 import { StatusMessage } from "@/ui/StatusMessage";
 import { ProfileGroup, ProfileRow } from "./ProfileComponents";
 import { useProfileSummary } from "./useProfileSummary";
@@ -20,15 +21,15 @@ export function ProfileScreen() {
   const [themeOpen, setThemeOpen] = useState(false); const [logoutOpen, setLogoutOpen] = useState(false); const [busy, setBusy] = useState(false); const lock = useRef(false); const [error, setError] = useState<string | null>(null);
   async function logout() { if (lock.current) return; lock.current = true; setBusy(true); setError(null); try { await signOut(); router.replace("/(auth)/login"); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось выйти. Повторите попытку."); } finally { lock.current = false; setBusy(false); } }
   return <Screen compactHeader title="Профиль" subtitle="Аккаунт, уведомления и настройки">
-    <ProfileGroup><ProfileRow title="Учётная запись" detail={identity.account} detailLines={2} last onPress={() => router.push("/settings/account")} leading={<View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.backgroundAccent, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontFamily: "Manrope_700Bold", color: colors.primary }}>{identity.account.charAt(0).toUpperCase()}</Text></View>} /></ProfileGroup>
-    <ProfileGroup>
+    <Rise index={0}><ProfileGroup><ProfileRow title="Учётная запись" detail={identity.account} detailLines={2} last onPress={() => router.push("/settings/account")} leading={<View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.backgroundAccent, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontFamily: "Manrope_700Bold", color: colors.primary }}>{identity.account.charAt(0).toUpperCase()}</Text></View>} /></ProfileGroup></Rise>
+    <Rise index={1}><ProfileGroup>
       <ProfileRow icon="cloud-upload-outline" title="Связь и отправка" detail={`${connectionLabel(connection)} · ${summaryError ? "очередь недоступна" : `${summary.pending} действий ожидают`}`} onPress={() => router.push("/settings/connection" as never)} />
       <ProfileRow icon="cloud-outline" title="Офлайн-доступ" detail={!summaryError && summary.snapshotReady ? "Готовность подтверждена" : "Готовность не подтверждена"} onPress={() => router.push("/settings/offline" as never)} />
       <ProfileRow icon="notifications-outline" title="Уведомления" detail={identity.unread === null ? "Данные недоступны" : `${identity.unread} непрочитанных`} onPress={() => router.push("/settings/notifications" as never)} />
       <ProfileRow icon="color-palette-outline" title="Оформление" detail={themeLabel(preference)} onPress={() => setThemeOpen(true)} />
       <ProfileRow icon="settings-outline" title="Дополнительно" onPress={() => router.push("/settings")} last />
-    </ProfileGroup>
-    <ProfileGroup><ProfileRow icon="log-out-outline" title="Выйти" danger last trailing={<View />} onPress={() => { setError(null); setLogoutOpen(true); }} /></ProfileGroup>
+    </ProfileGroup></Rise>
+    <Rise index={2}><ProfileGroup><ProfileRow icon="log-out-outline" title="Выйти" danger last trailing={<View />} onPress={() => { setError(null); setLogoutOpen(true); }} /></ProfileGroup></Rise>
     <ThemePicker visible={themeOpen} onClose={() => setThemeOpen(false)} />
     <Modal transparent visible={logoutOpen} animationType="none" onRequestClose={() => { if (!lock.current) setLogoutOpen(false); }}><View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: colors.scrim }}><View accessibilityViewIsModal style={{ maxHeight: "90%", borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 18 }}><ScrollView contentContainerStyle={{ gap: 16 }}>
       <Ionicons name="alert-circle" size={42} color={colors.warning} style={{ alignSelf: "center" }} />

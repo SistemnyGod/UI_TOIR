@@ -5,7 +5,7 @@ import { unreadBadgeLabel, useUnreadNotificationCount } from "@/features/profile
 
 export default function TabsLayout() {
   const unread = useUnreadNotificationCount(); const unreadLabel = unreadBadgeLabel(unread);
-  return <Tabs detachInactiveScreens={false} screenOptions={{ headerShown: false, lazy: true, animation: "none", tabBarHideOnKeyboard: true }}
+  return <Tabs detachInactiveScreens={false} screenOptions={{ headerShown: false, lazy: true, animation: "shift", transitionSpec: { animation: "timing", config: { duration: 220 } }, tabBarHideOnKeyboard: true }}
     tabBar={({ state, navigation }) => <NavigationBar active={state.routes[state.index].name} badges={{ profile: unreadLabel ? { label: unreadLabel, accessibilityLabel: `${unread} непрочитанных уведомлений` } : null }} onSelect={name => {
       const route = state.routes.find(item => item.name === name);
       if (!route) return;

@@ -229,12 +229,12 @@ function openNotificationTarget(response: Notifications.NotificationResponse) {
 }
 
 function RootStack() {
-  const { statusBarStyle } = useAppTheme();
+  const { colors, statusBarStyle } = useAppTheme();
 
   return (
     <>
       <StatusBar style={statusBarStyle} />
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false, animation: "slide_from_right", animationDuration: 260, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
