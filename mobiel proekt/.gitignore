@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 build-output/
+build-output-*/
 android/
 ios/
 *.jks
