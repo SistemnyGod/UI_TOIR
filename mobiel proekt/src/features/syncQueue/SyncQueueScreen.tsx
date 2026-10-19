@@ -22,6 +22,8 @@ import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { softShadow } from "@/ui/typography";
+import { deliveryStages, QueueDeliveryTimeline, QueueIconTile } from "@/features/syncQueue/QueueDeliveryTimeline";
 
 type SyncQueueState = {
   commands: SyncQueueCommandItem[];
@@ -228,14 +230,15 @@ export function SyncQueueScreen() {
       ) : null}
 
       {state.commands.length > 0 ? (
-        <Card>
+        <View style={styles.section}>
           <Text style={[styles.title, { color: colors.text }]}>Операции синхронизации</Text>
           {state.commands.map((command) => (
             <View
               key={command.clientOperationId}
-              style={[styles.queueItem, { borderColor: colors.border }]}
+              style={[styles.queueItem, queueCardStyle(colors, statusTone(command.status, command.resolutionStatus))]}
             >
               <View style={styles.itemTop}>
+                <QueueIconTile icon={commandIcon(command.commandType)} tone={statusTone(command.status, command.resolutionStatus)} />
                 <View style={styles.itemTitleBox}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>{commandTitle(command)}</Text>
                   <Text style={[styles.text, { color: colors.mutedText }]}>
@@ -244,7 +247,8 @@ export function SyncQueueScreen() {
                 </View>
                 <StatusPill label={statusLabel(command.status, command.resolutionStatus)} tone={statusTone(command.status, command.resolutionStatus)} />
               </View>
-                            <View style={styles.metaGrid}>
+              <QueueDeliveryTimeline stages={deliveryStages(command, formatDateTime)} />
+              <View style={[styles.metaGrid, { backgroundColor: colors.backgroundAccent }]}>
                 <Meta label="Попытки" value={String(command.attemptCount)} />
                 <Meta label="Последняя попытка" value={formatDateTime(command.lastAttemptAt)} />
                 <Meta label="Следующая попытка" value={formatDateTime(command.nextAttemptAt)} />
@@ -346,18 +350,16 @@ export function SyncQueueScreen() {
               ) : null}
             </View>
           ))}
-        </Card>
+        </View>
       ) : null}
 
       {state.files.length > 0 ? (
-        <Card>
+        <View style={styles.section}>
           <Text style={[styles.title, { color: colors.text }]}>Вложения</Text>
           {state.files.map((file) => (
-            <View key={file.clientFileId} style={[styles.queueItem, { borderColor: colors.border }]}>
+            <View key={file.clientFileId} style={[styles.queueItem, queueCardStyle(colors, statusTone(file.status))]}>
               <View style={styles.itemTop}>
-                <View style={[styles.fileIconBox, { backgroundColor: colors.backgroundAccent }]}>
-                  <Ionicons color={colors.primary} name={file.mediaKind === "video" ? "videocam-outline" : "image-outline"} size={22} />
-                </View>
+                <QueueIconTile icon={file.mediaKind === "video" ? "videocam-outline" : "image-outline"} tone={statusTone(file.status) === "danger" ? "danger" : "neutral"} />
                 <View style={styles.itemTitleBox}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>{file.mediaKind === "video" ? "Видео" : "Фото"}</Text>
                   <Text style={[styles.text, { color: colors.mutedText }]} numberOfLines={2}>
@@ -366,7 +368,8 @@ export function SyncQueueScreen() {
                 </View>
                 <StatusPill label={fileStatusLabel(file.status)} tone={statusTone(file.status)} />
               </View>
-                            <View style={styles.metaGrid}>
+              <QueueDeliveryTimeline stages={deliveryStages({ ...file, createdAtLocal: file.createdAtLocal ?? null, lastAttemptAt: file.lastAttemptAt ?? null, nextAttemptAt: file.nextAttemptAt ?? null, attemptCount: file.attemptCount ?? 0 }, formatDateTime)} />
+              <View style={[styles.metaGrid, { backgroundColor: colors.backgroundAccent }]}>
                 <Meta label="Попытки" value={String(file.attemptCount ?? 0)} />
                 <Meta label="Последняя попытка" value={formatDateTime(file.lastAttemptAt ?? null)} />
                 <Meta label="Следующая попытка" value={formatDateTime(file.nextAttemptAt ?? null)} />
@@ -387,7 +390,7 @@ export function SyncQueueScreen() {
               ) : null}
             </View>
           ))}
-        </Card>
+        </View>
       ) : null}
 
       <ActionSheet
@@ -442,6 +445,20 @@ function fileSubject(file: SyncQueueFileItem) {
   return "Вложение к отчёту";
 }
 
+/** Each queue entry is its own card; entries that need a decision get a danger outline. */
+function queueCardStyle(colors: Partial<ThemeColors>, tone: "success" | "warning" | "danger") {
+  return [{ backgroundColor: colors.card, borderColor: tone === "danger" ? colors.danger : colors.cardBorder }, softShadow(colors.shadow ?? "transparent", 1)];
+}
+
+function commandIcon(commandType: string): keyof typeof Ionicons.glyphMap {
+  if (commandType === "completePatrolAssignment") return "document-text-outline";
+  if (commandType === "switchPatrolAssignment") return "swap-horizontal-outline";
+  if (/Point|Photo/.test(commandType)) return "location-outline";
+  if (/WorkTask|PlannedWork/.test(commandType)) return "construct-outline";
+  if (/Remark|Appeal/.test(commandType)) return "chatbubble-ellipses-outline";
+  return "map-outline";
+}
+
 function warningBox(colors: Partial<ThemeColors>) {
   return { backgroundColor: colors.warningSurface, borderColor: colors.warning, color: colors.warning };
 }
@@ -453,7 +470,7 @@ function dangerBox(colors: Partial<ThemeColors>) {
 function Meta({ label, value }: { label: string; value: string }) {
   const { colors } = useAppTheme();
   return (
-    <View style={[styles.meta, { backgroundColor: colors.backgroundAccent }]}>
+    <View style={[styles.meta, { backgroundColor: colors.card }]}>
       <Text style={[styles.metaLabel, { color: colors.mutedText }]}>{label}</Text>
       <Text style={[styles.metaValue, { color: colors.text }]}>{value}</Text>
     </View>
@@ -671,13 +688,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     padding: 10
   },
-  fileIconBox: {
-    alignItems: "center",
-    borderRadius: 12,
-    height: 42,
-    justifyContent: "center",
-    width: 42
-  },
   feedback: {
     borderRadius: 10,
     borderWidth: 1,
@@ -717,9 +727,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   metaGrid: {
+    borderRadius: 14,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8
+    gap: 8,
+    padding: 8
   },
   metaLabel: {
     fontSize: 11,
@@ -749,10 +761,13 @@ const styles = StyleSheet.create({
     padding: 10
   },
   queueItem: {
-    borderRadius: 12,
+    borderRadius: 22,
     borderWidth: 1,
-    gap: 10,
-    padding: 12
+    gap: 12,
+    padding: 14
+  },
+  section: {
+    gap: 12
   },
   text: {
     fontSize: 14,

@@ -22,6 +22,7 @@ import { useConnectionStatus } from "@/core/connectionStatus";
 import { useStableListAnchor } from './useStableListAnchor';
 import { ClockSkewNotice } from './ClockSkewNotice';
 import { BrandLogo } from './BrandMark';
+import { GradientFill } from './GradientFill';
 import { font, softShadow } from './typography';
 
 type ScreenProps = {
@@ -152,8 +153,7 @@ function ScreenBackground() {
 
   return (
     <View pointerEvents="none" style={styles.backgroundLayer}>
-      <View style={[styles.topWash, { backgroundColor: colors.header }]} />
-      <View style={[styles.topWashFade, { backgroundColor: colors.header }]} />
+      <GradientFill colors={colors} kind="header" style={styles.topWash} />
       <View style={[styles.topGlow, { backgroundColor: colors.brand }]} />
     </View>
   );
@@ -231,14 +231,10 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0
   },
+  /** Header wash: fades from the header tint into the page background. */
   topWash: {
-    height: 120,
-    width: "100%"
-  },
-  topWashFade: {
-    height: 80,
-    opacity: 0.45,
-    width: "100%"
+    bottom: undefined,
+    height: 260
   },
   topGlow: {
     borderRadius: 999,

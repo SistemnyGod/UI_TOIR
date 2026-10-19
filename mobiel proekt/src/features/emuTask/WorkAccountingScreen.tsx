@@ -17,7 +17,8 @@ import { completeWorkTaskLocally, createRepeatWorkDraft, createWorkTaskLocally, 
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import type { LocalWorkItemsFilter } from "@/db/repositories/workTaskRepository";
 
-import { formatDateTime, formatParticipants, formatShortName, formatWorkAttachments, workDeliveryPresentation, remarkStatusLabel, remarkStatusTone, statusLabel, statusTone, useWorkAccountingStyles } from "@/features/emuTask/WorkAccountingPresentation";
+import { formatDateTime, formatShortName, remarkStatusLabel, remarkStatusTone, useWorkAccountingStyles } from "@/features/emuTask/WorkAccountingPresentation";
+import { WorkTaskCard } from "@/features/emuTask/WorkTaskCard";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { attachRemarkMediaFromGallery, attachRemarkPhotoFromCamera, attachRemarkVideoFromCamera, attachWorkMediaFromGallery, attachWorkPhotoFromCamera, attachWorkVideoFromCamera } from "@/services/mediaAttachmentService";
 import { loadMoreWorkItems, loadWorkItemsOfflineFirst } from "@/services/workTaskService";
@@ -811,20 +812,7 @@ export function WorkAccountingScreen() {
         renderItem={({ item }) => tab === "tasks" ? (() => {
           const task = item as WorkItemDto;
           const primary = getTaskPrimaryAction(task, { onStart: item => void openParticipationAction("start", item), onJoin: item => void openParticipationAction("join", item), onResume: task => void applyTaskAction(() => resumeWorkTaskLocally(task as WorkTaskDto, "Продолжение работы"), "Работа продолжена", "Не удалось продолжить"), onComplete: task => void openCompleteTask(task as WorkTaskDto) });
-          return <Card style={{ borderRadius: 12, padding: 14, gap: 8, elevation: 0, shadowOpacity: 0 }}>
-            <View style={styles.row}>
-              <View style={styles.titleBox}>
-                <Text style={styles.cardTitle}>{task.title}</Text>
-                <View style={styles.detailRow}><Ionicons name="location-outline" size={16} color={colors.mutedText} /><Text style={[styles.helperText, { flex: 1 }]}>{task.sectionName ?? "Участок не указан"}</Text></View>
-                <View style={styles.detailRow}><Ionicons name="person-outline" size={16} color={colors.mutedText} /><Text style={[styles.helperText, { flex: 1 }]}>{formatParticipants(task)}</Text></View>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel={`Действия: ${task.title}`} onPress={() => setMenuTask(task)} style={styles.iconButton}><Ionicons color={colors.mutedText} name="ellipsis-vertical" size={22} /></Pressable>
-            </View>
-            <View style={styles.cardActions}><StatusPill label={statusLabel(task.status)} tone={statusTone(task.status)} />{primary ? <View style={{ flexShrink: 1 }}><PrimaryButton disabled={loading} label={primary.label} icon={primary.icon} onPress={primary.onPress} /></View> : null}</View>
-            <View style={styles.metaRow}><Text style={styles.helperText}>{formatDateTime(task.createdAtLocal)}</Text><Text style={styles.helperText}>{formatWorkAttachments(task)}</Text></View>
-            <Text style={styles.helperText}>{workDeliveryPresentation(task.syncStatus).label}</Text>
-            {task.deliveryError ? <Text style={[styles.helperText, { color: colors.danger }]}>{task.deliveryError}</Text> : null}
-          </Card>;
+          return <WorkTaskCard task={task} primary={primary} loading={loading} onMenu={() => setMenuTask(task)} />;
         })() : (() => {
           const remark = item as ShiftRemark;
           return <Card><View style={styles.row}><View style={styles.titleBox}><Text style={[styles.cardTitle, { color: colors.text }]}>{remark.sectionName ?? "Замечание"}</Text><Text style={[styles.text, { color: colors.mutedText }]} numberOfLines={4}>{remark.comment}</Text></View><StatusPill label={remarkStatusLabel(remark.status)} tone={remarkStatusTone(remark.status)} /></View><Text style={[styles.text, { color: colors.mutedText }]}>Исполнитель: {remark.employeeName ? formatShortName(remark.employeeName) : "не указан"}</Text><Text style={[styles.muted, { color: colors.mutedText }]}>Дата: {formatDateTime(remark.createdAtLocal)}</Text><Text style={[styles.muted, { color: colors.mutedText }]}>Вложения: {remark.mediaClientFileIds.length}</Text><PrimaryButton disabled={loading} icon="attach-outline" label="Добавить вложение" onPress={() => setAttachmentRemark({ remarkId: remark.remarkId, title: remark.sectionName ?? "Замечание" })} variant="secondary" /></Card>;
