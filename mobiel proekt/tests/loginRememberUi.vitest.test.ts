@@ -2,13 +2,13 @@ import { createRequire } from 'node:module';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ values: new Map<string, string>(), read: vi.fn(), write: vi.fn(), remove: vi.fn(), signIn: vi.fn(), replace: vi.fn(), unlock: vi.fn(), biometric: vi.fn(), offline: null as any, owner: 'a', refresh: 'refresh', restore: vi.fn() }));
+const state = vi.hoisted(() => ({ values: new Map<string, string>(), read: vi.fn(), write: vi.fn(), remove: vi.fn(), signIn: vi.fn(), replace: vi.fn(), unlock: vi.fn(), biometric: vi.fn(), level: 3, offline: null as any, owner: 'a', refresh: 'refresh', restore: vi.fn() }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: state.read, setItemAsync: state.write, deleteItemAsync: state.remove, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device-only' }));
 vi.mock('expo-router', async () => { const R = await import('react'); return { useRouter: () => ({ replace: state.replace, push: vi.fn() }), useFocusEffect: (cb: any) => R.useEffect(cb, [cb]) }; });
 vi.mock('react-native', () => ({ View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', KeyboardAvoidingView: 'KeyboardAvoidingView', SafeAreaView: 'SafeAreaView', ScrollView: 'ScrollView', Platform: { OS: 'android' }, StyleSheet: { create: (s: any) => s }, Alert: { alert: vi.fn() } }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
-vi.mock('expo-local-authentication', () => ({ hasHardwareAsync: async () => true, isEnrolledAsync: async () => true, authenticateAsync: state.biometric }));
+vi.mock('expo-local-authentication', () => ({ hasHardwareAsync: async () => true, isEnrolledAsync: async () => true, getEnrolledLevelAsync: async () => state.level, SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 }, authenticateAsync: state.biometric }));
 vi.mock('@/core/environments', () => ({ currentContourId: 'test' }));
 vi.mock('@/core/serverSettings', () => ({ getServerBaseUrl: async () => 'https://server' }));
 vi.mock('@/auth/authService', () => ({ signIn: state.signIn, restoreSessionWithRefreshToken: state.restore }));
@@ -39,7 +39,7 @@ const unmount = async () => { if (screen) await act(() => screen!.unmount()); sc
 const optIn = async () => { await act(async () => checkbox().props.onPress()); };
 const fill = async (login = ' operator ', password = '  sample пароль  ') => { await act(async () => { field('Логин').props.onChangeText(login); field('Пароль').props.onChangeText(password); }); };
 beforeEach(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; vi.clearAllMocks(); state.values.clear(); state.offline = null; state.refresh = 'refresh';
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; vi.clearAllMocks(); state.values.clear(); state.offline = null; state.refresh = 'refresh'; state.level = 3;
   state.read.mockReset().mockImplementation(async key => state.values.get(key) ?? null);
   state.write.mockReset().mockImplementation(async (key, value) => { state.values.set(key, value); });
   state.remove.mockReset().mockImplementation(async key => { state.values.delete(key); });
@@ -60,8 +60,10 @@ it('an opted-in login restores the login but never puts the saved password into 
   expect(field('Логин').props.value).toBe('operator'); expect(field('Пароль').props.value).toBe('');
   expect(field('Пароль').props.placeholder).toBe('Пароль сохранён на телефоне');
   expect(field('Пароль').props.value).toBe(''); expect(checkbox().props.accessibilityState.checked).toBe(true);
+  expect(state.biometric).not.toHaveBeenCalled();
   await act(async () => submit().props.onPress());
-  expect(state.signIn).toHaveBeenLastCalledWith('operator', '  sample пароль  ');
+  expect(state.biometric).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ promptMessage: 'Подтвердите вход сохранённым паролем', disableDeviceFallback: false }));
+  expect(state.signIn).toHaveBeenCalledTimes(2); expect(state.signIn).toHaveBeenLastCalledWith('operator', '  sample пароль  ');
 });
 it('editing the saved login drops the saved password instead of pairing it with another account', async () => {
   await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
@@ -165,4 +167,59 @@ it('the login card and fields follow the dark theme', async () => {
   expect(views.some(style => style.backgroundColor === '#0b1a2f')).toBe(true);
   expect(flat(field('Логин').props.style).color).toBe('#f5f7fa');
   await unmount();
+});
+
+const alertText = () => screen!.root.findAllByProps({ accessibilityRole: 'alert' })[0]?.children ?? [];
+const hint = () => screen!.root.findAll(node => node.props.testID === 'login-saved-password-hint' && typeof node.type === 'string')[0];
+it('the saved password is used only after the device confirms the phone owner', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  expect(hint().children.join('')).toContain('подтвердите отпечатком пальца или кодом блокировки');
+  const order: string[] = [];
+  state.biometric.mockImplementationOnce(async () => { order.push('device-auth'); return { success: true }; });
+  state.signIn.mockImplementationOnce(async () => { order.push('sign-in'); });
+  await act(async () => submit().props.onPress());
+  expect(order).toEqual(['device-auth', 'sign-in']); expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', 'sample');
+  expect(field('Пароль').props.value).toBe('');
+});
+it('cancelled or failed device authentication never signs in with the saved password', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  state.biometric.mockResolvedValueOnce({ success: false, error: 'user_cancel' });
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).not.toHaveBeenCalled(); expect(alertText().join('')).toContain('Вход сохранённым паролем отменён');
+  state.biometric.mockResolvedValueOnce({ success: false, error: 'lockout' });
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).not.toHaveBeenCalled(); expect(alertText().join('')).toContain('Не удалось подтвердить личность');
+  state.biometric.mockRejectedValueOnce(new Error('native failure'));
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).not.toHaveBeenCalled(); expect(field('Логин').props.editable).toBe(true);
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', 'sample');
+});
+it('without a secure lock screen the saved password is refused and typing it still works', async () => {
+  state.level = 0; await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  expect(hint().children.join('')).toContain('не настроена блокировка экрана');
+  await act(async () => submit().props.onPress());
+  expect(state.biometric).not.toHaveBeenCalled(); expect(state.signIn).not.toHaveBeenCalled();
+  expect(alertText().join('')).toContain('не настроена блокировка экрана');
+  await act(async () => field('Пароль').props.onChangeText('typed-sample')); await act(async () => submit().props.onPress());
+  expect(state.biometric).not.toHaveBeenCalled(); expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', 'typed-sample');
+});
+it('a typed password does not ask for device authentication', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  await act(async () => field('Пароль').props.onChangeText('typed-sample')); await act(async () => submit().props.onPress());
+  expect(state.biometric).not.toHaveBeenCalled(); expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', 'typed-sample');
+});
+it('the password is re-read after device authentication, so a pair forgotten meanwhile is not used', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  state.biometric.mockImplementationOnce(async () => { await forgetRememberedCredentials(); return { success: true }; });
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).not.toHaveBeenCalled(); expect(alertText()).toContain('Введите пароль.');
+  expect(field('Пароль').props.placeholder).toBe('Введите пароль');
+});
+it('duplicate taps during device authentication prompt once and sign in once', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  const slow = deferred<any>(); state.biometric.mockReturnValueOnce(slow.promise);
+  const button = submit(); await act(async () => { void button.props.onPress(); void button.props.onPress(); });
+  expect(state.biometric).toHaveBeenCalledOnce(); expect(state.signIn).not.toHaveBeenCalled();
+  await act(async () => slow.resolve({ success: true })); expect(state.signIn).toHaveBeenCalledOnce();
 });
