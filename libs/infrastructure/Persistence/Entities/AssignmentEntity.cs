@@ -30,6 +30,13 @@ internal sealed class AssignmentEntity
 
     public long LockVersion { get; set; }
 
+    // "manual" or "auto", as reported by the phone in completePatrolAssignment.
+    // Null for reports from app versions that do not send submissionMode.
+    public string? ReportSubmissionMode { get; set; }
+
+    // Set when a dispatcher applied a late report from the review queue.
+    public DateTimeOffset? ReportLateAppliedAt { get; set; }
+
     public PatrolRequestEntity? PatrolRequest { get; set; }
 
     public RouteEntity? Route { get; set; }

@@ -15,7 +15,7 @@ internal sealed partial class EfMobileAppService(
     IMobileDiagnosticReportStore diagnosticReportStore,
     IPatrolTimeZone patrolTimeZone,
     IConfiguration configuration,
-    IDataProtectionProvider dataProtectionProvider) : IMobileAppService, IMobileSessionAuthenticationService, IMobilePatrolAppealService
+    IDataProtectionProvider dataProtectionProvider) : IMobileAppService, IMobileSessionAuthenticationService, IMobilePatrolAppealService, IPatrolLateReportService
 {
     private string MobileContourId => configuration["Patrol360:Mobile:ContourId"]
         ?? Environment.GetEnvironmentVariable("PATROL360_CONTOUR_ID")

@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<EfMobileAppService>();
         services.AddScoped<IMobilePatrolAppealService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.AddScoped<IMobileAppService>(provider => provider.GetRequiredService<EfMobileAppService>());
+        services.AddScoped<IPatrolLateReportService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.AddScoped<IMobileSessionAuthenticationService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.TryAddScoped<IMobilePushSender, FirebaseMobilePushSender>();
         services.AddScoped<IMobilePushDeliveryService, EfMobilePushDeliveryService>();

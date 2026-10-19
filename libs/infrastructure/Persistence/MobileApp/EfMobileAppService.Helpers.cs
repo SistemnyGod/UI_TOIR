@@ -280,8 +280,8 @@ internal sealed partial class EfMobileAppService
         }
     }
 
-    private static MobileOutboxResponseDto Rejected(string clientOperationId, string message) =>
-        new(clientOperationId, "rejected", null, null, message, null, null);
+    private static MobileOutboxResponseDto Rejected(string clientOperationId, string message, string? reasonCode = null) =>
+        new(clientOperationId, "rejected", null, null, message, null, null, reasonCode);
 
     private static MobileOutboxResponseDto Conflict(string clientOperationId, string message, string? reasonCode = null) =>
         new(clientOperationId, "conflict", null, null, message, Guid.NewGuid().ToString(), null, reasonCode);

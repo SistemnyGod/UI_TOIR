@@ -62,9 +62,14 @@ internal sealed partial class EfMobileAppService
                 && file.ClientFileId == clientFileId, cancellationToken);
         if (existing is not null)
         {
-            return MatchesUploadTarget(existing, command)
-                ? new MobileFileUploadResponseDto(existing.ClientFileId, existing.Id, "duplicate", existing.UploadedAt)
-                : null;
+            if (!MatchesUploadTarget(existing, command))
+            {
+                return null;
+            }
+
+            // A retry after a lost response must still reach a deferred report.
+            await LinkPendingReportPhotoAsync(existing.Id, cancellationToken);
+            return new MobileFileUploadResponseDto(existing.ClientFileId, existing.Id, "duplicate", existing.UploadedAt);
         }
 
         var remarkId = NormalizeRemarkFileId(command.RemarkId);
@@ -90,7 +95,10 @@ internal sealed partial class EfMobileAppService
                 clientFileId,
                 command.AssignmentId!.Value,
                 command.PointId!.Value);
-            if (!validation.Succeeded)
+            // A report accepted with photoUploadMode = "deferred" or queued as a
+            // late report keeps the assignment closed while its photos upload.
+            if (!validation.Succeeded
+                && !HasPendingReportPhoto(session.MobileAccountId, command.AssignmentId.Value, command.PointId.Value, clientFileId))
             {
                 return null;
             }
@@ -181,6 +189,11 @@ internal sealed partial class EfMobileAppService
         {
             TryDeleteFile(storagePath);
             throw;
+        }
+
+        if (isPatrolPointFile)
+        {
+            await LinkPendingReportPhotoAsync(serverFileId, cancellationToken);
         }
 
         return new MobileFileUploadResponseDto(clientFileId, serverFileId, "uploaded", uploadedAt);

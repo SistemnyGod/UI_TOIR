@@ -47,10 +47,16 @@ internal sealed partial class EfMobileAppService
                 "routeVersion");
         }
 
+        // Optional fields from newer apps. Older apps (0.1.51) send none of them
+        // and keep the original responses below; only reasonCode is added.
+        var lateReview = IsLateReportReviewRequested(command.Payload);
+        var deferredPhotos = IsDeferredPhotoUploadRequested(command.Payload);
+        var submissionMode = ReadReportSubmissionMode(command.Payload);
+
         var wasCancelledByDispatcher = assignment.Status == AssignmentStatusValues.Cancelled
             || assignment.PatrolRequest.Status == AssignmentStatusValues.Cancelled;
 
-        if (wasCancelledByDispatcher)
+        if (wasCancelledByDispatcher && !lateReview)
         {
             return Conflict(
                 command.ClientOperationId,
@@ -58,11 +64,20 @@ internal sealed partial class EfMobileAppService
                 "assignmentCancelled");
         }
 
-        if (assignment.Status == AssignmentStatusValues.NeedsDispatcherDecision
-            || assignment.PatrolRequest.Status == AssignmentStatusValues.NeedsDispatcherDecision)
+        var needsDispatcherDecision = assignment.Status == AssignmentStatusValues.NeedsDispatcherDecision
+            || assignment.PatrolRequest.Status == AssignmentStatusValues.NeedsDispatcherDecision;
+        if (needsDispatcherDecision && !lateReview)
         {
-            return Conflict(command.ClientOperationId, "Patrol request requires dispatcher decision.");
+            return Conflict(command.ClientOperationId, "Patrol request requires dispatcher decision.", AssignmentNeedsDecisionReasonCode);
         }
+
+        var assignmentCompleted = assignment.Status == AssignmentStatusValues.Completed
+            || assignment.PatrolRequest.Status == AssignmentStatusValues.Completed;
+        // Photo uploads are refused once the assignment is closed, so a late
+        // report may name photos the server has not received yet.
+        var allowMissingPhotos = deferredPhotos
+            || (lateReview && (wasCancelledByDispatcher || needsDispatcherDecision || assignmentCompleted));
+        var missingPhotos = new List<PendingReportPhoto>();
 
         var duplicatePointIds = pointResults
             .GroupBy(result => result.PointId)
@@ -147,7 +162,16 @@ internal sealed partial class EfMobileAppService
                 var uploaded = uploadedFilesForPoint.Any(file => file.ClientFileId == clientFileId);
                 if (!uploaded)
                 {
-                    return Rejected(command.ClientOperationId, "All attached photos must be uploaded before report submit.");
+                    if (!allowMissingPhotos)
+                    {
+                        return Rejected(command.ClientOperationId, "All attached photos must be uploaded before report submit.");
+                    }
+
+                    var normalizedFileId = NormalizeOptionalText(clientFileId);
+                    if (!string.IsNullOrWhiteSpace(normalizedFileId))
+                    {
+                        missingPhotos.Add(new PendingReportPhoto(result.PointId, normalizedFileId));
+                    }
                 }
             }
         }
@@ -157,7 +181,9 @@ internal sealed partial class EfMobileAppService
         {
             if (!existingReportCheck.PayloadMatches)
             {
-                return Conflict(command.ClientOperationId, "Patrol assignment report was already accepted with different point results.");
+                return lateReview
+                    ? QueueLateReport(account, command, assignment, AssignmentClosedReasonCode, pointResults, missingPhotos, completedAtLocal, submissionMode)
+                    : Conflict(command.ClientOperationId, "Patrol assignment report was already accepted with different point results.", AssignmentClosedReasonCode);
             }
 
             return new MobileOutboxResponseDto(
@@ -170,10 +196,28 @@ internal sealed partial class EfMobileAppService
                 null);
         }
 
+        if (wasCancelledByDispatcher)
+        {
+            return QueueLateReport(account, command, assignment, "assignmentCancelled", pointResults, missingPhotos, completedAtLocal, submissionMode);
+        }
+
+        if (needsDispatcherDecision)
+        {
+            return QueueLateReport(account, command, assignment, AssignmentNeedsDecisionReasonCode, pointResults, missingPhotos, completedAtLocal, submissionMode);
+        }
+
         if (assignment.Status != AssignmentStatusValues.InProgress
             || assignment.PatrolRequest.Status != AssignmentStatusValues.InProgress)
         {
-            return Rejected(command.ClientOperationId, "Patrol assignment must be in progress before report submit.");
+            if (assignmentCompleted && lateReview)
+            {
+                return QueueLateReport(account, command, assignment, AssignmentClosedReasonCode, pointResults, missingPhotos, completedAtLocal, submissionMode);
+            }
+
+            return Rejected(
+                command.ClientOperationId,
+                "Patrol assignment must be in progress before report submit.",
+                assignmentCompleted ? AssignmentClosedReasonCode : AssignmentNotInProgressReasonCode);
         }
 
         if (baseRevision is null)
@@ -194,6 +238,26 @@ internal sealed partial class EfMobileAppService
             completedAtLocal,
             now,
             uploadedFilesByPoint.SelectMany(pair => pair.Value).ToArray());
+        RegisterPendingReportPhotos(account.Id, assignment.Id, missingPhotos, null, now);
+        MarkAssignmentReportCompleted(assignment, pointResults, completedAtLocal, submissionMode, now);
+
+        return new MobileOutboxResponseDto(
+            command.ClientOperationId,
+            "accepted",
+            assignment.Id.ToString(),
+            assignment.LockVersion,
+            "Patrol assignment completed.",
+            null,
+            null);
+    }
+
+    private void MarkAssignmentReportCompleted(
+        AssignmentEntity assignment,
+        IReadOnlyList<MobilePointResultPayload> pointResults,
+        DateTimeOffset completedAtLocal,
+        string? submissionMode,
+        DateTimeOffset now)
+    {
         var startedAt = InferCompletedPatrolStartedAt(assignment, pointResults, completedAtLocal);
 
         assignment.Status = AssignmentStatusValues.Completed;
@@ -201,7 +265,12 @@ internal sealed partial class EfMobileAppService
         assignment.FinishedAt = completedAtLocal.ToUniversalTime();
         assignment.ProgressPercent = 100;
         assignment.LockVersion += 1;
-        assignment.PatrolRequest.Status = AssignmentStatusValues.Completed;
+        assignment.ReportSubmissionMode = submissionMode;
+        if (assignment.PatrolRequest is not null)
+        {
+            assignment.PatrolRequest.Status = AssignmentStatusValues.Completed;
+        }
+
         foreach (var appeal in dbContext.MobilePatrolAppeals.Where(item => item.AssignmentId == assignment.Id && item.Kind == "cancel" && item.Status == "open"))
         {
             // A pending request is not an approved cancellation. Completion wins
@@ -212,15 +281,6 @@ internal sealed partial class EfMobileAppService
             appeal.Reply = "Обход завершён до рассмотрения запроса отмены.";
             appeal.Version++;
         }
-
-        return new MobileOutboxResponseDto(
-            command.ClientOperationId,
-            "accepted",
-            assignment.Id.ToString(),
-            assignment.LockVersion,
-            "Patrol assignment completed.",
-            null,
-            null);
     }
 
     private static DateTimeOffset InferCompletedPatrolStartedAt(

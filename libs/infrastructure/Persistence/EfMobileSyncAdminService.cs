@@ -82,6 +82,10 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
                 var latestSession = account.Sessions
                     .OrderByDescending(session => session.LastSeenAt)
                     .FirstOrDefault();
+                var latestHeartbeat = account.Sessions
+                    .Where(session => session.HeartbeatAt != null)
+                    .OrderByDescending(session => session.HeartbeatAt)
+                    .FirstOrDefault();
                 outboxByAccount.TryGetValue(account.Id, out var operations);
                 devicesByAccount.TryGetValue(account.Id, out var latestDevice);
                 notificationsByAccount.TryGetValue(account.Id, out var notifications);
@@ -111,7 +115,13 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
                         ? ReadMessage(latestErrorOperation)
                         : string.IsNullOrWhiteSpace(latestFailedPush?.PushLastError) ? null : latestFailedPush.PushLastError,
                     latestDevice?.Trusted ?? true,
-                    latestDevice?.BlockedAt);
+                    latestDevice?.BlockedAt)
+                {
+                    HeartbeatAt = latestHeartbeat?.HeartbeatAt,
+                    HeartbeatPendingCount = latestHeartbeat?.HeartbeatPendingCount,
+                    HeartbeatFailedCount = latestHeartbeat?.HeartbeatFailedCount,
+                    HeartbeatOldestPendingAgeSeconds = latestHeartbeat?.HeartbeatOldestPendingAgeSeconds
+                };
             })
             .ToList();
     }

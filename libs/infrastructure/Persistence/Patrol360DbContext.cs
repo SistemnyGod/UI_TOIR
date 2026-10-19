@@ -248,6 +248,7 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
         ConfigureMobileUploadedFiles(modelBuilder);
         ConfigureMobileShiftRemarks(modelBuilder);
         ConfigureMobilePatrolAppeals(modelBuilder);
+        ConfigurePatrolLateReports(modelBuilder);
         ConfigureSiteUsers(modelBuilder);
         ConfigureRoles(modelBuilder);
         ConfigurePermissions(modelBuilder);
