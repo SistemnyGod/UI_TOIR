@@ -1,4 +1,4 @@
-import type { AssignmentScanPolicy, ActiveAssignment, PointListItem, AssignmentProgress, ReportProblem, ReportReadiness } from './patrolRepositoryTypes';
+import type { AssignmentScanPolicy, ActiveAssignment, PointListItem, AssignmentProgress, ReportPreviewPoint, ReportProblem, ReportReadiness } from './patrolRepositoryTypes';
 
 import * as SQLite from "expo-sqlite";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -317,6 +317,35 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
       && reportPointReadiness.ready
       && problems.length === 0
   };
+}
+
+/** Every point of the report with its result and attachment counts, read from this phone only. */
+export async function getReportPreviewPoints(assignmentId: string): Promise<ReportPreviewPoint[]> {
+  const db = await getDatabase();
+  const ownerUserId = await requireOwnerUserId();
+  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
+  const files = await db.getAllAsync<{ clientFileId: string; mediaKind: string | null; contentType: string | null }>(
+    `
+      SELECT client_file_id AS clientFileId, media_kind AS mediaKind, content_type AS contentType
+      FROM files
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND assignment_id = ?
+    `,
+    [ownerUserId, currentContourId, assignmentId]
+  );
+  const filesById = new Map(files.map((file) => [file.clientFileId, file]));
+
+  return points.map((point) => {
+    const referenced = Array.from(new Set(point.photoClientFileIds)).map((clientFileId) => filesById.get(clientFileId));
+    const isVideo = (file: (typeof files)[number]) => file.mediaKind === "video" || (!file.mediaKind && file.contentType === "video/mp4");
+    return {
+      ...point,
+      photoCount: referenced.filter((file) => file && !isVideo(file)).length,
+      videoCount: referenced.filter((file) => file && isVideo(file)).length,
+      missingAttachmentCount: referenced.filter((file) => !file).length
+    };
+  });
 }
 
 export async function getAssignmentProgress(assignmentId: string): Promise<AssignmentProgress> {

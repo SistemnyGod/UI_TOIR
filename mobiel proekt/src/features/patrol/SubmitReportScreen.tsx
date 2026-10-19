@@ -9,8 +9,10 @@ import { getPatrolReportState, isReportFullyDelivered } from '@/services/patrolN
 import { getReportDeliveryState } from '@/db/repositories/outboxRepository';
 import { clearCurrentPatrolIfMatches, getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
 import {
+  getReportPreviewPoints,
   getReportReadiness,
   reopenInvalidCompletionReportLocally,
+  ReportPreviewPoint,
   ReportReadiness
 } from '@/db/repositories/patrolRepository';
 import { getReportPrimaryAction } from '@/features/patrol/reportDeliveryPresentation';
@@ -21,6 +23,8 @@ import { shouldReloadReportAfterSync, subscribeToSyncEvents } from '@/sync/syncE
 import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 import { queuePatrolReport } from '@/features/patrol/reportSubmissionCoordinator';
 import { ReportSendDialog } from '@/features/patrol/ReportSendDialog';
+import { ReportPreviewCard } from '@/features/patrol/ReportPreviewCard';
+import { buildReportPreview, type ReportPreviewRow } from '@/features/patrol/reportPreviewPresentation';
 import { Card } from '@/ui/Card';
 import { ActionSheet } from '@/ui/ActionSheet';
 import { toneColors } from '@/ui/atomTheme';
@@ -35,6 +39,8 @@ export function SubmitReportScreen() {
   const { colors } = useAppTheme();
   const { assignmentId, mode } = useLocalSearchParams<{ assignmentId: string; mode?: string }>();
   const [readiness, setReadiness] = useState<ReportReadiness | null>(null);
+  // null: the preview could not be read; the problem list below still shows what is missing.
+  const [previewPoints, setPreviewPoints] = useState<ReportPreviewPoint[] | null>(null);
   const [delivery, setDelivery] = useState<DeliveryState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
@@ -56,16 +62,18 @@ export function SubmitReportScreen() {
     setLoadError(null);
     try {
       const scope = await captureDataOwnerContext();
-      const [loadedReadiness, loadedDelivery, reportState] = await Promise.all([
+      const [loadedReadiness, loadedDelivery, reportState, loadedPreview] = await Promise.all([
         getReportReadiness(assignmentId),
         getReportDeliveryState(scope.ownerUserId, assignmentId),
-        getPatrolReportState(scope, assignmentId)
+        getPatrolReportState(scope, assignmentId),
+        loadReportPreview(assignmentId)
       ]);
       const reportDelivery = reportState.completedLocally ? loadedDelivery : null;
       const fullyDelivered = reportState.completedLocally && loadedDelivery.status === 'delivered' && await isReportFullyDelivered(scope, assignmentId);
       await assertDataOwnerContext(scope);
       if (!isCurrent()) return;
       setReadiness(loadedReadiness);
+      setPreviewPoints(loadedPreview);
       setDelivery(reportDelivery?.status === 'delivered' && !fullyDelivered
         ? { ...reportDelivery, status: 'sending' }
         : reportDelivery);
@@ -91,6 +99,7 @@ export function SubmitReportScreen() {
       focusVersion.current++;
       primaryActionInFlight.current = null;
       setReadiness(null);
+      setPreviewPoints(null);
       setDelivery(null);
       setAwaitingAttachments(false);
       setIsSubmitting(false);
@@ -114,6 +123,14 @@ export function SubmitReportScreen() {
     () => groupReportProblems(readiness?.problems ?? []),
     [readiness]
   );
+  const preview = useMemo(
+    () => previewPoints ? buildReportPreview(previewPoints, readiness?.problems ?? []) : null,
+    [previewPoints, readiness]
+  );
+  const openPreviewPoint = (row: ReportPreviewRow) => {
+    const editable = readiness?.assignment?.status === 'inProgress';
+    router.push(`/patrol/assignment/${assignmentId}/point/${row.pointId}${editable && row.problems.length > 0 ? '/fill' : ''}`);
+  };
   const sendBusy = isSubmitting && delivery?.status !== 'delivered';
   const primaryAction = getReportPrimaryAction(delivery, {
     ready: readiness?.ready ?? false,
@@ -324,7 +341,9 @@ export function SubmitReportScreen() {
         </Card>
       ) : null}
 
-      {problemGroups.some(problem => problem.orderIndex > 0) ? (
+      {preview ? (
+        <ReportPreviewCard rows={preview.rows} attentionCount={preview.attentionCount} onOpenPoint={openPreviewPoint} />
+      ) : problemGroups.some(problem => problem.orderIndex > 0) ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Требуют внимания</Text>
           {problemGroups.filter(problem => problem.orderIndex > 0).map((problem) => (
@@ -363,6 +382,16 @@ export function SubmitReportScreen() {
         onClose={() => setSendDialogOpen(false)} onContinue={() => void leaveToRequestBoard()} />
     </Screen>
   );
+}
+
+/** The preview is an aid: a failed read must not hide the readiness summary or block sending. */
+async function loadReportPreview(assignmentId: string) {
+  try {
+    return await getReportPreviewPoints(assignmentId);
+  } catch (error) {
+    void logMobileError('report.preview.load.failed', error);
+    return null;
+  }
 }
 
 function ProgressValue({ label, value }: { label: string; value: string }) {

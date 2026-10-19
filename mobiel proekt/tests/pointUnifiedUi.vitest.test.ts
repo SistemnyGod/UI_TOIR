@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   preventRemove: null as null | ((event: any) => void), appState: null as null | ((value: string) => void),
   dispatch: vi.fn(), push: vi.fn(), replace: vi.fn(), back: vi.fn(),
   saveDraft: vi.fn(), saveOk: vi.fn(), saveIssue: vi.fn(), skip: vi.fn(), camera: vi.fn(), gallery: vi.fn(), readiness: vi.fn(), load: vi.fn(), getPoint: vi.fn(), fileReads: 0,
+  series: vi.fn(), deleteFile: vi.fn(), replacePhoto: vi.fn(), editBlocks: {} as Record<string, string>,
 }));
 vi.mock('expo-router', async () => {
   const R = await import('react');
@@ -21,17 +22,18 @@ vi.mock('expo-router/react-navigation', () => {
   return { useNavigation: () => navigation, usePreventRemove: (_enabled: boolean, callback: (event: any) => void) => { state.preventRemove = callback; } };
 });
 vi.mock('react-native', () => ({
-  View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView', Image: 'Image',
+  View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView', Image: 'Image', Modal: 'Modal',
   ActivityIndicator: 'ActivityIndicator', KeyboardAvoidingView: 'KeyboardAvoidingView',
   Platform: { OS: 'android' }, StyleSheet: { create: (styles: unknown) => styles },
   useWindowDimensions: () => ({ width: 360, height: 800, fontScale: 1, scale: 3 }),
   AppState: { addEventListener: (_name: string, callback: (value: string) => void) => { state.appState = callback; return { remove() { state.appState = null; } }; } },
 }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+vi.mock('@/ui/useReducedMotion', () => ({ useReducedMotion: () => true }));
 vi.mock('@/features/settings/themePreference', () => ({ useAppTheme: () => ({ colors: {} }) }));
 vi.mock('@/ui/Screen', async () => {
   const R = await import('react');
-  return { Screen: (props: any) => R.createElement('Screen', props, props.children, props.bottomAction) };
+  return { Screen: (props: any) => R.createElement('Screen', props, props.floatingNotice, props.children, props.bottomAction) };
 });
 vi.mock('@/ui/TextField', () => ({ TextField: 'TextInput' }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
@@ -63,7 +65,8 @@ vi.mock('@/db/database', () => {
 });
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/mediaAttachmentService', () => ({ attachPointPhotoFromCamera: state.camera,
-  attachPointVideoFromCamera: vi.fn(), attachPointMediaFromGallery: state.gallery }));
+  attachPointVideoFromCamera: vi.fn(), attachPointMediaFromGallery: state.gallery,
+  attachPointPhotoSeriesFromCamera: state.series, deletePointAttachmentFile: state.deleteFile, replacePointPhotoFromCamera: state.replacePhoto }));
 vi.mock('@/db/repositories/filesRepository', () => ({ listPointFiles: async () => { state.fileReads++; return state.files; } }));
 // The mounted screen and draft controller are real. Repository boundaries are
 // controlled here; SQLite records draft writes and lets tests delay/fail storage.
@@ -72,7 +75,7 @@ vi.mock('@/db/repositories/patrolRepository', () => ({
   getReportReadiness: state.readiness,
   getAssignmentScanPolicy: async () => ({ nfcEnabled: true, qrFallbackEnabled: true }),
   savePointDraft: state.saveDraft, savePointOk: state.saveOk, savePointIssue: state.saveIssue, skipPoint: state.skip,
-  beginManualPointInspection: vi.fn(), deferPoint: vi.fn(),
+  beginManualPointInspection: vi.fn(), deferPoint: vi.fn(), listPointAttachmentEditBlocks: async () => state.editBlocks,
 }));
 
 import { PointFillScreen } from '@/features/patrol/PointFillScreen';
@@ -87,7 +90,7 @@ beforeEach(() => {
   state.point = { pointId: 'point', name: 'Печь 930 Э', orderIndex: 1, status: 'pending',
     confirmationType: 'nfc', scannedAtLocal: '2026-09-28T12:00:00Z', comment: '', issueTypeId: null,
     requiresPhoto: false, description: 'Осмотреть оборудование', instruction: 'Проверить крепления', photoClientFileIds: [] };
-  state.files = [];
+  state.files = []; state.editBlocks = {};
   state.load.mockImplementation(async () => state.point); state.getPoint.mockImplementation(async () => state.point);
   state.db = new DatabaseSync(':memory:');
   state.db.exec('CREATE TABLE draft (owner TEXT PRIMARY KEY, payload TEXT NOT NULL)');
@@ -116,7 +119,7 @@ async function choose(label: string) {
 async function mediaAction(label: string) {
   await act(() => button('Добавить фото или видео').props.onPress());
   const sheet = screen!.root.findByType('ActionSheet' as any);
-  expect(sheet.props.actions.map((a: any) => a.label)).toEqual(['Сделать фото', 'Снять видео', 'Выбрать фото и видео с телефона']);
+  expect(sheet.props.actions.map((a: any) => a.label)).toEqual(['Сделать фото', 'Серия фото подряд', 'Снять видео', 'Выбрать фото и видео с телефона']);
   await act(() => { sheet.props.onClose(); sheet.props.actions.find((a: any) => a.label === label).onPress(); });
 }
 const comment = () => screen!.root.findAllByType('TextInput' as any).find(node => node.props.multiline)!;
@@ -439,4 +442,129 @@ it('the actual attachment repository rejects another owner before touching SQLit
   const repository = await vi.importActual<typeof import('@/db/repositories/patrolRepository')>('@/db/repositories/patrolRepository');
   await expect(repository.attachPhotoToPoint('assignment', 'point', { ownerUserId: 'other', clientFileId: 'file' } as any,
     { ownerUserId: 'owner', contourId: 'test', generation: 1 })).rejects.toThrow('другому аккаунту');
+});
+
+const notice = () => screen!.root.findAllByProps({ accessibilityRole: 'alert', accessibilityLiveRegion: 'assertive' })
+  .map(node => node.findAllByType('Text' as any).map(text => text.props.children).join(''))[0];
+const pressable = (label: string) => screen!.root.findAllByType('Pressable' as any).find(node => node.props.accessibilityLabel === label)!;
+
+it('a failed point save stays visible past the old toast timeout until it is dismissed', async () => {
+  state.saveOk.mockRejectedValue(new Error('SQLite: диск заполнен'));
+  await mount();
+  await choose('Исправно');
+  await act(async () => { await button('Сохранить и продолжить').props.onPress(); });
+  expect(notice()).toBe('Не удалось сохранить метку.');
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(notice()).toBe('Не удалось сохранить метку.');
+  await act(async () => pressable('Скрыть сообщение об ошибке').props.onPress());
+  expect(notice()).toBeUndefined();
+});
+
+it('a later successful save removes the earlier save error', async () => {
+  state.saveOk.mockRejectedValueOnce(new Error('busy')).mockResolvedValue(undefined);
+  await mount();
+  await choose('Исправно');
+  await act(async () => { await button('Сохранить и продолжить').props.onPress(); });
+  expect(notice()).toBe('Не удалось сохранить метку.');
+  await act(async () => { await button('Сохранить и продолжить').props.onPress(); });
+  expect(notice()).toBeUndefined();
+  expect(state.saveOk).toHaveBeenCalledTimes(2);
+});
+
+it('a draft write error stays until the next draft write succeeds', async () => {
+  await mount();
+  await choose('Исправно');
+  state.failWrite = true;
+  await act(async () => { comment().props.onChangeText('first'); await vi.advanceTimersByTimeAsync(500); });
+  expect(notice()).toBe('SQLite unavailable');
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(notice()).toBe('SQLite unavailable');
+  state.failWrite = false;
+  await act(async () => { comment().props.onChangeText('second'); await vi.advanceTimersByTimeAsync(500); });
+  expect(notice()).toBeUndefined();
+  expect(draft().comment).toBe('second');
+});
+
+it('opens a photo full screen and deletes it only after confirmation', async () => {
+  state.files = [{ clientFileId: 'photo', localPath: 'file:///photo.jpg', status: 'queued', mediaKind: 'photo' }];
+  state.deleteFile.mockImplementation(async () => { state.files = []; });
+  await mount();
+  await choose('Исправно');
+  await act(async () => pressable('Фото. Прикреплено · на телефоне').props.onPress());
+  expect(screen!.root.findByType('Modal' as any).findByType('Image' as any).props.source.uri).toBe('file:///photo.jpg');
+  expect(button('Заменить фото')).toBeDefined();
+  await act(async () => button('Удалить фото').props.onPress());
+  expect(state.deleteFile).not.toHaveBeenCalled();
+  await act(async () => { await button('Удалить фото').props.onPress(); });
+  expect(state.deleteFile).toHaveBeenCalledExactlyOnceWith('assignment', 'point', 'photo');
+  expect(screen!.root.findAllByType('Modal' as any)).toHaveLength(0);
+  expect(screen!.root.findAllByType('Image' as any)).toHaveLength(0);
+  expect(state.saveOk).not.toHaveBeenCalled();
+});
+
+it('replaces a photo from the viewer and refreshes the tile', async () => {
+  state.files = [{ clientFileId: 'old', localPath: 'file:///old.jpg', status: 'queued', mediaKind: 'photo' }];
+  state.replacePhoto.mockImplementation(async () => {
+    state.files = [{ clientFileId: 'new', localPath: 'file:///new.jpg', status: 'queued', mediaKind: 'photo' }];
+    return 'attached';
+  });
+  await mount();
+  await choose('Исправно');
+  await act(async () => pressable('Фото. Прикреплено · на телефоне').props.onPress());
+  await act(async () => { await button('Заменить фото').props.onPress(); });
+  expect(state.replacePhoto).toHaveBeenCalledWith('assignment', 'point', 'old', expect.any(Function));
+  expect(screen!.root.findAllByType('Image' as any).map(node => node.props.source.uri)).toEqual(['file:///new.jpg']);
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(draft().photoClientFileIds).toEqual(['new']);
+});
+
+it('a sent attachment opens read-only with the reason instead of delete and replace', async () => {
+  state.files = [{ clientFileId: 'photo', localPath: 'file:///photo.jpg', status: 'uploaded', mediaKind: 'photo' }];
+  state.editBlocks = { photo: 'Вложение уже отправлено. Изменить или удалить его нельзя.' };
+  await mount();
+  await choose('Исправно');
+  await act(async () => pressable('Фото. Прикреплено · на сервере').props.onPress());
+  const modalText = screen!.root.findByType('Modal' as any).findAllByType('Text' as any).map(node => node.props.children);
+  expect(modalText).toContain('Вложение уже отправлено. Изменить или удалить его нельзя.');
+  expect(button('Удалить фото')).toBeUndefined();
+  expect(button('Заменить фото')).toBeUndefined();
+});
+
+it('a photo series runs from the attachment menu and reports how many photos were added', async () => {
+  state.series.mockImplementation(async (_assignment: string, _point: string, options: any) => {
+    state.files = [{ clientFileId: 'one', localPath: 'file:///one.jpg', status: 'queued', mediaKind: 'photo' }];
+    await options.onPhotoAttached(1);
+    state.files = [...state.files, { clientFileId: 'two', localPath: 'file:///two.jpg', status: 'queued', mediaKind: 'photo' }];
+    await options.onPhotoAttached(2);
+    return { attachedCount: 2, error: null };
+  });
+  await mount();
+  await choose('Исправно');
+  await mediaAction('Серия фото подряд');
+  expect(state.series).toHaveBeenCalledOnce();
+  expect(screen!.root.findAllByType('Image' as any).map(node => node.props.source.uri)).toEqual(['file:///one.jpg', 'file:///two.jpg']);
+  expect(screen!.root.findAllByType('Text' as any).some(node => node.props.children === 'Серия: добавлено фото 2')).toBe(true);
+  expect(draft().photoClientFileIds).toEqual(['one', 'two']);
+});
+
+it('shows no photo-instruction slot while the server sends text instructions only', async () => {
+  await mount();
+  await choose('Исправно');
+  const texts = screen!.root.findAllByType('Text' as any).map(node => JSON.stringify(node.props.children));
+  expect(texts.some(value => value.includes('Фото-инструкция'))).toBe(false);
+  expect(texts.some(value => value.includes('Проверить крепления'))).toBe(true);
+});
+
+it('a refused delete is shown inside the open viewer and keeps the photo', async () => {
+  state.files = [{ clientFileId: 'photo', localPath: 'file:///photo.jpg', status: 'queued', mediaKind: 'photo' }];
+  state.deleteFile.mockRejectedValue(new Error('Вложение уже передано в очередь отправки. Изменить или удалить его нельзя.'));
+  await mount();
+  await choose('Исправно');
+  await act(async () => pressable('Фото. Прикреплено · на телефоне').props.onPress());
+  await act(async () => button('Удалить фото').props.onPress());
+  await act(async () => { await button('Удалить фото').props.onPress(); });
+  const modal = screen!.root.findByType('Modal' as any);
+  expect(modal.findByProps({ accessibilityRole: 'alert', accessibilityLiveRegion: 'assertive' }).findAllByType('Text' as any)[0].props.children)
+    .toBe('Вложение уже передано в очередь отправки. Изменить или удалить его нельзя.');
+  expect(modal.findByType('Image' as any).props.source.uri).toBe('file:///photo.jpg');
 });
